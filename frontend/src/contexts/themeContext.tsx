@@ -14,30 +14,32 @@ interface ThemeColors {
   textGhost: string;
   border: string;
   borderFaint: string;
-  primary: string;
-  cellHover: string;
   rowHover: string;
-  switchActive: string;
-  headerBg: string;
-  buttonBg: string;
-  buttonBgHover: string;
-  modalBg: string;
-  modalCard: string;
-  toastBg: string;
-  toastText: string;
-  toastBorder: string;
-  toastErrBg: string;
-  toastErrText: string;
-  toastErrBorder: string;
-  scrollThumb: string;
+  cellHover: string;
   empName: string;
   empNameSel: string;
+  modalBg: string;
+  modalCard: string;
+  btnBg: string;
+  btnBgHover: string;
+  scrollThumb: string;
+  toastBg: string;
+  toastErrBg: string;
+  toastText: string;
+  toastErrText: string;
+  toastBorder: string;
+  toastErrBorder: string;
+  statColors: string[];
+  switchBg: string;
+  switchActive: string;
   roleV: string;
   roleM: string;
-  legendItemBg: string;
+  logoRotateBorder: string;
+  emptyJobBg: string;
+  emptyJobText: string;
   legendCountActive: string;
   legendCountInactive: string;
-  statColors?: string[];
+  legendItemBg: string;
 }
 
 interface ThemeContextType {
@@ -45,6 +47,9 @@ interface ThemeContextType {
   toggleTheme: () => void;
   th: ThemeColors;
   t: any;
+  mode?: string;
+  lang?: string;
+  setLanguage?: (lang: string) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -97,6 +102,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       legendItemBg: '#1a1a1a',
       legendCountActive: '#d4af37',
       legendCountInactive: '#707070',
+      btnBg: '#2a2a2a',
+      btnBgHover: '#3a3a3a',
+      switchBg: '#1a1a1a',
+      logoRotateBorder: '#d4af37',
+      toast: '#333333',
+      legend: '#1a1a1a',
+      legendText: '#ffffff',
+      emptyJobBg: '#333333',
+      emptyJobText: '#999999',
       statColors: ['#d4af37', '#4ecdc4', '#ff6b9d', '#95e1d3'],
     } as ThemeColors,
     light: {
@@ -136,6 +150,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       legendItemBg: '#f5f5f5',
       legendCountActive: '#c9a961',
       legendCountInactive: '#999999',
+      btnBg: '#f5f5f5',
+      btnBgHover: '#e0e0e0',
+      switchBg: '#ffffff',
+      logoRotateBorder: '#c9a961',
+      toast: '#f5f5f5',
+      legend: '#ffffff',
+      legendText: '#000000',
+      emptyJobBg: '#f0f0f0',
+      emptyJobText: '#cccccc',
       statColors: ['#c9a961', '#2c9b8b', '#d85b8f', '#7ac74f'],
     } as ThemeColors,
   };
@@ -157,7 +180,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const t = translations.de;
 
   return (
-    <ThemeContext.Provider value={{ isDark, toggleTheme: () => setIsDark(!isDark), th, t }}>
+    <ThemeContext.Provider value={{ isDark, toggleTheme: () => setIsDark(!isDark), th, t, mode: isDark ? 'dark' : 'light', lang: 'de' }}>
       {children}
     </ThemeContext.Provider>
   );
