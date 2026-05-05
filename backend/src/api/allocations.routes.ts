@@ -3,14 +3,6 @@ import { supabase } from '../lib/supabase';
 import { requireRole } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 
-let io: any = null;
-try {
-  // Only available in dev (server.ts), not in serverless
-  io = require('../server').io;
-} catch {
-  // Running on Vercel serverless — no Socket.IO
-}
-
 export const allocationsRouter = Router();
 
 // GET /api/v1/allocations?weekId=xxx
@@ -18,7 +10,7 @@ allocationsRouter.get('/', async (req, res, next) => {
   try {
     const { week_id, user_id } = req.query;
     let query = supabase.from('allocations').select('*');
-    
+
     if (week_id) {
       query = query.eq('week_id', week_id);
     }
@@ -28,7 +20,7 @@ allocationsRouter.get('/', async (req, res, next) => {
 
     const { data, error } = await query.order('day_of_week', { ascending: true });
     if (error) throw error;
-    
+
     res.json({ success: true, data: data || [] });
   } catch (err) {
     next(err);
@@ -45,15 +37,12 @@ allocationsRouter.post('/', async (req, res, next) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'No token provided' });
     }
 
-    // Decode JWT to get user ID
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'emmenegger-dev-secret-change-in-production') as any;
     const createdById = decoded.id || decoded.userId;
 
     if (!createdById) {
       return res.status(401).json({ error: 'Unauthorized', message: 'User ID not found in token' });
     }
-
-    console.log('✅ Creating allocation for user:', createdById);
 
     const { data, error } = await supabase
       .from('allocations')
@@ -68,14 +57,13 @@ allocationsRouter.post('/', async (req, res, next) => {
       .select();
 
     if (error) throw error;
-    
-    console.log('✅ Allocation created:', data?.[0]);
+
     res.status(201).json({ success: true, data: data?.[0] });
   } catch (error) {
     console.error('❌ Error creating allocation:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error instanceof Error ? error.message : 'Failed to create allocation' 
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to create allocation',
     });
   }
 });
@@ -88,9 +76,6 @@ allocationsRouter.delete(
     try {
       const { id } = req.params;
 
-      console.log('🗑️ Deleting allocation:', id);
-
-      // Get allocation with week info before deleting
       const { data: allocation, error: fetchError } = await supabase
         .from('allocations')
         .select('id, week_id')
@@ -98,14 +83,12 @@ allocationsRouter.delete(
         .single();
 
       if (fetchError || !allocation) {
-        console.error('❌ Allocation not found:', id);
         return res.status(404).json({
           success: false,
           message: 'Allocation not found',
         });
       }
 
-      // Delete the allocation
       const { error: deleteError } = await supabase
         .from('allocations')
         .delete()
@@ -113,16 +96,7 @@ allocationsRouter.delete(
 
       if (deleteError) throw deleteError;
 
-      console.log('✅ Allocation deleted:', id);
-
-      // Broadcast deletion
-      if (io) {
-        io.to(`schedule:*:${allocation.week_id}`).emit('allocation:deleted', {
-          id: allocation.id,
-          weekId: allocation.week_id,
-        });
-      }
-
+      // Real-time updates handled by Supabase Realtime on the frontend
       res.json({
         success: true,
         message: 'Allocation deleted',
@@ -142,9 +116,6 @@ allocationsRouter.post(
     try {
       const { sourceWeekId, targetWeekId } = req.body;
 
-      console.log('📋 Copying allocations from week', sourceWeekId, 'to', targetWeekId);
-
-      // Get source allocations
       const { data: sourceAllocations, error: fetchError } = await supabase
         .from('allocations')
         .select('user_id, task_id, day_of_week, time_slot')
@@ -159,7 +130,6 @@ allocationsRouter.post(
         });
       }
 
-      // Create allocations for target week
       const allocationsToCreate = sourceAllocations.map((a) => ({
         user_id: a.user_id,
         task_id: a.task_id,
@@ -174,8 +144,6 @@ allocationsRouter.post(
         .select();
 
       if (createError) throw createError;
-
-      console.log(`✅ Copied ${created?.length || 0} allocations`);
 
       res.json({
         success: true,

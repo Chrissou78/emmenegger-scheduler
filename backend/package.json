@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "dotenv -e .env tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/backend/src/server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.2",
