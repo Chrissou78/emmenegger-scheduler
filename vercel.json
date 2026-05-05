@@ -1,25 +1,26 @@
 {
-  "version": 2,
-  "builds": [
+  "buildCommand": "echo 'Building monorepo'",
+  "outputDirectory": ".",
+  "projects": [
     {
-      "src": "backend/package.json",
-      "use": "@vercel/node"
+      "name": "backend",
+      "rootDirectory": "backend",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
+      "framework": "nodejs",
+      "env": {
+        "NODE_ENV": "production"
+      }
     },
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "backend/src/index.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/dist/$1",
-      "status": 200
+      "name": "frontend",
+      "rootDirectory": "frontend",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
+      "framework": "vite",
+      "env": {
+        "VITE_API_URL": "@api_url"
+      }
     }
   ]
 }
