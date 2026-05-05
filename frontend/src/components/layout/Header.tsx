@@ -126,7 +126,7 @@ export function Header({ view, setView, dept, setDept }: HeaderProps) {
         {/* Lang */}
         <div style={{ display: 'flex', gap: 1, background: th.switchBg, borderRadius: 2, padding: 2 }}>
           {['de', 'en', 'fr', 'pt'].map((l) => (
-            <Pill key={l} active={lang === l} onClick={() => setLanguage(l as any)}>
+            <Pill key={l} active={lang === l} onClick={() => setLanguage?.(l as any)}>
               {l.toUpperCase()}
             </Pill>
           ))}
