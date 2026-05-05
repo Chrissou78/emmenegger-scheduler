@@ -1,5 +1,5 @@
 {
-  "buildCommand": "echo 'Building monorepo'",
+  "buildCommand": "npm run build:all",
   "outputDirectory": ".",
   "projects": [
     {
@@ -7,10 +7,7 @@
       "rootDirectory": "backend",
       "buildCommand": "npm run build",
       "outputDirectory": "dist",
-      "framework": "nodejs",
-      "env": {
-        "NODE_ENV": "production"
-      }
+      "framework": "nodejs"
     },
     {
       "name": "frontend",
