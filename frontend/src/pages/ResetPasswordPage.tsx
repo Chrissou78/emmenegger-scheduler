@@ -32,7 +32,7 @@ export default function ResetPasswordPage() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/password-reset/verify/${token}`
+        `${import.meta.env.VITE_API_URL || ''}/api/v1/password-reset/verify/${token}`
       );
       const data = await response.json();
 
@@ -67,7 +67,7 @@ export default function ResetPasswordPage() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/password-reset/reset`,
+        `${import.meta.env.VITE_API_URL || ''}/api/v1/password-reset/reset`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

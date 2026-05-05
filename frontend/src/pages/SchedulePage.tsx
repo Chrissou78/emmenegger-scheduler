@@ -133,7 +133,7 @@ export function SchedulePage() {
 
   // Socket.IO
   useEffect(() => {
-    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001');
+    const socket = io(import.meta.env.VITE_API_URL || '');
     socket.on('connect', () => console.log('✅ Socket connected'));
     socket.on('allocation:created', () => {
       console.log('📢 Allocation created');
@@ -154,7 +154,7 @@ export function SchedulePage() {
     const fetchWeeks = async () => {
       const token = localStorage.getItem('token');
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/weeks`, {
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/weeks`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await resp.json();
@@ -172,7 +172,7 @@ export function SchedulePage() {
     const fetchTasks = async () => {
       const token = localStorage.getItem('token');
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/tasks`, {
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/tasks`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await resp.json();
@@ -196,7 +196,7 @@ export function SchedulePage() {
     const fetchUsers = async () => {
       const token = localStorage.getItem('token');
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/users`, {
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/users`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await resp.json();
@@ -217,7 +217,7 @@ export function SchedulePage() {
   const fetchAllocations = async () => {
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/allocations`, {
+      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await resp.json();
@@ -344,7 +344,7 @@ export function SchedulePage() {
       console.log('📤 Payload:', payload);
 
       const resp = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/allocations`,
+        `${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`,
         {
           method: 'POST',
           headers: {
@@ -376,7 +376,7 @@ export function SchedulePage() {
     const token = localStorage.getItem('token');
 
     try {
-      const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/allocations`, {
+      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await resp.json();
@@ -385,7 +385,7 @@ export function SchedulePage() {
 
       if (allocToDelete) {
         const delResp = await fetch(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/allocations/${allocToDelete.id}`,
+          `${import.meta.env.VITE_API_URL || ''}/api/v1/allocations/${allocToDelete.id}`,
           {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` },
