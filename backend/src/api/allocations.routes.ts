@@ -1,8 +1,15 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { requireRole } from '../middleware/auth';
-import { io } from '../server';
 import jwt from 'jsonwebtoken';
+
+let io: any = null;
+try {
+  // Only available in dev (server.ts), not in serverless
+  io = require('../server').io;
+} catch {
+  // Running on Vercel serverless — no Socket.IO
+}
 
 export const allocationsRouter = Router();
 
@@ -109,10 +116,12 @@ allocationsRouter.delete(
       console.log('✅ Allocation deleted:', id);
 
       // Broadcast deletion
-      io.to(`schedule:*:${allocation.week_id}`).emit('allocation:deleted', {
-        id: allocation.id,
-        weekId: allocation.week_id,
-      });
+      if (io) {
+        io.to(`schedule:*:${allocation.week_id}`).emit('allocation:deleted', {
+          id: allocation.id,
+          weekId: allocation.week_id,
+        });
+      }
 
       res.json({
         success: true,

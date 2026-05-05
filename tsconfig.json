@@ -3,17 +3,18 @@
     "target": "ES2022",
     "module": "commonjs",
     "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+    "outDir": ".vercel/output",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@emmenegger/shared/*": ["shared/*"]
+    }
   },
-  "include": ["src/**/*", "../shared/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["api/**/*", "backend/src/**/*", "shared/**/*"],
+  "exclude": ["node_modules", "frontend"]
 }

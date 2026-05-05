@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ScheduleType, ViewMode } from '../../../shared/types';
+import type { ScheduleType, ViewMode } from '@emmenegger/shared/types';
 
 interface ScheduleState {
   // Current view

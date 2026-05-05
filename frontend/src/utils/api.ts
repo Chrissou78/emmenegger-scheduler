@@ -1,6 +1,6 @@
 import { useAuthStore } from '../contexts/authStore';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 class ApiClient {
   private getHeaders(): HeadersInit {
