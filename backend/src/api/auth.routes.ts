@@ -1,128 +1,169 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { prisma } from '../db/client';
-import { signToken } from '../middleware/auth';
+import bcryptjs from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { supabase } from '../lib/supabase';
+import { z } from 'zod';
 
 export const authRouter = Router();
 
+const loginSchema = z.object({
+  email: z.string().email('Invalid email'),
+  password: z.string().min(1, 'Password required'),
+});
+
 // POST /api/v1/auth/login
-authRouter.post('/login', async (req, res, next) => {
+authRouter.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = loginSchema.parse(req.body);
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Email and password required' });
+    // Fetch user from database
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email, password_hash, first_name, last_name, role, departments, is_active')
+      .eq('email', email)
+      .single();
+
+    if (userError || !user) {
+      console.error('❌ User not found:', email, userError);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid credentials' });
+    if (!user.is_active) {
+      console.error('❌ User inactive:', email);
+      return res.status(401).json({
+        success: false,
+        message: 'Account is inactive',
+      });
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid credentials' });
+    // Verify password
+    const passwordValid = await bcryptjs.compare(password, user.password_hash);
+    if (!passwordValid) {
+      console.error('❌ Password mismatch for:', email);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
     }
 
-    const token = signToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      departments: user.departments,
-    });
+    // Generate JWT token (7 days expiry)
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      process.env.JWT_SECRET || 'emmenegger-dev-secret-change-in-production',
+      { expiresIn: '7d' }
+    );
+
+    console.log(`✅ Login successful for: ${email}`);
 
     res.json({
-      data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          departments: user.departments,
-          avatarUrl: user.avatarUrl,
-        },
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+        departments: user.departments,
       },
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    res.status(400).json({
+      success: false,
+      message: error instanceof z.ZodError ? error.errors[0].message : 'Login failed',
+    });
   }
 });
 
-// POST /api/v1/auth/register (admin only, but open for initial setup)
-authRouter.post('/register', async (req, res, next) => {
+// POST /api/v1/auth/register (optional, for dev)
+authRouter.post('/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, departments } = req.body;
+    const { email, password, first_name, last_name, role, departments } = req.body;
 
-    if (!email || !password || !firstName || !lastName) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Missing required fields' });
-    }
+    const passwordHash = await bcryptjs.hash(password, 12);
 
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const user = await prisma.user.create({
-      data: {
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert({
         email,
-        passwordHash,
-        firstName,
-        lastName,
+        password_hash: passwordHash,
+        first_name: first_name || '',
+        last_name: last_name || '',
         role: role || 'ARBEITER',
         departments: departments || ['GARTEN_TIEFBAU'],
-      },
-    });
+        is_active: true,
+      })
+      .select('id, email, first_name, last_name, role, departments')
+      .single();
 
-    const token = signToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      departments: user.departments,
-    });
+    if (insertError) {
+      return res.status(400).json({
+        success: false,
+        message: insertError.message,
+      });
+    }
 
     res.status(201).json({
-      data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          departments: user.departments,
-        },
-      },
+      success: true,
+      message: 'User registered successfully',
+      user: newUser,
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('❌ Register error:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Registration failed',
+    });
   }
 });
 
-// GET /api/v1/auth/me
-authRouter.get('/me', async (req, res, next) => {
+// GET /api/v1/auth/me (verify token)
+authRouter.get('/me', async (req, res) => {
   try {
-    // This route uses a simple token check without the full middleware chain
-    const header = req.headers.authorization;
-    if (!header?.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized' });
+    const token = req.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided',
+      });
     }
 
-    const jwt = await import('jsonwebtoken');
-    const payload = jwt.default.verify(
-      header.split(' ')[1],
+    const decoded = jwt.verify(
+      token,
       process.env.JWT_SECRET || 'emmenegger-dev-secret-change-in-production'
-    ) as any;
+    ) as { userId: string; email: string; role: string };
 
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        id: true, email: true, firstName: true, lastName: true,
-        role: true, departments: true, avatarUrl: true, phone: true,
-      },
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email, first_name, last_name, role, departments, is_active')
+      .eq('id', decoded.userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      user,
     });
-
-    if (!user) return res.status(404).json({ error: 'Not Found' });
-    res.json({ data: user });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('❌ Auth verify error:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Invalid or expired token',
+    });
   }
 });

@@ -1,42 +1,153 @@
 import { Router } from 'express';
-import { prisma } from '../db/client';
+import { supabase } from '../lib/supabase';
+import { requireRole } from '../middleware/auth';
 
 export const reportsRouter = Router();
 
+// GET /api/v1/reports
 reportsRouter.get('/', async (req, res, next) => {
   try {
     const { userId, startDate, endDate, status } = req.query;
-    const where: any = {};
-    if (req.user?.role === 'ARBEITER') where.userId = req.user.userId;
-    else if (userId) where.userId = userId;
-    if (status) where.status = status;
-    if (startDate && endDate) where.date = { gte: new Date(startDate as string), lte: new Date(endDate as string) };
-    const reports = await prisma.timeReport.findMany({
-      where, include: { task: { select: { id:true, name:true, code:true, color:true } }, user: { select: { id:true, firstName:true, lastName:true } } },
-      orderBy: { date: 'desc' },
-    });
-    res.json({ data: reports });
-  } catch (err) { next(err); }
+
+    let query = supabase.from('time_reports').select(`
+      *,
+      task:tasks(id, name, code, color),
+      user:users(id, first_name, last_name)
+    `);
+
+    // Workers can only see their own reports
+    if (req.user?.role === 'ARBEITER') {
+      query = query.eq('user_id', req.user.userId);
+    } else if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (startDate) {
+      query = query.gte('date', startDate);
+    }
+
+    if (endDate) {
+      query = query.lte('date', endDate);
+    }
+
+    const { data: reports, error } = await query.order('date', { ascending: false });
+
+    if (error) throw error;
+
+    res.json({ data: reports || [] });
+  } catch (err) {
+    next(err);
+  }
 });
 
-// Workers submit their own reports
+// POST /api/v1/reports (workers submit their own)
 reportsRouter.post('/', async (req, res, next) => {
   try {
-    const report = await prisma.timeReport.create({
-      data: { ...req.body, userId: req.user!.userId, date: new Date(req.body.date), submittedAt: new Date() },
-    });
+    const { taskId, date, plannedHours, actualHours, workDescription, notes, photos } = req.body;
+
+    const { data: report, error } = await supabase
+      .from('time_reports')
+      .insert([
+        {
+          user_id: req.user!.userId,
+          task_id: taskId,
+          date,
+          planned_hours: plannedHours,
+          actual_hours: actualHours,
+          work_description: workDescription,
+          notes,
+          photos: photos || [],
+          status: 'PLANNED',
+          submitted_at: new Date().toISOString(),
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
     res.status(201).json({ data: report });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
+// PUT /api/v1/reports/:id
 reportsRouter.put('/:id', async (req, res, next) => {
   try {
-    const report = await prisma.timeReport.findUnique({ where: { id: req.params.id } });
-    if (!report) return res.status(404).json({ error: 'Not found' });
-    if (req.user?.role === 'ARBEITER' && report.userId !== req.user.userId) {
+    const { taskId, date, plannedHours, actualHours, status, workDescription, notes, photos } = req.body;
+
+    // Fetch report to check permissions
+    const { data: report, error: fetchError } = await supabase
+      .from('time_reports')
+      .select('user_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (fetchError || !report) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    // Workers can only edit their own
+    if (req.user?.role === 'ARBEITER' && report.user_id !== req.user.userId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const updated = await prisma.timeReport.update({ where: { id: req.params.id }, data: { ...req.body, date: req.body.date ? new Date(req.body.date) : undefined } });
+
+    const { data: updated, error } = await supabase
+      .from('time_reports')
+      .update({
+        task_id: taskId,
+        date,
+        planned_hours: plannedHours,
+        actual_hours: actualHours,
+        status,
+        work_description: workDescription,
+        notes,
+        photos,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
     res.json({ data: updated });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/v1/reports/:id
+reportsRouter.delete('/:id', async (req, res, next) => {
+  try {
+    const { data: report, error: fetchError } = await supabase
+      .from('time_reports')
+      .select('user_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (fetchError || !report) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    if (req.user?.role === 'ARBEITER' && report.user_id !== req.user.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { error } = await supabase
+      .from('time_reports')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
+    res.json({ data: { deleted: true } });
+  } catch (err) {
+    next(err);
+  }
 });

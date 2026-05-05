@@ -1,51 +1,158 @@
 import { Router } from 'express';
-import { prisma } from '../db/client';
+import { supabase } from '../lib/supabase';
 import { requireRole } from '../middleware/auth';
 
 export const machinesRouter = Router();
 
+// GET /api/v1/machines
 machinesRouter.get('/', async (req, res, next) => {
   try {
     const { category, active } = req.query;
-    const where: any = {};
-    if (category) where.category = category;
-    if (active !== undefined) where.isActive = active === 'true';
-    const machines = await prisma.machine.findMany({ where, orderBy: [{ category: 'asc' }, { tonnage: 'asc' }] });
-    res.json({ data: machines });
-  } catch (err) { next(err); }
+
+    let query = supabase.from('machines').select('*');
+
+    if (category) {
+      query = query.eq('category', category);
+    }
+
+    if (active !== undefined) {
+      query = query.eq('is_active', active === 'true');
+    }
+
+    const { data: machines, error } = await query
+      .order('category', { ascending: true })
+      .order('tonnage', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ data: machines || [] });
+  } catch (err) {
+    next(err);
+  }
 });
 
+// POST /api/v1/machines
 machinesRouter.post('/', requireRole('GLOBAL_MANAGER'), async (req, res, next) => {
   try {
-    const machine = await prisma.machine.create({ data: req.body });
+    const { inventoryNr, name, category, tonnage, operator, notes } = req.body;
+
+    const { data: machine, error } = await supabase
+      .from('machines')
+      .insert([
+        {
+          inventory_nr: inventoryNr,
+          name,
+          category,
+          tonnage,
+          operator: operator || 'EMMENEGGER',
+          notes,
+          is_active: true,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
     res.status(201).json({ data: machine });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
+// GET /api/v1/machines/allocations
 machinesRouter.get('/allocations', async (req, res, next) => {
   try {
     const { weekId } = req.query;
-    const where: any = {};
-    if (weekId) where.weekId = weekId;
-    const allocs = await prisma.machineAllocation.findMany({
-      where, include: { machine: true, site: { select: { id:true, name:true, location:true } } },
-      orderBy: [{ dayOfWeek: 'asc' }],
-    });
-    res.json({ data: allocs });
-  } catch (err) { next(err); }
+
+    let query = supabase.from('machine_allocations').select(`
+      id,
+      machine_id,
+      site_id,
+      week_id,
+      day_of_week,
+      created_by_id,
+      created_at,
+      machine:machines(*),
+      site:tasks(id, name, location)
+    `);
+
+    if (weekId) {
+      query = query.eq('week_id', weekId);
+    }
+
+    const { data: allocations, error } = await query.order('day_of_week', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ data: allocations || [] });
+  } catch (err) {
+    next(err);
+  }
 });
 
+// POST /api/v1/machines/allocations
 machinesRouter.post('/allocations', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
   try {
     const { machineId, siteId, weekId, dayOfWeek } = req.body;
-    const existing = await prisma.machineAllocation.findUnique({
-      where: { machineId_weekId_dayOfWeek: { machineId, weekId, dayOfWeek } },
-    });
-    if (existing) return res.status(409).json({ error: 'Machine already allocated on this day' });
-    const alloc = await prisma.machineAllocation.create({
-      data: { machineId, siteId, weekId, dayOfWeek, createdById: req.user!.userId },
-      include: { machine: true, site: { select: { id:true, name:true } } },
-    });
-    res.status(201).json({ data: alloc });
-  } catch (err) { next(err); }
+
+    // Check for existing allocation
+    const { data: existing } = await supabase
+      .from('machine_allocations')
+      .select('id')
+      .eq('machine_id', machineId)
+      .eq('week_id', weekId)
+      .eq('day_of_week', dayOfWeek)
+      .single();
+
+    if (existing) {
+      return res.status(409).json({ error: 'Machine already allocated on this day' });
+    }
+
+    const { data: allocation, error } = await supabase
+      .from('machine_allocations')
+      .insert([
+        {
+          machine_id: machineId,
+          site_id: siteId,
+          week_id: weekId,
+          day_of_week: dayOfWeek,
+          created_by_id: req.user!.userId,
+        },
+      ])
+      .select(`
+        id,
+        machine_id,
+        site_id,
+        week_id,
+        day_of_week,
+        created_by_id,
+        created_at,
+        machine:machines(*),
+        site:tasks(id, name)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ data: allocation });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/v1/machines/allocations/:id
+machinesRouter.delete('/allocations/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('machine_allocations')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
+    res.json({ data: { deleted: true } });
+  } catch (err) {
+    next(err);
+  }
 });

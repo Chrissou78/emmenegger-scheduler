@@ -1,42 +1,145 @@
 import { Router } from 'express';
-import { prisma } from '../db/client';
+import { supabase } from '../lib/supabase';
 import { requireRole } from '../middleware/auth';
 
 export const tasksRouter = Router();
 
+// GET /api/v1/tasks
 tasksRouter.get('/', async (req, res, next) => {
   try {
-    const { scheduleType, status, recurring } = req.query;
-    const where: any = {};
-    if (scheduleType) where.scheduleType = scheduleType;
-    if (status) where.status = status;
-    if (recurring !== undefined) where.isRecurring = recurring === 'true';
+    const { scheduleType, status, customerId, code } = req.query;
 
-    const tasks = await prisma.task.findMany({
-      where, include: { customer: { select: { id:true, name:true } } },
-      orderBy: { sortOrder: 'asc' },
-    });
-    res.json({ data: tasks });
-  } catch (err) { next(err); }
+    let query = supabase.from('tasks').select(`
+      id,
+      code,
+      name,
+      color,
+      schedule_type,
+      customer:customers(id, name)
+    `);
+
+    if (code) {
+      query = query.eq('code', code);
+    }
+
+    if (scheduleType) {
+      query = query.eq('schedule_type', scheduleType);
+    }
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (customerId) {
+      query = query.eq('customer_id', customerId);
+    }
+
+    const { data: tasks, error } = await query.order('sort_order', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ success: true, data: tasks || [] });
+  } catch (err) {
+    next(err);
+  }
 });
 
+// POST /api/v1/tasks
 tasksRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
   try {
-    const task = await prisma.task.create({ data: req.body });
+    const {
+      customerId,
+      code,
+      name,
+      description,
+      location,
+      scheduleType,
+      isRecurring,
+      recurrenceType,
+      recurrenceWeeks,
+      seasonalTasks,
+      estimatedHours,
+      machines,
+      materials,
+      color,
+      sortOrder,
+    } = req.body;
+
+    const { data: task, error } = await supabase
+      .from('tasks')
+      .insert([
+        {
+          customer_id: customerId,
+          code,
+          name,
+          description,
+          location,
+          schedule_type: scheduleType,
+          is_recurring: isRecurring || false,
+          recurrence_type: recurrenceType || 'NONE',
+          recurrence_weeks: recurrenceWeeks || [],
+          seasonal_tasks: seasonalTasks || [],
+          estimated_hours: estimatedHours,
+          machines: machines || [],
+          materials,
+          color: color || '#8B7355',
+          sort_order: sortOrder || 0,
+          status: 'ACTIVE',
+        },
+      ])
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
     res.status(201).json({ data: task });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
+// PUT /api/v1/tasks/:id
 tasksRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
   try {
-    const task = await prisma.task.update({ where: { id: req.params.id }, data: req.body });
+    const { name, description, location, status, color, sortOrder, machines, estimatedHours } = req.body;
+
+    const { data: task, error } = await supabase
+      .from('tasks')
+      .update({
+        name,
+        description,
+        location,
+        status,
+        color,
+        sort_order: sortOrder,
+        machines,
+        estimated_hours: estimatedHours,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
     res.json({ data: task });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
+// DELETE /api/v1/tasks/:id
 tasksRouter.delete('/:id', requireRole('GLOBAL_MANAGER'), async (req, res, next) => {
   try {
-    await prisma.task.delete({ where: { id: req.params.id } });
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: 'CANCELLED', updated_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
     res.json({ data: { deleted: true } });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });

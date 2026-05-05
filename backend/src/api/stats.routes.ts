@@ -1,43 +1,96 @@
 import { Router } from 'express';
-import { prisma } from '../db/client';
+import { supabase } from '../lib/supabase';
+import { requireRole } from '../middleware/auth';
 
 export const statsRouter = Router();
 
-statsRouter.get('/occupancy', async (req, res, next) => {
+// GET /api/v1/stats/week/:weekId
+statsRouter.get('/week/:weekId', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
   try {
-    const { weekId, userId } = req.query;
-    const where: any = {};
-    if (weekId) where.weekId = weekId;
-    if (req.user?.role === 'ARBEITER') where.userId = req.user.userId;
-    else if (userId) where.userId = userId;
+    const { weekId } = req.params;
 
-    const allocations = await prisma.allocation.findMany({ where });
-    const week = weekId ? await prisma.week.findUnique({ where: { id: weekId as string } }) : null;
+    // Get all allocations for the week
+    const { data: allocations, error: allocError } = await supabase
+      .from('allocations')
+      .select('user_id, task_id, day_of_week')
+      .eq('week_id', weekId);
 
-    // Calculate total available slots (6 days x 4 slots per user)
-    let userIds: string[];
-    if (userId) { userIds = [userId as string]; }
-    else {
-      const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
-      userIds = users.map(u => u.id);
-    }
+    if (allocError) throw allocError;
 
-    const totalSlots = userIds.length * 6 * 4;
-    const filledSlots = allocations.length;
+    // Get all absences for employees in that week
+    const { data: week, error: weekError } = await supabase
+      .from('weeks')
+      .select('year, week_number')
+      .eq('id', weekId)
+      .single();
 
-    // Get absences for the period
-    const absenceCount = weekId
-      ? await prisma.absence.count({ where: { userId: userId ? userId as string : undefined } })
-      : 0;
+    if (weekError) throw weekError;
+
+    // Calculate stats
+    const employeeCount = new Set((allocations || []).map((a) => a.user_id)).size;
+    const allocationCount = (allocations || []).length;
+    const taskCount = new Set((allocations || []).map((a) => a.task_id)).size;
+    const daysUtilized = (allocations || []).length > 0 ? 6 : 0; // 0-5 days
 
     res.json({
       data: {
-        totalSlots,
-        filledSlots,
-        absenceSlots: absenceCount,
-        occupancyRate: totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0,
-        employeeCount: userIds.length,
+        weekId,
+        year: week.year,
+        weekNumber: week.week_number,
+        employeeCount,
+        allocationCount,
+        taskCount,
+        daysUtilized,
+        timestamp: new Date().toISOString(),
       },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/stats/user/:userId
+statsRouter.get('/user/:userId', async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { year } = req.query;
+
+    const currentYear = year ? Number(year) : new Date().getFullYear();
+
+    // Get allocations
+    const { data: allocations, error: allocError } = await supabase
+      .from('allocations')
+      .select(`
+        id,
+        week:weeks(year, week_number),
+        task:tasks(name, code)
+      `)
+      .eq('user_id', userId);
+
+    if (allocError) throw allocError;
+
+    // Get reports
+    const { data: reports, error: reportError } = await supabase
+      .from('time_reports')
+      .select('actual_hours, status')
+      .eq('user_id', userId);
+
+    if (reportError) throw reportError;
+
+    const totalHours = (reports || []).reduce((sum, r) => sum + (r.actual_hours || 0), 0);
+    const completedReports = (reports || []).filter((r) => r.status === 'COMPLETED').length;
+
+    res.json({
+      data: {
+        userId,
+        allocations: allocations || [],
+        reports: reports || [],
+        totalHours,
+        completedReports,
+        allocationCount: allocations?.length || 0,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 });
