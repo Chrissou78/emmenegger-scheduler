@@ -96,13 +96,13 @@ export default function ResetPasswordPage() {
       <div
         style={{
           minHeight: '100vh',
-          backgroundColor: isDark ? th.bgD : th.bgL,
+          background: th.bg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <div style={{ fontSize: '18px', color: isDark ? th.textD : th.textL }}>
+        <div style={{ fontSize: '18px', color: th.text }}>
           Loading...
         </div>
       </div>
@@ -114,8 +114,8 @@ export default function ResetPasswordPage() {
       <div
         style={{
           minHeight: '100vh',
-          backgroundColor: isDark ? th.bgD : th.bgL,
-          color: isDark ? th.textD : th.textL,
+          backgroundColor: th.bg,
+          color: th.text,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -128,7 +128,7 @@ export default function ResetPasswordPage() {
             width: '100%',
             maxWidth: '400px',
             padding: '40px 30px',
-            backgroundColor: isDark ? '#1e1e1e' : '#fff',
+            backgroundColor: th.bgCard,
             borderRadius: '10px',
             textAlign: 'center',
           }}
@@ -159,8 +159,8 @@ export default function ResetPasswordPage() {
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: isDark ? th.bgD : th.bgL,
-        color: isDark ? th.textD : th.textL,
+        backgroundColor: th.bg,
+        color: th.text,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -173,7 +173,7 @@ export default function ResetPasswordPage() {
           width: '100%',
           maxWidth: '400px',
           padding: '40px 30px',
-          backgroundColor: isDark ? '#1e1e1e' : '#fff',
+          backgroundColor: th.bgCard,
           borderRadius: '10px',
           boxShadow: isDark
             ? '0 10px 40px rgba(0,0,0,0.3)'

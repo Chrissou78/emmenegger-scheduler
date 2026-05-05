@@ -20,6 +20,7 @@ interface ThemeColors {
   empNameSel: string;
   modalBg: string;
   modalCard: string;
+  primary: string;
   btnBg: string;
   btnBgHover: string;
   scrollThumb: string;
