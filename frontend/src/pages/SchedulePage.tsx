@@ -143,8 +143,11 @@ export function SchedulePage() {
       console.log('📢 Allocation deleted');
       fetchAllocations();
     });
-    return () => socket.close();
+    return () => {
+      socket.close();
+    };
   }, []);
+
 
   // Fetch weeks
   useEffect(() => {
@@ -422,12 +425,12 @@ export function SchedulePage() {
   };
 
   const absBg = (code: string) => {
-    const abs = ABS[code as keyof typeof ABS];
-    return isDark ? abs?.bgD : abs?.bgL;
+    const abs = ABS[code as unknown as keyof typeof ABS];
+    return abs?.bg || '#333';
   };
 
   const absText = (code: string) => {
-    const abs = ABS[code as keyof typeof ABS];
+    const abs = ABS[code as unknown as keyof typeof ABS];
     return isDark ? abs?.textD : abs?.textL;
   };
 
@@ -817,7 +820,7 @@ export function SchedulePage() {
                                 }}
                                 title={T.de.abs[absCode as keyof typeof T.de.abs]}
                               >
-                                <span style={{ flexShrink: 0 }}>{ABS[absCode as keyof typeof ABS]?.icon}</span>
+                                <span style={{ flexShrink: 0 }}>{ABS[absCode as unknown as keyof typeof ABS]?.icon}</span>
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '7px' }}>
                                   {T.de.abs[absCode as keyof typeof T.de.abs]}
                                 </span>
@@ -1023,7 +1026,7 @@ export function SchedulePage() {
             }}
           >
             {Object.entries(T.de.abs).map(([code, label]) => {
-              const abs = ABS[code as keyof typeof ABS];
+              const abs = ABS[code as unknown as keyof typeof ABS];
               const count = Object.values(alloc).reduce((s, userAlloc) => {
                 return (
                   s +
@@ -1053,7 +1056,7 @@ export function SchedulePage() {
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     borderLeft: '2px solid transparent',
-                    backgroundImage: `linear-gradient(${th.bgCard},${th.bgCard}), ${isDark ? abs?.bgD : abs?.bgL}`,
+                    backgroundImage: `linear-gradient(${th.bgCard},${th.bgCard}), ${ABS[code as unknown as keyof typeof ABS]?.bg}`,
                     backgroundOrigin: 'padding-box, border-box',
                     backgroundClip: 'padding-box, border-box',
                     border: '1px solid transparent',
@@ -1073,7 +1076,7 @@ export function SchedulePage() {
                         width: 22,
                         height: 22,
                         borderRadius: 2,
-                        background: isDark ? abs?.bgD : abs?.bgL,
+                        background: abs?.bg,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1172,7 +1175,7 @@ export function SchedulePage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {Object.entries(T.de.abs).map(([code, label]) => {
-                const abs = ABS[code as keyof typeof ABS];
+                const abs = ABS[code as unknown as keyof typeof ABS];
                 return (
                   <button
                     key={code}

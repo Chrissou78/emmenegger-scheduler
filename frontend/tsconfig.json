@@ -4,6 +4,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
+    "useDefineForClassFields": true,
     "esModuleInterop": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -13,7 +14,8 @@
     "jsx": "react-jsx",
     "strict": true,
     "declaration": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["vite/client"]
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

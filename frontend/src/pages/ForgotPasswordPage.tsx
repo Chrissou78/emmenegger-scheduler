@@ -19,8 +19,9 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/v1/password-reset/forgot`,
+        `${apiUrl}/api/v1/password-reset/forgot`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -49,8 +50,8 @@ export default function ForgotPasswordPage() {
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: isDark ? th.bgD : th.bgL,
-        color: isDark ? th.textD : th.textL,
+        backgroundColor: th.bg,
+        color: th.text,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -63,22 +64,33 @@ export default function ForgotPasswordPage() {
           width: '100%',
           maxWidth: '400px',
           padding: '40px 30px',
-          backgroundColor: isDark ? '#1e1e1e' : '#fff',
+          backgroundColor: th.bgCard,
           borderRadius: '10px',
           boxShadow: isDark
             ? '0 10px 40px rgba(0,0,0,0.3)'
             : '0 10px 40px rgba(0,0,0,0.1)',
         }}
       >
-        <Link to="/login" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: th.primary, textDecoration: 'none', marginBottom: '30px', fontSize: '14px' }}>
+        <Link 
+          to="/login" 
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            color: th.primary, 
+            textDecoration: 'none', 
+            marginBottom: '30px', 
+            fontSize: '14px' 
+          }}
+        >
           <ArrowLeft size={16} />
           Back to login
         </Link>
 
-        <h1 style={{ marginBottom: '10px', fontSize: '24px', fontWeight: '600' }}>
+        <h1 style={{ marginBottom: '10px', fontSize: '24px', fontWeight: '600', color: th.text }}>
           Reset Password
         </h1>
-        <p style={{ marginBottom: '30px', fontSize: '14px', opacity: 0.7 }}>
+        <p style={{ marginBottom: '30px', fontSize: '14px', color: th.textDim }}>
           Enter your email address and we'll send you a link to reset your password.
         </p>
 
@@ -106,6 +118,7 @@ export default function ForgotPasswordPage() {
                   marginBottom: '8px',
                   fontSize: '14px',
                   fontWeight: '500',
+                  color: th.text,
                 }}
               >
                 Email Address
@@ -116,7 +129,7 @@ export default function ForgotPasswordPage() {
                   style={{
                     position: 'absolute',
                     left: '12px',
-                    opacity: 0.5,
+                    color: th.textDim,
                   }}
                 />
                 <input
@@ -128,19 +141,19 @@ export default function ForgotPasswordPage() {
                   style={{
                     width: '100%',
                     padding: '12px 12px 12px 40px',
-                    border: `1px solid ${isDark ? '#333' : '#ddd'}`,
+                    border: `1px solid ${th.border}`,
                     borderRadius: '6px',
                     backgroundColor: isDark ? '#2a2a2a' : '#f8f8f8',
-                    color: isDark ? '#fff' : '#000',
+                    color: th.text,
                     fontSize: '14px',
                     outline: 'none',
                     transition: 'border-color 0.2s',
                   }}
                   onFocus={(e) =>
-                    (e.target.style.borderColor = th.primary)
+                    (e.currentTarget.style.borderColor = th.primary)
                   }
                   onBlur={(e) =>
-                    (e.target.style.borderColor = isDark ? '#333' : '#ddd')
+                    (e.currentTarget.style.borderColor = th.border)
                   }
                 />
               </div>
@@ -150,8 +163,8 @@ export default function ForgotPasswordPage() {
               <div
                 style={{
                   padding: '12px',
-                  backgroundColor: isDark ? '#4d1a1a' : '#f8d7da',
-                  color: isDark ? '#ff6b6b' : '#721c24',
+                  backgroundColor: th.toastErrBg,
+                  color: th.toastErrText,
                   borderRadius: '6px',
                   marginBottom: '20px',
                   fontSize: '13px',
@@ -182,7 +195,7 @@ export default function ForgotPasswordPage() {
               style={{
                 width: '100%',
                 padding: '12px',
-                backgroundColor: loading ? '#999' : th.primary,
+                backgroundColor: loading ? th.textDim : th.primary,
                 color: '#fff',
                 border: 'none',
                 borderRadius: '6px',
@@ -190,9 +203,10 @@ export default function ForgotPasswordPage() {
                 fontWeight: '600',
                 cursor: loading ? 'not-allowed' : 'pointer',
                 transition: 'background-color 0.2s',
+                opacity: loading ? 0.6 : 1,
               }}
               onMouseOver={(e) => !loading && (e.currentTarget.style.opacity = '0.9')}
-              onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+              onMouseOut={(e) => (e.currentTarget.style.opacity = loading ? '0.6' : '1')}
             >
               {loading ? 'Sending...' : 'Send Reset Link'}
             </button>
