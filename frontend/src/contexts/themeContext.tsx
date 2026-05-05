@@ -171,9 +171,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       employees: 'Mitarbeiter',
       assignments: 'Zuweisungen',
       absences: 'Absenzen',
+      absenzen: 'Absenzen',  // Add this
+      objekte: 'Objekte',     // Add this if missing
       objects: 'Objekte',
       today: 'Heute',
       days: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
+      abs: {                  // Add this entire object
+        '1': 'Krankheit',
+        '2': 'Urlaub',
+        '3': 'Fortbildung',
+        '4': 'Dienstreise',
+        '5': 'Homeoffice',
+        '6': 'Sonstiges',
+      },
     },
   };
 
