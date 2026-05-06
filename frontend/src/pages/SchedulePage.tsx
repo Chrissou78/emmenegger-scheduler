@@ -664,7 +664,16 @@ export function SchedulePage() {
 
         if (delResp.ok) {
           console.log('✅ Absence deleted from DB');
-          await fetchAbsences();
+          setAlloc(prev => {
+            const newAlloc = { ...prev };
+            if (newAlloc[userId]?.[day]?.absences) {
+              newAlloc[userId][day] = {
+                ...newAlloc[userId][day],
+                absences: newAlloc[userId][day].absences!.filter(a => a !== absenceCode),
+              };
+            }
+            return { ...newAlloc };
+          });
           showToast(t.removed, 'info');
         } else {
           const err = await delResp.json();
