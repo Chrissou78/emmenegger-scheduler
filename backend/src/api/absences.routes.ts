@@ -11,25 +11,22 @@ absencesRouter.get('/', async (req, res, next) => {
 
     let query = supabase
       .from('absences')
-      .select(`
-        *,
-        user:users(id, first_name, last_name)
-      `)
+      .select('*')
       .order('date', { ascending: true });
 
     // Workers can only see their own absences
     if (req.user?.role === 'ARBEITER') {
       query = query.eq('user_id', req.user.userId);
     } else if (userId) {
-      query = query.eq('user_id', userId);
+      query = query.eq('user_id', userId as string);
     }
 
     // Date range filter
     if (startDate) {
-      query = query.gte('date', startDate);
+      query = query.gte('date', startDate as string);
     }
     if (endDate) {
-      query = query.lte('date', endDate);
+      query = query.lte('date', endDate as string);
     }
 
     const { data: absences, error } = await query;
@@ -38,6 +35,7 @@ absencesRouter.get('/', async (req, res, next) => {
 
     res.json({ data: absences || [] });
   } catch (err) {
+    console.error('❌ Error fetching absences:', err);
     next(err);
   }
 });
