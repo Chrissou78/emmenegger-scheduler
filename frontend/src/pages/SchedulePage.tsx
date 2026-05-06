@@ -211,8 +211,14 @@ export function SchedulePage() {
 
   // Fetch allocations
   useEffect(() => {
-    fetchAllocations();
+    fetchAllocations().then(() => fetchAbsences());
   }, [weekOff, users.length, taskMap]);
+
+  useEffect(() => {
+    if (weeks.length > 0) {
+      fetchAbsences();
+    }
+  }, [weeks]);
 
   const fetchAllocations = async () => {
     const token = localStorage.getItem('token');
@@ -263,6 +269,69 @@ export function SchedulePage() {
     }
   };
 
+  const fetchAbsences = async () => {
+    const token = localStorage.getItem('token');
+    const currentKW = getKW(dates[0]);
+    const currentYear = dates[0].getFullYear();
+
+    // Calculate the Monday and Saturday of the current week
+    const startDate = format(dates[0], 'yyyy-MM-dd');
+    const endDate = format(dates[5], 'yyyy-MM-dd');
+
+    try {
+      const resp = await fetch(
+        `${import.meta.env.VITE_API_URL || ''}/api/v1/absences?startDate=${startDate}&endDate=${endDate}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await resp.json();
+      console.log('🏥 Absences loaded:', data.data?.length);
+
+      // Merge absences into alloc state
+      setAlloc(prev => {
+        const newAlloc = { ...prev };
+        // Clear all existing absences first (keep slots)
+        Object.keys(newAlloc).forEach(uid => {
+          Object.keys(newAlloc[uid]).forEach(d => {
+            if (newAlloc[uid][parseInt(d)]) {
+              newAlloc[uid][parseInt(d)] = {
+                ...newAlloc[uid][parseInt(d)],
+                absences: [],
+              };
+            }
+          });
+        });
+
+        if (Array.isArray(data.data)) {
+          data.data.forEach((abs: any) => {
+            // Convert the date to a day index (0=Mon, 1=Tue, ... 5=Sat)
+            const absDate = new Date(abs.date + 'T00:00:00');
+            const dayIndex = dates.findIndex(
+              d => d.getFullYear() === absDate.getFullYear() &&
+                  d.getMonth() === absDate.getMonth() &&
+                  d.getDate() === absDate.getDate()
+            );
+
+            if (dayIndex === -1) return;
+
+            const uid = abs.user_id;
+            if (!newAlloc[uid]) newAlloc[uid] = {};
+            if (!newAlloc[uid][dayIndex]) newAlloc[uid][dayIndex] = { slots: [], absences: [] };
+            if (!newAlloc[uid][dayIndex].absences) newAlloc[uid][dayIndex].absences = [];
+
+            const code = String(abs.absence_code);
+            if (!newAlloc[uid][dayIndex].absences!.includes(code)) {
+              newAlloc[uid][dayIndex].absences!.push(code);
+            }
+          });
+        }
+
+        return { ...newAlloc };
+      });
+    } catch (err) {
+      console.error('❌ Error fetching absences:', err);
+    }
+  };
+
   const getA = (userId: string, day: number) => alloc[userId]?.[day];
 
   const drop = async (userId: string, day: number, code: string) => {
@@ -277,19 +346,45 @@ export function SchedulePage() {
     const isAbsence = Object.keys(T.de.abs).includes(code);
 
     if (isAbsence) {
-      // Handle absence drop
-      setAlloc(p => {
-        const newAlloc = { ...p };
-        if (!newAlloc[userId]) newAlloc[userId] = {};
-        if (!newAlloc[userId][day]) newAlloc[userId][day] = { slots: [], absences: [] };
-        if (!newAlloc[userId][day].absences) newAlloc[userId][day].absences = [];
-        if (!newAlloc[userId][day].absences!.includes(code)) {
-          newAlloc[userId][day].absences!.push(code);
+      const token = localStorage.getItem('token');
+      const currentKW = getKW(dates[0]);
+      const currentYear = dates[0].getFullYear();
+      const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+
+      // Calculate the actual date from the day index
+      const absenceDate = format(dates[day], 'yyyy-MM-dd');
+
+      try {
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/absences`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            userId: userId,
+            date: absenceDate,
+            absenceCode: parseInt(code),
+            source: 'MANUAL',
+          }),
+        });
+
+        if (resp.ok) {
+          const result = await resp.json();
+          console.log('✅ Absence saved:', result);
+          // Refresh to show persisted data
+          await fetchAbsences();
+          const absLabel = T.de.abs[code as keyof typeof T.de.abs];
+          showToast(`${absLabel} → ${users.find(e => e.id === userId)?.first_name || 'Unknown'}`, 'ok');
+        } else {
+          const err = await resp.json();
+          console.error('❌ Error saving absence:', err);
+          showToast(`Error: ${err.message || 'Failed to save absence'}`, 'err');
         }
-        return newAlloc;
-      });
-      const absLabel = T.de.abs[code as keyof typeof T.de.abs];
-      showToast(`${absLabel} → ${users.find(e => e.id === userId)?.first_name || 'Unknown'}`, 'ok');
+      } catch (err) {
+        console.error('❌ Network error saving absence:', err);
+        showToast('Network error', 'err');
+      }
       return;
     }
 
@@ -403,15 +498,44 @@ export function SchedulePage() {
     }
   };
 
-  const rmAbsence = (userId: string, day: number, absenceCode: string) => {
-    setAlloc(p => {
-      const newAlloc = { ...p };
-      if (newAlloc[userId] && newAlloc[userId][day]) {
-        newAlloc[userId][day].absences = newAlloc[userId][day].absences?.filter(a => a !== absenceCode) || [];
+  const rmAbsence = async (userId: string, day: number, absenceCode: string) => {
+    const token = localStorage.getItem('token');
+    const absenceDate = format(dates[day], 'yyyy-MM-dd');
+
+    try {
+      // First, find the absence ID by fetching absences for this user/date
+      const resp = await fetch(
+        `${import.meta.env.VITE_API_URL || ''}/api/v1/absences?userId=${userId}&startDate=${absenceDate}&endDate=${absenceDate}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await resp.json();
+
+      const absToDelete = data.data?.find(
+        (a: any) => String(a.absence_code) === absenceCode
+      );
+
+      if (absToDelete) {
+        const delResp = await fetch(
+          `${import.meta.env.VITE_API_URL || ''}/api/v1/absences/${absToDelete.id}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        if (delResp.ok) {
+          console.log('✅ Absence deleted from DB');
+          await fetchAbsences();
+          showToast(t.removed, 'info');
+        } else {
+          const err = await delResp.json();
+          showToast(`Error: ${err.message || 'Failed to delete'}`, 'err');
+        }
       }
-      return newAlloc;
-    });
-    showToast(t.removed, 'info');
+    } catch (err) {
+      console.error('❌ Error deleting absence:', err);
+      showToast('Network error', 'err');
+    }
   };
 
   const jobBg = (code: string) => {
