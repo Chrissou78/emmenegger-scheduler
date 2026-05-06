@@ -377,6 +377,10 @@ export function SchedulePage() {
       showToast(`${t.blocked} ${t.days[day]}`, 'err');
       return;
     }
+    if ((ex?.slots?.length || 0) >= 2) {
+      showToast(`Max 2 Aufträge pro Zelle`, 'err');
+      return;
+    }
 
     const token = localStorage.getItem('token');
     const taskId = Object.entries(taskMap).find(([_, taskCode]) => taskCode === code)?.[0];
@@ -428,6 +432,7 @@ export function SchedulePage() {
       if (resp.ok) {
         console.log('✅ Allocation created successfully');
         await fetchAllocations();
+        await fetchAbsences();
         const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
         const empName = users.find(e => e.id === userId)?.first_name || 'Unknown';
         showToast(`${job?.label || code} → ${empName}`, 'ok');
@@ -473,6 +478,7 @@ export function SchedulePage() {
         } else {
           const ex = alloc[emp.id]?.[day];
           if (ex?.absences && ex.absences.length > 0) { skipCount++; continue; }
+          if ((ex?.slots?.length || 0) >= 2) { skipCount++; continue; }
 
           const taskId = Object.entries(taskMap).find(([_, tc]) => tc === code)?.[0];
           if (!taskId || !currentWeek) { skipCount++; continue; }
@@ -535,6 +541,7 @@ export function SchedulePage() {
         } else {
           const ex = alloc[userId]?.[day];
           if (ex?.absences && ex.absences.length > 0) { skipCount++; continue; }
+          if ((ex?.slots?.length || 0) >= 2) { skipCount++; continue; }
 
           const taskId = Object.entries(taskMap).find(([_, tc]) => tc === code)?.[0];
           if (!taskId || !currentWeek) { skipCount++; continue; }
@@ -587,6 +594,7 @@ export function SchedulePage() {
 
         if (delResp.ok) {
           await fetchAllocations();
+          await fetchAbsences();
           showToast(t.removed, 'info');
           console.log('✅ Allocation deleted');
         }
