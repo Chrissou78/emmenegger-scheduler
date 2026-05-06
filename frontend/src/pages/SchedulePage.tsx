@@ -64,6 +64,9 @@ const T = {
     unterhalt: 'Unterhalt',
     days: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
     abs: { '1': 'Ferien', '2': 'Schule', '3': 'ÜK', '4': 'Unfall', '5': 'Krank', '6': 'Teilzeit' },
+    bulkDay: 'Spalte',
+    bulkRow: 'Zeile',
+    skipped: 'übersprungen',
   },
 };
 
@@ -107,6 +110,7 @@ export function SchedulePage() {
   const [absModal, setAbsModal] = useState<{ user_id: string; day: number } | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'info' | 'ok' | 'err' } | null>(null);
   const [hover, setHover] = useState<{ e: string; d: number } | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const dates = getWeekDates(weekOff);
   const kw = getKW(dates[0]);
@@ -147,7 +151,6 @@ export function SchedulePage() {
       socket.close();
     };
   }, []);
-
 
   // Fetch weeks
   useEffect(() => {
@@ -228,7 +231,6 @@ export function SchedulePage() {
       });
       const data = await resp.json();
 
-      // Get current week ID
       const currentKW = getKW(dates[0]);
       const currentYear = dates[0].getFullYear();
       const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
@@ -240,9 +242,7 @@ export function SchedulePage() {
 
       if (Array.isArray(data.data)) {
         data.data.forEach((a: Allocation) => {
-          // FILTER: Only include allocations from current week
           if (a.week_id !== currentWeek?.id) {
-            console.log('⏭️ Skipping allocation from different week:', a.week_id);
             return;
           }
 
@@ -253,7 +253,6 @@ export function SchedulePage() {
 
           const code = taskMap[a.task_id];
           if (code) {
-            // Check if slot already exists, don't add duplicates
             if (!newAlloc[a.user_id][a.day_of_week].slots!.includes(code)) {
               newAlloc[a.user_id][a.day_of_week].slots!.push(code);
               console.log('✅ Added allocation:', a.user_id, 'day', a.day_of_week, 'code', code);
@@ -271,10 +270,7 @@ export function SchedulePage() {
 
   const fetchAbsences = async () => {
     const token = localStorage.getItem('token');
-    const currentKW = getKW(dates[0]);
-    const currentYear = dates[0].getFullYear();
 
-    // Calculate the Monday and Saturday of the current week
     const startDate = format(dates[0], 'yyyy-MM-dd');
     const endDate = format(dates[5], 'yyyy-MM-dd');
 
@@ -286,10 +282,8 @@ export function SchedulePage() {
       const data = await resp.json();
       console.log('🏥 Absences loaded:', data.data?.length);
 
-      // Merge absences into alloc state
       setAlloc(prev => {
         const newAlloc = { ...prev };
-        // Clear all existing absences first (keep slots)
         Object.keys(newAlloc).forEach(uid => {
           Object.keys(newAlloc[uid]).forEach(d => {
             if (newAlloc[uid][parseInt(d)]) {
@@ -303,7 +297,6 @@ export function SchedulePage() {
 
         if (Array.isArray(data.data)) {
           data.data.forEach((abs: any) => {
-            // Convert the date to a day index (0=Mon, 1=Tue, ... 5=Sat)
             const absDate = new Date(abs.date + 'T00:00:00');
             const dayIndex = dates.findIndex(
               d => d.getFullYear() === absDate.getFullYear() &&
@@ -334,6 +327,7 @@ export function SchedulePage() {
 
   const getA = (userId: string, day: number) => alloc[userId]?.[day];
 
+  // ── Single cell drop (existing) ──
   const drop = async (userId: string, day: number, code: string) => {
     if (!code) {
       console.warn('⚠️ No code data');
@@ -342,16 +336,10 @@ export function SchedulePage() {
 
     console.log('📥 DROP triggered:', userId, day, 'code=', code);
 
-    // Check if it's an absence code
     const isAbsence = Object.keys(T.de.abs).includes(code);
 
     if (isAbsence) {
       const token = localStorage.getItem('token');
-      const currentKW = getKW(dates[0]);
-      const currentYear = dates[0].getFullYear();
-      const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
-
-      // Calculate the actual date from the day index
       const absenceDate = format(dates[day], 'yyyy-MM-dd');
 
       try {
@@ -372,7 +360,6 @@ export function SchedulePage() {
         if (resp.ok) {
           const result = await resp.json();
           console.log('✅ Absence saved:', result);
-          // Refresh to show persisted data
           await fetchAbsences();
           const absLabel = T.de.abs[code as keyof typeof T.de.abs];
           showToast(`${absLabel} → ${users.find(e => e.id === userId)?.first_name || 'Unknown'}`, 'ok');
@@ -388,7 +375,7 @@ export function SchedulePage() {
       return;
     }
 
-    // Handle task drop (original logic)
+    // Handle task drop
     const ex = getA(userId, day);
     if (ex?.absences && ex.absences.length > 0) {
       showToast(`${t.blocked} ${t.days[day]}`, 'err');
@@ -396,8 +383,6 @@ export function SchedulePage() {
     }
 
     const token = localStorage.getItem('token');
-
-    // Find task ID by matching the code
     const taskId = Object.entries(taskMap).find(([_, taskCode]) => taskCode === code)?.[0];
 
     if (!taskId) {
@@ -406,11 +391,8 @@ export function SchedulePage() {
       return;
     }
 
-    // Get the current week number and year from dates[0]
     const currentKW = getKW(dates[0]);
     const currentYear = dates[0].getFullYear();
-
-    // Find the matching week
     const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
 
     if (!currentWeek) {
@@ -422,11 +404,8 @@ export function SchedulePage() {
     console.log('✅ Found week:', currentWeek.id);
 
     try {
-      // Calculate next time_slot: count existing slots + 1
       const existingSlots = alloc[userId]?.[day]?.slots?.length || 0;
       const nextTimeSlot = existingSlots + 1;
-
-      console.log('📊 Existing slots for this cell:', existingSlots, 'Next time_slot:', nextTimeSlot);
 
       const payload = {
         user_id: userId,
@@ -467,6 +446,129 @@ export function SchedulePage() {
     }
   };
 
+  // ── Bulk drop: apply code to ALL employees for a given day (column header) ──
+  const dropOnDay = async (day: number, code: string) => {
+    if (!code || bulkLoading) return;
+    setBulkLoading(true);
+    console.log('📥 BULK DROP on day', day, 'code=', code, '→', emps.length, 'employees');
+
+    const isAbsence = Object.keys(T.de.abs).includes(code);
+    const token = localStorage.getItem('token');
+    const currentKW = getKW(dates[0]);
+    const currentYear = dates[0].getFullYear();
+    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+
+    let successCount = 0;
+    let skipCount = 0;
+
+    for (const emp of emps) {
+      try {
+        if (isAbsence) {
+          const existing = alloc[emp.id]?.[day]?.absences || [];
+          if (existing.includes(code)) { skipCount++; continue; }
+
+          const absenceDate = format(dates[day], 'yyyy-MM-dd');
+          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/absences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ userId: emp.id, date: absenceDate, absenceCode: parseInt(code), source: 'MANUAL' }),
+          });
+          if (resp.ok) successCount++;
+        } else {
+          const ex = alloc[emp.id]?.[day];
+          if (ex?.absences && ex.absences.length > 0) { skipCount++; continue; }
+
+          const taskId = Object.entries(taskMap).find(([_, tc]) => tc === code)?.[0];
+          if (!taskId || !currentWeek) { skipCount++; continue; }
+
+          const existingSlots = alloc[emp.id]?.[day]?.slots?.length || 0;
+          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              user_id: emp.id, task_id: taskId, day_of_week: day,
+              week_id: currentWeek.id, time_slot: existingSlots + 1,
+            }),
+          });
+          if (resp.ok) successCount++;
+        }
+      } catch (err) {
+        console.error('❌ Bulk error for', emp.first_name, err);
+      }
+    }
+
+    await fetchAllocations();
+    await fetchAbsences();
+    setBulkLoading(false);
+
+    const label = isAbsence
+      ? T.de.abs[code as keyof typeof T.de.abs]
+      : (JOB_COLORS[code as keyof typeof JOB_COLORS]?.label || code);
+    showToast(`${label} → ${t.days[day]}: ${successCount} ✓${skipCount > 0 ? ` · ${skipCount} ${t.skipped}` : ''}`, 'ok');
+  };
+
+  // ── Bulk drop: apply code to ALL 6 days for a given employee (row header) ──
+  const dropOnEmployee = async (userId: string, code: string) => {
+    if (!code || bulkLoading) return;
+    setBulkLoading(true);
+    const empName = users.find(e => e.id === userId)?.first_name || 'Unknown';
+    console.log('📥 BULK DROP on employee', empName, 'code=', code, '→ 6 days');
+
+    const isAbsence = Object.keys(T.de.abs).includes(code);
+    const token = localStorage.getItem('token');
+    const currentKW = getKW(dates[0]);
+    const currentYear = dates[0].getFullYear();
+    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+
+    let successCount = 0;
+    let skipCount = 0;
+
+    for (let day = 0; day < 6; day++) {
+      try {
+        if (isAbsence) {
+          const existing = alloc[userId]?.[day]?.absences || [];
+          if (existing.includes(code)) { skipCount++; continue; }
+
+          const absenceDate = format(dates[day], 'yyyy-MM-dd');
+          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/absences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ userId, date: absenceDate, absenceCode: parseInt(code), source: 'MANUAL' }),
+          });
+          if (resp.ok) successCount++;
+        } else {
+          const ex = alloc[userId]?.[day];
+          if (ex?.absences && ex.absences.length > 0) { skipCount++; continue; }
+
+          const taskId = Object.entries(taskMap).find(([_, tc]) => tc === code)?.[0];
+          if (!taskId || !currentWeek) { skipCount++; continue; }
+
+          const existingSlots = alloc[userId]?.[day]?.slots?.length || 0;
+          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              user_id: userId, task_id: taskId, day_of_week: day,
+              week_id: currentWeek.id, time_slot: existingSlots + 1,
+            }),
+          });
+          if (resp.ok) successCount++;
+        }
+      } catch (err) {
+        console.error('❌ Bulk error for day', day, err);
+      }
+    }
+
+    await fetchAllocations();
+    await fetchAbsences();
+    setBulkLoading(false);
+
+    const label = isAbsence
+      ? T.de.abs[code as keyof typeof T.de.abs]
+      : (JOB_COLORS[code as keyof typeof JOB_COLORS]?.label || code);
+    showToast(`${label} → ${empName} (Mo–Sa): ${successCount} ✓${skipCount > 0 ? ` · ${skipCount} ${t.skipped}` : ''}`, 'ok');
+  };
+
   const rm = async (userId: string, day: number) => {
     const token = localStorage.getItem('token');
 
@@ -503,7 +605,6 @@ export function SchedulePage() {
     const absenceDate = format(dates[day], 'yyyy-MM-dd');
 
     try {
-      // First, find the absence ID by fetching absences for this user/date
       const resp = await fetch(
         `${import.meta.env.VITE_API_URL || ''}/api/v1/absences?userId=${userId}&startDate=${absenceDate}&endDate=${absenceDate}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -569,6 +670,8 @@ export function SchedulePage() {
         color: th.text,
         minHeight: '100vh',
         transition: 'background 0.4s ease, color 0.4s ease',
+        opacity: bulkLoading ? 0.7 : 1,
+        pointerEvents: bulkLoading ? 'none' : 'auto',
       }}
     >
       <link
@@ -600,6 +703,22 @@ export function SchedulePage() {
         >
           {toast.msg}
         </div>
+      )}
+
+      {/* BULK LOADING INDICATOR */}
+      {bulkLoading && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            background: `linear-gradient(90deg, transparent, ${th.gold}, transparent)`,
+            zIndex: 1001,
+            animation: 'bulkProgress 1.5s ease-in-out infinite',
+          }}
+        />
       )}
 
       {/* MAIN */}
@@ -774,12 +893,33 @@ export function SchedulePage() {
                 {t.days.map((d, i) => (
                   <th
                     key={d}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+                    onDragEnter={e => {
+                      e.preventDefault();
+                      (e.currentTarget as HTMLElement).style.background = th.switchActive;
+                      (e.currentTarget as HTMLElement).style.boxShadow = `inset 0 -3px 0 ${th.gold}`;
+                    }}
+                    onDragLeave={e => {
+                      (e.currentTarget as HTMLElement).style.background = th.goldGhost;
+                      (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                    }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      (e.currentTarget as HTMLElement).style.background = th.goldGhost;
+                      (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                      const code = e.dataTransfer.getData('text/plain');
+                      console.log('📥 BULK DROP on column header', d, 'day=', i, 'code=', code);
+                      dropOnDay(i, code);
+                    }}
                     style={{
                       padding: '4px 4px',
                       textAlign: 'center',
                       borderBottom: `1px solid ${th.border}`,
                       borderRight: i < 5 ? `1px solid ${th.borderFaint}` : 'none',
                       background: th.goldGhost,
+                      cursor: 'copy',
+                      transition: 'background 0.15s ease, box-shadow 0.15s ease',
                     }}
                   >
                     <div style={{ fontSize: 11, fontWeight: 400, color: th.gold, letterSpacing: 0.5 }}>
@@ -836,8 +976,28 @@ export function SchedulePage() {
                         padding: '4px 12px',
                         borderRight: `1px solid ${th.borderFaint}`,
                         cursor: 'pointer',
+                        transition: 'background 0.15s ease, box-shadow 0.15s ease',
                       }}
                       onClick={() => setSelectedEmp(selectedEmp === emp.id ? null : emp.id)}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+                      onDragEnter={e => {
+                        e.preventDefault();
+                        (e.currentTarget as HTMLElement).style.background = th.switchActive;
+                        (e.currentTarget as HTMLElement).style.boxShadow = `inset 3px 0 0 ${th.gold}`;
+                      }}
+                      onDragLeave={e => {
+                        (e.currentTarget as HTMLElement).style.background = 'transparent';
+                        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                      }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        (e.currentTarget as HTMLElement).style.background = 'transparent';
+                        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                        const code = e.dataTransfer.getData('text/plain');
+                        console.log('📥 BULK DROP on employee', emp.first_name, 'code=', code);
+                        dropOnEmployee(emp.id, code);
+                      }}
                     >
                       <div
                         style={{
@@ -1376,6 +1536,7 @@ export function SchedulePage() {
         @keyframes fadeSlide { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes bulkProgress { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
