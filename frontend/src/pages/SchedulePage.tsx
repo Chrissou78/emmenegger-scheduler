@@ -356,7 +356,19 @@ export function SchedulePage() {
         if (resp.ok) {
           const result = await resp.json();
           console.log('✅ Absence saved:', result);
-          await fetchAbsences();
+          setAlloc(prev => {
+            const newAlloc = { ...prev };
+            if (!newAlloc[userId]) newAlloc[userId] = {};
+            if (!newAlloc[userId][day]) newAlloc[userId][day] = { slots: [], absences: [] };
+            if (!newAlloc[userId][day].absences) newAlloc[userId][day].absences = [];
+            if (!newAlloc[userId][day].absences!.includes(code)) {
+              newAlloc[userId][day] = {
+                ...newAlloc[userId][day],
+                absences: [...newAlloc[userId][day].absences!, code],
+              };
+            }
+            return { ...newAlloc };
+          });
           const absLabel = T.de.abs[code as keyof typeof T.de.abs];
           showToast(`${absLabel} → ${users.find(e => e.id === userId)?.first_name || 'Unknown'}`, 'ok');
         } else {
@@ -431,8 +443,19 @@ export function SchedulePage() {
 
       if (resp.ok) {
         console.log('✅ Allocation created successfully');
-        await fetchAllocations();
-        await fetchAbsences();
+        setAlloc(prev => {
+          const newAlloc = { ...prev };
+          if (!newAlloc[userId]) newAlloc[userId] = {};
+          if (!newAlloc[userId][day]) newAlloc[userId][day] = { slots: [], absences: [] };
+          if (!newAlloc[userId][day].slots) newAlloc[userId][day].slots = [];
+          if (!newAlloc[userId][day].slots!.includes(code)) {
+            newAlloc[userId][day] = {
+              ...newAlloc[userId][day],
+              slots: [...newAlloc[userId][day].slots!, code],
+            };
+          }
+          return { ...newAlloc };
+        });
         const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
         const empName = users.find(e => e.id === userId)?.first_name || 'Unknown';
         showToast(`${job?.label || code} → ${empName}`, 'ok');
@@ -593,8 +616,19 @@ export function SchedulePage() {
         );
 
         if (delResp.ok) {
-          await fetchAllocations();
-          await fetchAbsences();
+          setAlloc(prev => {
+            const newAlloc = { ...prev };
+            if (newAlloc[userId]?.[day]?.slots) {
+              const taskCode = taskMap[allocToDelete.task_id];
+              if (taskCode) {
+                newAlloc[userId][day] = {
+                  ...newAlloc[userId][day],
+                  slots: newAlloc[userId][day].slots!.filter(s => s !== taskCode),
+                };
+              }
+            }
+            return { ...newAlloc };
+          });
           showToast(t.removed, 'info');
           console.log('✅ Allocation deleted');
         }
