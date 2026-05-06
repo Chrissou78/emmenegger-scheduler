@@ -214,14 +214,10 @@ export function SchedulePage() {
 
   // Fetch allocations
   useEffect(() => {
-    fetchAllocations().then(() => fetchAbsences());
-  }, [weekOff, users.length, taskMap]);
-
-  useEffect(() => {
     if (weeks.length > 0) {
-      fetchAbsences();
+      fetchAllocations().then(() => fetchAbsences());
     }
-  }, [weeks]);
+  }, [weekOff, users.length, taskMap, weeks]);
 
   const fetchAllocations = async () => {
     const token = localStorage.getItem('token');
