@@ -16,7 +16,11 @@ import { ProfilePage } from './pages/ProfilePage';
 function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const { user, token } = useAuthStore();
   if (!token || !user) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" replace />;
+  if (roles && !roles.includes(user.role)) {
+    // Redirect workers to /reports, managers to /schedule
+    const fallback = user.role === 'ARBEITER' ? '/reports' : '/schedule';
+    return <Navigate to={fallback} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -33,7 +37,7 @@ function AppContent() {
       case 'ARBEITER': return '/reports';
       case 'LOCAL_MANAGER': return '/schedule';
       case 'GLOBAL_MANAGER': return '/schedule';
-      default: return '/schedule';
+      default: return '/reports';
     }
   };
 
