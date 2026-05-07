@@ -145,8 +145,9 @@ export function AppShell() {
             flexWrap: 'wrap',
             padding: collapsed ? '0 4px' : '0',
           }}>
-            {['de', 'en', 'fr', 'pt'].map(l => (
-              <button key={l} onClick={() => { if (setLanguage) setLanguage(l as 'de' | 'en' | 'fr' | 'pt'); }}
+            {(['de', 'en', 'fr', 'pt'] as const).map(l => (
+              <button key={l} 
+                onClick={() => { if (setLanguage) setLanguage(l); }}
                 style={{
                   padding: collapsed ? '4px 6px' : '4px 8px',
                   borderRadius: 4, border: 'none', cursor: 'pointer',

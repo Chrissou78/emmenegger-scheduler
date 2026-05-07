@@ -5,11 +5,60 @@ import { useAuthStore } from '../contexts/authStore';
 import { themes } from '../i18n/translations';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
+/* ─── Login-specific translations ─── */
+const LT: Record<string, Record<string, string>> = {
+  de: {
+    signIn: 'Anmelden',
+    signingIn: 'Anmeldung…',
+    email: 'E-Mail',
+    password: 'Passwort',
+    forgotPassword: 'Passwort vergessen?',
+    admin: 'Admin',
+    manager: 'Manager',
+    worker: 'Arbeiter',
+    devHint: 'Entwickler-Zugänge',
+  },
+  en: {
+    signIn: 'Sign In',
+    signingIn: 'Signing in…',
+    email: 'Email',
+    password: 'Password',
+    forgotPassword: 'Forgot password?',
+    admin: 'Admin',
+    manager: 'Manager',
+    worker: 'Worker',
+    devHint: 'Dev accounts',
+  },
+  fr: {
+    signIn: 'Connexion',
+    signingIn: 'Connexion…',
+    email: 'E-mail',
+    password: 'Mot de passe',
+    forgotPassword: 'Mot de passe oublié ?',
+    admin: 'Admin',
+    manager: 'Manager',
+    worker: 'Ouvrier',
+    devHint: 'Comptes de développement',
+  },
+  pt: {
+    signIn: 'Entrar',
+    signingIn: 'Entrando…',
+    email: 'E-mail',
+    password: 'Senha',
+    forgotPassword: 'Esqueceu a senha?',
+    admin: 'Admin',
+    manager: 'Gerente',
+    worker: 'Trabalhador',
+    devHint: 'Contas de desenvolvimento',
+  },
+};
+
 export function LoginPage() {
-  const { t, isDark } = useTheme();
+  const { t, isDark, lang, setLanguage, toggleTheme } = useTheme();
   const th = isDark ? themes.dark : themes.light;
   const navigate = useNavigate();
   const { login, loading, error: authError } = useAuthStore();
+  const lt = LT[lang || 'de'] || LT.de;
 
   const [email, setEmail] = useState('admin@emmenegger.ch');
   const [password, setPassword] = useState('admin');
@@ -23,24 +72,15 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     try {
       await login(email, password);
-
-      // Role-based redirect — read user from store after login
       const user = useAuthStore.getState().user;
       const role = (user?.role || '').toUpperCase();
-
       switch (role) {
-        case 'ARBEITER':
-          navigate('/reports');
-          break;
+        case 'ARBEITER': navigate('/reports'); break;
         case 'LOCAL_MANAGER':
-        case 'GLOBAL_MANAGER':
-          navigate('/schedule');
-          break;
-        default:
-          navigate('/reports');
+        case 'GLOBAL_MANAGER': navigate('/schedule'); break;
+        default: navigate('/reports');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -48,28 +88,41 @@ export function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: th.bg,
-        color: th.text,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-        fontFamily: 'Inter, sans-serif',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '400px',
-          padding: '40px 30px',
-          backgroundColor: th.bgCard,
-          borderRadius: '10px',
-          boxShadow: `0 10px 40px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
-        }}
-      >
+    <div style={{
+      minHeight: '100vh', backgroundColor: th.bg, color: th.text,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px', fontFamily: 'Inter, sans-serif',
+    }}>
+      <div style={{
+        width: '100%', maxWidth: '400px', padding: '40px 30px',
+        backgroundColor: th.bgCard, borderRadius: '10px',
+        boxShadow: `0 10px 40px ${isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'}`,
+      }}>
+        {/* Top controls: language + theme */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['de', 'en', 'fr', 'pt'] as const).map(l => (
+              <button key={l}
+                onClick={() => { if (setLanguage) setLanguage(l); }}
+                style={{
+                  padding: '5px 10px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 700, letterSpacing: .5,
+                  background: lang === l ? th.gold : 'transparent',
+                  color: lang === l ? '#fff' : th.textMuted,
+                  transition: 'all .15s',
+                }}
+              >{l.toUpperCase()}</button>
+            ))}
+          </div>
+          <button onClick={toggleTheme}
+            style={{
+              padding: '5px 10px', borderRadius: 4, border: `1px solid ${th.border}`,
+              background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16,
+            }}
+          >{isDark ? '☀' : '☽'}</button>
+        </div>
+
+        {/* Brand */}
         <h1 style={{ marginBottom: '10px', fontSize: '28px', fontWeight: '700', color: th.gold }}>
           🏗️ {t.brand}
         </h1>
@@ -81,12 +134,11 @@ export function LoginPage() {
           {/* Email */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500', color: th.text }}>
-              Email
+              {lt.email}
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Mail size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@emmenegger.ch" required
                 style={{
                   width: '100%', padding: '12px 12px 12px 40px', border: `1px solid ${th.border}`,
@@ -102,12 +154,11 @@ export function LoginPage() {
           {/* Password */}
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500', color: th.text }}>
-              Password
+              {lt.password}
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Lock size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
-              <input
-                type={showPassword ? 'text' : 'password'} value={password}
+              <input type={showPassword ? 'text' : 'password'} value={password}
                 onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required
                 style={{
                   width: '100%', padding: '12px 40px 12px 40px', border: `1px solid ${th.border}`,
@@ -130,7 +181,7 @@ export function LoginPage() {
               style={{ fontSize: '13px', color: th.gold, textDecoration: 'none' }}
               onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
               onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}>
-              Forgot password?
+              {lt.forgotPassword}
             </Link>
           </div>
 
@@ -154,46 +205,35 @@ export function LoginPage() {
             }}
             onMouseOver={(e) => !loading && (e.currentTarget.style.opacity = '0.9')}
             onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}>
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? lt.signingIn : lt.signIn}
           </button>
         </form>
 
-        {/* Dev Quick Buttons — 3 columns */}
+        {/* Dev Quick Buttons */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
           <button onClick={setDevAccount}
-            style={{
-              padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`,
-              borderRadius: '6px', color: th.gold, fontSize: '11px', fontWeight: '600',
-              cursor: 'pointer', transition: 'background-color 0.2s',
-            }}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: th.gold, fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            👑 Admin
+            👑 {lt.admin}
           </button>
           <button onClick={setMarcoAccount}
-            style={{
-              padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`,
-              borderRadius: '6px', color: '#6495ed', fontSize: '11px', fontWeight: '600',
-              cursor: 'pointer', transition: 'background-color 0.2s',
-            }}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#6495ed', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            📋 Manager
+            📋 {lt.manager}
           </button>
           <button onClick={setWorkerAccount}
-            style={{
-              padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`,
-              borderRadius: '6px', color: '#4caf50', fontSize: '11px', fontWeight: '600',
-              cursor: 'pointer', transition: 'background-color 0.2s',
-            }}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#4caf50', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            🔧 Arbeiter
+            🔧 {lt.worker}
           </button>
         </div>
 
         {/* Credentials hint */}
         <div style={{ fontSize: '11px', color: th.textMuted, textAlign: 'center', lineHeight: 1.8 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>{lt.devHint}</div>
           <div>👑 <code style={{ color: th.gold }}>admin@emmenegger.ch</code> / <code style={{ color: th.gold }}>admin</code></div>
           <div>📋 <code style={{ color: '#6495ed' }}>marco.cancela@emmenegger.ch</code> / <code style={{ color: '#6495ed' }}>emmenegger2026</code></div>
           <div>🔧 <code style={{ color: '#4caf50' }}>worker@emmenegger.ch</code> / <code style={{ color: '#4caf50' }}>worker2026</code></div>
