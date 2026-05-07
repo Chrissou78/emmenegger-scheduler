@@ -222,43 +222,52 @@ export function SchedulePage() {
   const fetchAllocations = async () => {
     const token = localStorage.getItem('token');
     try {
-      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await resp.json();
-
       const currentKW = getKW(dates[0]);
       const currentYear = dates[0].getFullYear();
-      const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+      
+      const matchingWeeks = weeks.filter(w => w.week_number === currentKW && w.year === currentYear);
+      
+      if (matchingWeeks.length === 0) {
+        console.warn('⚠️ No weeks found for KW', currentKW, currentYear);
+        setAlloc({});
+        return;
+      }
 
-      console.log('📊 Raw allocations from API:', data.data?.slice(0, 5).map((a: any) => ({ user_id: a.user_id, day_of_week: a.day_of_week, task_id: a.task_id })));
-      console.log('📊 Filtering for week:', currentWeek?.id, 'KW', currentKW, 'Year', currentYear);
+      console.log('📊 Found', matchingWeeks.length, 'week(s) for KW', currentKW);
+
+      const allAllocations: Allocation[] = [];
+      for (const week of matchingWeeks) {
+        const resp = await fetch(
+          `${import.meta.env.VITE_API_URL || ''}/api/v1/allocations?week_id=${week.id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await resp.json();
+        if (Array.isArray(data.data)) {
+          allAllocations.push(...data.data);
+        }
+        console.log('📊 Week', week.id, `(${week.schedule_type}):`, data.data?.length, 'allocations');
+      }
+
+      console.log('📊 Total allocations for KW', currentKW, ':', allAllocations.length);
 
       const newAlloc: Record<string, Record<number, { slots?: string[]; absences?: string[] }>> = {};
 
-      if (Array.isArray(data.data)) {
-        data.data.forEach((a: Allocation) => {
-          if (a.week_id !== currentWeek?.id) {
-            return;
-          }
+      allAllocations.forEach((a: Allocation) => {
+        if (!newAlloc[a.user_id]) newAlloc[a.user_id] = {};
+        if (!newAlloc[a.user_id][a.day_of_week]) {
+          newAlloc[a.user_id][a.day_of_week] = { slots: [] };
+        }
 
-          if (!newAlloc[a.user_id]) newAlloc[a.user_id] = {};
-          if (!newAlloc[a.user_id][a.day_of_week]) {
-            newAlloc[a.user_id][a.day_of_week] = { slots: [] };
+        const code = taskMap[a.task_id];
+        if (code) {
+          if (!newAlloc[a.user_id][a.day_of_week].slots!.includes(code)) {
+            newAlloc[a.user_id][a.day_of_week].slots!.push(code);
           }
-
-          const code = taskMap[a.task_id];
-          if (code) {
-            if (!newAlloc[a.user_id][a.day_of_week].slots!.includes(code)) {
-              newAlloc[a.user_id][a.day_of_week].slots!.push(code);
-              console.log('✅ Added allocation:', a.user_id, 'day', a.day_of_week, 'code', code);
-            }
-          }
-        });
-      }
+        }
+      });
 
       setAlloc(newAlloc);
-      console.log('📊 Final allocations:', newAlloc);
+      console.log('📊 Users with allocations:', Object.keys(newAlloc).length);
     } catch (err) {
       console.error('❌ Error fetching allocations:', err);
     }
@@ -405,7 +414,8 @@ export function SchedulePage() {
 
     const currentKW = getKW(dates[0]);
     const currentYear = dates[0].getFullYear();
-    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear && w.schedule_type === 'GARTEN_TIEFBAU')
+      || weeks.find(w => w.week_number === currentKW && w.year === currentYear);
 
     if (!currentWeek) {
       console.warn('⚠️ Current week not found. Looking for KW', currentKW, 'Year', currentYear);
@@ -480,7 +490,8 @@ export function SchedulePage() {
     const token = localStorage.getItem('token');
     const currentKW = getKW(dates[0]);
     const currentYear = dates[0].getFullYear();
-    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear && w.schedule_type === 'GARTEN_TIEFBAU')
+      || weeks.find(w => w.week_number === currentKW && w.year === currentYear);
 
     let successCount = 0;
     let skipCount = 0;
@@ -543,7 +554,8 @@ export function SchedulePage() {
     const token = localStorage.getItem('token');
     const currentKW = getKW(dates[0]);
     const currentYear = dates[0].getFullYear();
-    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear && w.schedule_type === 'GARTEN_TIEFBAU')
+      || weeks.find(w => w.week_number === currentKW && w.year === currentYear);
 
     let successCount = 0;
     let skipCount = 0;
