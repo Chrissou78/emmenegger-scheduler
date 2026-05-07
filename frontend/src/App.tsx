@@ -13,12 +13,19 @@ import { AdminPage } from './pages/AdminPage';
 import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
 
-function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
+/* ─── Auth guard ─── */
+function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuthStore();
   if (!token || !user) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user.role)) {
-    // Redirect workers to /reports, managers to /schedule
-    const fallback = user.role === 'ARBEITER' ? '/reports' : '/schedule';
+  return <>{children}</>;
+}
+
+/* ─── Role guard ─── */
+function RequireRole({ children, roles }: { children: React.ReactNode; roles: string[] }) {
+  const { user } = useAuthStore();
+  const userRole = (user?.role || '').toUpperCase();
+  if (!roles.some(r => r.toUpperCase() === userRole)) {
+    const fallback = userRole === 'ARBEITER' ? '/reports' : '/schedule';
     return <Navigate to={fallback} replace />;
   }
   return <>{children}</>;
@@ -33,7 +40,7 @@ function AppContent() {
 
   const getDefaultRoute = () => {
     if (!user) return '/login';
-    switch (user.role) {
+    switch ((user.role || '').toUpperCase()) {
       case 'ARBEITER': return '/reports';
       case 'LOCAL_MANAGER': return '/schedule';
       case 'GLOBAL_MANAGER': return '/schedule';
@@ -44,45 +51,45 @@ function AppContent() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Auth Routes (no layout) */}
+        {/* Public */}
         <Route path="/login" element={token ? <Navigate to={getDefaultRoute()} /> : <LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        {/* Protected Routes (with AppShell layout) */}
-        <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+        {/* All protected routes inside AppShell */}
+        <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+
           <Route path="/schedule" element={
-            <ProtectedRoute roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
               <SchedulePage />
-            </ProtectedRoute>
+            </RequireRole>
           } />
 
           <Route path="/machines" element={
-            <ProtectedRoute roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
               <MachinesPage />
-            </ProtectedRoute>
-          } />
-
-          <Route path="/reports" element={<ReportsPage />} />
-
-          <Route path="/admin" element={
-            <ProtectedRoute roles={['GLOBAL_MANAGER']}>
-              <AdminPage />
-            </ProtectedRoute>
+            </RequireRole>
           } />
 
           <Route path="/stats" element={
-            <ProtectedRoute roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
               <StatsPage />
-            </ProtectedRoute>
+            </RequireRole>
           } />
 
+          <Route path="/admin" element={
+            <RequireRole roles={['GLOBAL_MANAGER']}>
+              <AdminPage />
+            </RequireRole>
+          } />
+
+          {/* Available to all authenticated users */}
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
 
           <Route path="/" element={<Navigate to={getDefaultRoute()} replace />} />
         </Route>
 
-        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
