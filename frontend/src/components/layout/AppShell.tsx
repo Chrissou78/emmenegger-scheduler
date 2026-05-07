@@ -123,7 +123,7 @@ export function AppShell() {
           {/* user info */}
           {!collapsed && user && (
             <div style={{ padding: '8px 0', marginBottom: 4 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{user.name}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{user.email}</div>
               <div style={{ fontSize: 11, color: th.textDim }}>{
                 user.role === 'GLOBAL_MANAGER' ? 'Global Manager' :
                 user.role === 'LOCAL_MANAGER' ? 'Lokal Manager' : 'Arbeiter'
