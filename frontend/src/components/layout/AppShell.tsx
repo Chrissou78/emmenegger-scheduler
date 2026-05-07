@@ -140,17 +140,21 @@ export function AppShell() {
           )}
 
           <div style={{
-            display: 'flex', gap: 4, justifyContent: collapsed ? 'center' : 'flex-start',
+            display: 'flex', gap: 4,
+            justifyContent: collapsed ? 'center' : 'flex-start',
             flexWrap: 'wrap',
+            padding: collapsed ? '0 4px' : '0',
           }}>
-            {!collapsed && ['de', 'en', 'fr', 'pt'].map(l => (
-              <button key={l} onClick={() => setLanguage?.(l as any)}
+            {['de', 'en', 'fr', 'pt'].map(l => (
+              <button key={l} onClick={() => { if (setLanguage) setLanguage(l as 'de' | 'en' | 'fr' | 'pt'); }}
                 style={{
-                  padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  padding: collapsed ? '4px 6px' : '4px 8px',
+                  borderRadius: 4, border: 'none', cursor: 'pointer',
                   fontSize: 10, fontWeight: 700, letterSpacing: .5,
                   background: lang === l ? gold : 'transparent',
                   color: lang === l ? '#fff' : th.textDim,
                   transition: 'all .15s',
+                  minWidth: collapsed ? 28 : 'auto',
                 }}
               >{l.toUpperCase()}</button>
             ))}
