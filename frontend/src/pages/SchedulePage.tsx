@@ -1,95 +1,52 @@
-import { useState, useEffect } from 'react';
+// frontend/src/pages/SchedulePage.tsx
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
-import { themes, JOB_COLORS, ABS } from '../i18n/translations';
-import { format, startOfWeek, addDays, getWeek } from 'date-fns';
-import io from 'socket.io-client';
+import { themes, ABS } from '../i18n/translations';
+import { format } from 'date-fns';
 
-interface Allocation {
-  id: string;
-  user_id: string;
-  task_id: string;
-  day_of_week: number;
-  week_id: string;
-}
+/* ─── Types ─── */
+interface Allocation { id: string; user_id: string; task_id: string; day_of_week: number; week_id: string; time_slot: number; }
+interface User { id: string; first_name: string; last_name: string; department: string; }
+interface Week { id: string; week_number: number; year: number; schedule_type: string; status: string; }
+interface Task { id: string; code: string; name: string; color: string; schedule_type: string; status?: string; customer?: { id: string; name: string } | null; }
 
-interface User {
-  id: string;
-  first_name: string;
-  last_name: string;
-  department: string;
-}
-
-interface Week {
-  id: string;
-  week_number: number;
-  year: number;
-  schedule_type: string;
-  status: string;
-  created_by_id: string;
-  published_at: string | null;
-  locked_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Task {
-  id: string;
-  code: string;
-  name: string;
-}
+const API = import.meta.env.VITE_API_URL || '';
 
 const T = {
   de: {
-    brand: 'Emmenegger',
-    sub: 'Disposition & Planung',
-    employees: 'Mitarbeiter',
-    assignments: 'Zuweisungen',
-    absences: 'Absenzen',
-    objects: 'Objekte',
-    today: 'Heute',
-    objekte: 'Objekte',
-    absenzen: 'Absenzen',
-    setAbsence: 'Absenz setzen',
-    cancel: 'Abbrechen',
-    clickRemove: 'Klicken zum Entfernen',
-    blocked: 'Blockiert: Absenz am',
-    removed: 'Zuweisung entfernt',
-    set: 'gesetzt',
-    objectDir: 'Objektverzeichnis',
-    bothDept: 'Beide Abt.',
-    gartenFull: 'Garten & Tiefbau',
-    unterhaltFull: 'Unterhalt',
-    all: 'Alle',
-    garten: 'Garten',
-    unterhalt: 'Unterhalt',
+    employees: 'Mitarbeiter', assignments: 'Zuweisungen', absences: 'Absenzen',
+    objects: 'Objekte', today: 'Heute', absenzen: 'Absenzen', objectDir: 'Aufträge',
+    bothDept: 'Beide Abt.', gartenFull: 'Garten & Tiefbau', unterhaltFull: 'Unterhalt',
     days: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
-    abs: { '1': 'Ferien', '2': 'Schule', '3': 'ÜK', '4': 'Unfall', '5': 'Krank', '6': 'Teilzeit' },
-    bulkDay: 'Spalte',
-    bulkRow: 'Zeile',
-    skipped: 'übersprungen',
+    daysShort: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'],
+    abs: { '1': 'Ferien', '2': 'Schule', '3': 'ÜK', '4': 'Unfall', '5': 'Krank', '6': 'Teilzeit' } as Record<string, string>,
+    removed: 'Entfernt', cancel: 'Abbrechen', setAbsence: 'Absenz setzen',
+    searchTasks: 'Auftrag suchen...', noMatch: 'Kein Treffer', max2: 'Max. 2 Aufträge',
+    blocked: 'Blockiert (Absenz)',
   },
 };
 
+/* ─── Color palette for tasks ─── */
+const PALETTE = [
+  '#B8860B','#4A6741','#5B6E82','#7D4E57','#8E6F3E','#4A4063','#704241','#3B4F64',
+  '#6B8E23','#8B4513','#556B2F','#483D8B','#2F4F4F','#8B0000','#006400','#4682B4',
+  '#C8A96E','#6B4C3B','#2C3E50','#8B7355','#9B59B6','#1ABC9C','#E67E22','#34495E',
+];
+function hashColor(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return PALETTE[Math.abs(h) % PALETTE.length];
+}
+
+/* ─── Helpers ─── */
 function getWeekDates(off: number) {
-  const n = new Date();
-  const d = n.getDay();
-  const diff = d === 0 ? -6 : 1 - d;
-  const mon = new Date(n);
-  mon.setDate(n.getDate() + diff + off * 7);
-  return Array.from({ length: 6 }, (_, i) => {
-    const x = new Date(mon);
-    x.setDate(mon.getDate() + i);
-    return x;
-  });
+  const n = new Date(); const d = n.getDay(); const diff = d === 0 ? -6 : 1 - d;
+  const mon = new Date(n); mon.setDate(n.getDate() + diff + off * 7);
+  return Array.from({ length: 6 }, (_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return x; });
 }
-
-function fmtDate(d: Date) {
-  return `${d.getDate()}.${d.getMonth() + 1}.`;
-}
-
+function fmtDate(d: Date) { return `${d.getDate()}.${d.getMonth() + 1}.`; }
 function getKW(d: Date) {
-  const date = new Date(d);
-  date.setHours(0, 0, 0, 0);
+  const date = new Date(d); date.setHours(0, 0, 0, 0);
   date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
   const w1 = new Date(date.getFullYear(), 0, 4);
   return 1 + Math.round(((date.getTime() - w1.getTime()) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7);
@@ -97,1364 +54,380 @@ function getKW(d: Date) {
 
 export function SchedulePage() {
   const { isDark } = useTheme();
-  const th = isDark ? themes.dark : themes.light;
+  const th = isDark ? themes.dark : themes.light as any;
   const t = T.de;
 
+  /* ─── State ─── */
   const [weekOff, setWeekOff] = useState(0);
   const [dept, setDept] = useState('all');
   const [users, setUsers] = useState<User[]>([]);
   const [weeks, setWeeks] = useState<Week[]>([]);
-  const [taskMap, setTaskMap] = useState<Record<string, string>>({});
-  const [alloc, setAlloc] = useState<Record<string, Record<number, { slots?: string[]; absences?: string[] }>>>({});
-  const [selectedEmp, setSelectedEmp] = useState<string | null>(null);
-  const [absModal, setAbsModal] = useState<{ user_id: string; day: number } | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: 'info' | 'ok' | 'err' } | null>(null);
-  const [hover, setHover] = useState<{ e: string; d: number } | null>(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [rawAllocs, setRawAllocs] = useState<Allocation[]>([]);
+  const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
+  const [picker, setPicker] = useState<{ userId: string; day: number; rect: DOMRect } | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [absModal, setAbsModal] = useState<{ userId: string; day: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const dates = getWeekDates(weekOff);
   const kw = getKW(dates[0]);
-  const emps = users.filter(u => dept === 'all' || u.department === dept);
+  const year = dates[0].getFullYear();
+  const headers = { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' };
 
-  const totalSlots = Object.values(alloc).reduce(
-    (s, userAlloc) => s + Object.values(userAlloc).reduce((us, dayAlloc) => us + (dayAlloc.slots?.length || 0), 0),
-    0
-  );
-  const totalAbs = Object.values(alloc).reduce(
-    (s, userAlloc) => s + Object.values(userAlloc).reduce((us, dayAlloc) => us + (dayAlloc.absences?.length || 0), 0),
-    0
-  );
-  const activeJobs = new Set(
-    Object.values(alloc).flatMap(userAlloc =>
-      Object.values(userAlloc).flatMap((a: any) => a.slots || []).filter((s: string) => JOB_COLORS[s as keyof typeof JOB_COLORS])
-    )
-  );
+  const emps = useMemo(() => users.filter(u => dept === 'all' || u.department === dept), [users, dept]);
 
-  const showToast = (msg: string, type: 'info' | 'ok' | 'err' = 'info') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 2800);
+  const matchingWeeks = useMemo(() => weeks.filter(w => w.week_number === kw && w.year === year), [weeks, kw, year]);
+  const weekIds = useMemo(() => new Set(matchingWeeks.map(w => w.id)), [matchingWeeks]);
+
+  // Build allocation lookup: userId → day → task_id[]
+  const allocMap = useMemo(() => {
+    const m: Record<string, Record<number, { taskIds: string[]; allocIds: string[] }>> = {};
+    rawAllocs.forEach(a => {
+      if (!weekIds.has(a.week_id)) return;
+      if (!m[a.user_id]) m[a.user_id] = {};
+      if (!m[a.user_id][a.day_of_week]) m[a.user_id][a.day_of_week] = { taskIds: [], allocIds: [] };
+      if (!m[a.user_id][a.day_of_week].taskIds.includes(a.task_id)) {
+        m[a.user_id][a.day_of_week].taskIds.push(a.task_id);
+        m[a.user_id][a.day_of_week].allocIds.push(a.id);
+      }
+    });
+    return m;
+  }, [rawAllocs, weekIds]);
+
+  const taskById = useMemo(() => {
+    const m: Record<string, Task> = {};
+    tasks.forEach(t => { m[t.id] = t; });
+    return m;
+  }, [tasks]);
+
+  // Stats
+  const totalSlots = useMemo(() => Object.values(allocMap).reduce((s, u) => s + Object.values(u).reduce((ss, d) => ss + d.taskIds.length, 0), 0), [allocMap]);
+  const activeTaskIds = useMemo(() => {
+    const s = new Set<string>();
+    Object.values(allocMap).forEach(u => Object.values(u).forEach(d => d.taskIds.forEach(id => s.add(id))));
+    return s;
+  }, [allocMap]);
+
+  const showToast = useCallback((msg: string, err = false) => { setToast({ msg, err }); setTimeout(() => setToast(null), 2800); }, []);
+
+  /* ─── Fetchers ─── */
+  const fetchWeeks = async () => {
+    try { const r = await fetch(`${API}/api/v1/weeks`, { headers }); const d = await r.json(); setWeeks(d.data || []); } catch {}
   };
-
-  // Socket.IO
-  useEffect(() => {
-    const socket = io(import.meta.env.VITE_API_URL || '');
-    socket.on('connect', () => console.log('✅ Socket connected'));
-    socket.on('allocation:created', () => {
-      console.log('📢 Allocation created');
-      fetchAllocations();
-    });
-    socket.on('allocation:deleted', () => {
-      console.log('📢 Allocation deleted');
-      fetchAllocations();
-    });
-    return () => {
-      socket.close();
-    };
-  }, []);
-
-  // Fetch weeks
-  useEffect(() => {
-    const fetchWeeks = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/weeks`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await resp.json();
-        setWeeks(Array.isArray(data.data) ? data.data : []);
-        console.log('📅 Weeks loaded:', data.data?.length);
-      } catch (err) {
-        console.error('❌ Error fetching weeks:', err);
-      }
-    };
-    fetchWeeks();
-  }, []);
-
-  // Fetch tasks
-  useEffect(() => {
-    const fetchTasks = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/tasks`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await resp.json();
-        const map: Record<string, string> = {};
-        if (Array.isArray(data.data)) {
-          data.data.forEach((task: Task) => {
-            map[task.id] = task.code.toLowerCase();
-          });
-        }
-        setTaskMap(map);
-        console.log('📋 Task map created:', Object.keys(map).length);
-      } catch (err) {
-        console.error('❌ Error fetching tasks:', err);
-      }
-    };
-    fetchTasks();
-  }, []);
-
-  // Fetch users
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const token = localStorage.getItem('token');
-      try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/users`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await resp.json();
-        setUsers(Array.isArray(data.data) ? data.data : []);
-        console.log('👥 Users set:', data.data?.length);
-      } catch (err) {
-        console.error('❌ Error fetching users:', err);
-      }
-    };
-    fetchUsers();
-  }, [dept]);
-
-  // Fetch allocations
-  useEffect(() => {
-    if (weeks.length > 0) {
-      fetchAllocations().then(() => fetchAbsences());
-    }
-  }, [weekOff, users.length, taskMap, weeks]);
-
+  const fetchTasks = async () => {
+    try { const r = await fetch(`${API}/api/v1/tasks`, { headers }); const d = await r.json(); setTasks(d.data || []); } catch {}
+  };
+  const fetchUsers = async () => {
+    try { const r = await fetch(`${API}/api/v1/users`, { headers }); const d = await r.json(); setUsers(d.data || []); } catch {}
+  };
   const fetchAllocations = async () => {
-    const token = localStorage.getItem('token');
-    try {
-      const currentKW = getKW(dates[0]);
-      const currentYear = dates[0].getFullYear();
-      
-      const matchingWeeks = weeks.filter(w => w.week_number === currentKW && w.year === currentYear);
-      
-      if (matchingWeeks.length === 0) {
-        console.warn('⚠️ No weeks found for KW', currentKW, currentYear);
-        setAlloc({});
-        return;
-      }
-
-      console.log('📊 Found', matchingWeeks.length, 'week(s) for KW', currentKW);
-
-      const allAllocations: Allocation[] = [];
-      for (const week of matchingWeeks) {
-        const resp = await fetch(
-          `${import.meta.env.VITE_API_URL || ''}/api/v1/allocations?week_id=${week.id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const data = await resp.json();
-        if (Array.isArray(data.data)) {
-          allAllocations.push(...data.data);
-        }
-        console.log('📊 Week', week.id, `(${week.schedule_type}):`, data.data?.length, 'allocations');
-      }
-
-      console.log('📊 Total allocations for KW', currentKW, ':', allAllocations.length);
-
-      const newAlloc: Record<string, Record<number, { slots?: string[]; absences?: string[] }>> = {};
-
-      allAllocations.forEach((a: Allocation) => {
-        if (!newAlloc[a.user_id]) newAlloc[a.user_id] = {};
-        if (!newAlloc[a.user_id][a.day_of_week]) {
-          newAlloc[a.user_id][a.day_of_week] = { slots: [] };
-        }
-
-        const code = taskMap[a.task_id];
-        if (code) {
-          if (!newAlloc[a.user_id][a.day_of_week].slots!.includes(code)) {
-            newAlloc[a.user_id][a.day_of_week].slots!.push(code);
-          }
-        }
-      });
-
-      setAlloc(newAlloc);
-      console.log('📊 Users with allocations:', Object.keys(newAlloc).length);
-    } catch (err) {
-      console.error('❌ Error fetching allocations:', err);
-    }
-  };
-
-  const fetchAbsences = async () => {
-    const token = localStorage.getItem('token');
-
-    const startDate = format(dates[0], 'yyyy-MM-dd');
-    const endDate = format(dates[5], 'yyyy-MM-dd');
-
-    try {
-      const resp = await fetch(
-        `${import.meta.env.VITE_API_URL || ''}/api/v1/absences?startDate=${startDate}&endDate=${endDate}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const data = await resp.json();
-      console.log('🏥 Absences loaded:', data.data?.length);
-
-      setAlloc(prev => {
-        const newAlloc = { ...prev };
-        Object.keys(newAlloc).forEach(uid => {
-          Object.keys(newAlloc[uid]).forEach(d => {
-            if (newAlloc[uid][parseInt(d)]) {
-              newAlloc[uid][parseInt(d)] = {
-                ...newAlloc[uid][parseInt(d)],
-                absences: [],
-              };
-            }
-          });
-        });
-
-        if (Array.isArray(data.data)) {
-          data.data.forEach((abs: any) => {
-            const absDate = new Date(abs.date + 'T00:00:00');
-            const dayIndex = dates.findIndex(
-              d => d.getFullYear() === absDate.getFullYear() &&
-                  d.getMonth() === absDate.getMonth() &&
-                  d.getDate() === absDate.getDate()
-            );
-
-            if (dayIndex === -1) return;
-
-            const uid = abs.user_id;
-            if (!newAlloc[uid]) newAlloc[uid] = {};
-            if (!newAlloc[uid][dayIndex]) newAlloc[uid][dayIndex] = { slots: [], absences: [] };
-            if (!newAlloc[uid][dayIndex].absences) newAlloc[uid][dayIndex].absences = [];
-
-            const code = String(abs.absence_code);
-            if (!newAlloc[uid][dayIndex].absences!.includes(code)) {
-              newAlloc[uid][dayIndex].absences!.push(code);
-            }
-          });
-        }
-
-        return { ...newAlloc };
-      });
-    } catch (err) {
-      console.error('❌ Error fetching absences:', err);
-    }
-  };
-
-  const getA = (userId: string, day: number) => alloc[userId]?.[day];
-
-  // ── Single cell drop (existing) ──
-  const drop = async (userId: string, day: number, code: string) => {
-    if (!code) {
-      console.warn('⚠️ No code data');
-      return;
-    }
-
-    console.log('📥 DROP triggered:', userId, day, 'code=', code);
-
-    const isAbsence = Object.keys(T.de.abs).includes(code);
-
-    if (isAbsence) {
-      const token = localStorage.getItem('token');
-      const absenceDate = format(dates[day], 'yyyy-MM-dd');
-
+    if (matchingWeeks.length === 0) { setRawAllocs([]); return; }
+    const all: Allocation[] = [];
+    for (const w of matchingWeeks) {
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/absences`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            userId: userId,
-            date: absenceDate,
-            absenceCode: parseInt(code),
-            source: 'MANUAL',
-          }),
-        });
-
-        if (resp.ok) {
-          const result = await resp.json();
-          console.log('✅ Absence saved:', result);
-          setAlloc(prev => {
-            const newAlloc = { ...prev };
-            if (!newAlloc[userId]) newAlloc[userId] = {};
-            if (!newAlloc[userId][day]) newAlloc[userId][day] = { slots: [], absences: [] };
-            if (!newAlloc[userId][day].absences) newAlloc[userId][day].absences = [];
-            if (!newAlloc[userId][day].absences!.includes(code)) {
-              newAlloc[userId][day] = {
-                ...newAlloc[userId][day],
-                absences: [...newAlloc[userId][day].absences!, code],
-              };
-            }
-            return { ...newAlloc };
-          });
-          const absLabel = T.de.abs[code as keyof typeof T.de.abs];
-          showToast(`${absLabel} → ${users.find(e => e.id === userId)?.first_name || 'Unknown'}`, 'ok');
-        } else {
-          const err = await resp.json();
-          console.error('❌ Error saving absence:', err);
-          showToast(`Error: ${err.message || 'Failed to save absence'}`, 'err');
-        }
-      } catch (err) {
-        console.error('❌ Network error saving absence:', err);
-        showToast('Network error', 'err');
-      }
-      return;
+        const r = await fetch(`${API}/api/v1/allocations?week_id=${w.id}`, { headers });
+        const d = await r.json();
+        if (Array.isArray(d.data)) all.push(...d.data);
+      } catch {}
     }
+    setRawAllocs(all);
+  };
 
-    // Handle task drop
-    const ex = getA(userId, day);
-    if (ex?.absences && ex.absences.length > 0) {
-      showToast(`${t.blocked} ${t.days[day]}`, 'err');
-      return;
-    }
-    if ((ex?.slots?.length || 0) >= 2) {
-      showToast(`Max 2 Aufträge pro Zelle`, 'err');
-      return;
-    }
+  useEffect(() => { fetchWeeks(); fetchTasks(); fetchUsers(); }, []);
+  useEffect(() => { if (weeks.length > 0) fetchAllocations(); }, [weekOff, weeks]);
+  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
 
-    const token = localStorage.getItem('token');
-    const taskId = Object.entries(taskMap).find(([_, taskCode]) => taskCode === code)?.[0];
+  // Close picker on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPicker(null);
+    };
+    if (picker) { document.addEventListener('mousedown', handler); return () => document.removeEventListener('mousedown', handler); }
+  }, [picker]);
+  useEffect(() => { if (picker && searchRef.current) searchRef.current.focus(); }, [picker]);
 
-    if (!taskId) {
-      console.warn('⚠️ Task not found for code:', code);
-      showToast('Task not found', 'err');
-      return;
-    }
+  /* ─── Actions ─── */
+  const getCell = (userId: string, day: number) => allocMap[userId]?.[day] || { taskIds: [], allocIds: [] };
 
-    const currentKW = getKW(dates[0]);
-    const currentYear = dates[0].getFullYear();
-    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear && w.schedule_type === 'GARTEN_TIEFBAU')
-      || weeks.find(w => w.week_number === currentKW && w.year === currentYear);
+  const openPicker = (userId: string, day: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const cell = getCell(userId, day);
+    if (cell.taskIds.length >= 2) { showToast(t.max2, true); return; }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPicker({ userId, day, rect });
+    setPickerSearch('');
+  };
 
-    if (!currentWeek) {
-      console.warn('⚠️ Current week not found. Looking for KW', currentKW, 'Year', currentYear);
-      showToast('Week not found', 'err');
-      return;
-    }
+  const assignTask = async (taskId: string) => {
+    if (!picker) return;
+    const { userId, day } = picker;
+    const cell = getCell(userId, day);
+    if (cell.taskIds.includes(taskId)) { setPicker(null); return; } // already assigned
+    if (cell.taskIds.length >= 2) { showToast(t.max2, true); setPicker(null); return; }
 
-    console.log('✅ Found week:', currentWeek.id);
+    const week = matchingWeeks.find(w => {
+      const task = taskById[taskId];
+      return task && w.schedule_type === task.schedule_type;
+    }) || matchingWeeks[0];
+    if (!week) { showToast('Week not found', true); setPicker(null); return; }
 
     try {
-      const existingSlots = alloc[userId]?.[day]?.slots?.length || 0;
-      const nextTimeSlot = existingSlots + 1;
-
-      const payload = {
-        user_id: userId,
-        task_id: taskId,
-        day_of_week: day,
-        week_id: currentWeek.id,
-        time_slot: nextTimeSlot,
-      };
-
-      console.log('📤 Payload:', payload);
-
-      const resp = await fetch(
-        `${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      if (resp.ok) {
-        console.log('✅ Allocation created successfully');
-        setAlloc(prev => {
-          const newAlloc = { ...prev };
-          if (!newAlloc[userId]) newAlloc[userId] = {};
-          if (!newAlloc[userId][day]) newAlloc[userId][day] = { slots: [], absences: [] };
-          if (!newAlloc[userId][day].slots) newAlloc[userId][day].slots = [];
-          if (!newAlloc[userId][day].slots!.includes(code)) {
-            newAlloc[userId][day] = {
-              ...newAlloc[userId][day],
-              slots: [...newAlloc[userId][day].slots!, code],
-            };
-          }
-          return { ...newAlloc };
-        });
-        const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
-        const empName = users.find(e => e.id === userId)?.first_name || 'Unknown';
-        showToast(`${job?.label || code} → ${empName}`, 'ok');
-      } else {
-        const err = await resp.json();
-        console.error('❌ Server error:', err);
-        showToast(`Error: ${err.message || 'Failed to create allocation'}`, 'err');
-      }
-    } catch (err) {
-      console.error('❌ Error creating allocation:', err);
-      showToast('Network error', 'err');
-    }
-  };
-
-  // ── Bulk drop: apply code to ALL employees for a given day (column header) ──
-  const dropOnDay = async (day: number, code: string) => {
-    if (!code || bulkLoading) return;
-    setBulkLoading(true);
-    console.log('📥 BULK DROP on day', day, 'code=', code, '→', emps.length, 'employees');
-
-    const isAbsence = Object.keys(T.de.abs).includes(code);
-    const token = localStorage.getItem('token');
-    const currentKW = getKW(dates[0]);
-    const currentYear = dates[0].getFullYear();
-    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear && w.schedule_type === 'GARTEN_TIEFBAU')
-      || weeks.find(w => w.week_number === currentKW && w.year === currentYear);
-
-    let successCount = 0;
-    let skipCount = 0;
-
-    for (const emp of emps) {
-      try {
-        if (isAbsence) {
-          const existing = alloc[emp.id]?.[day]?.absences || [];
-          if (existing.includes(code)) { skipCount++; continue; }
-
-          const absenceDate = format(dates[day], 'yyyy-MM-dd');
-          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/absences`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ userId: emp.id, date: absenceDate, absenceCode: parseInt(code), source: 'MANUAL' }),
-          });
-          if (resp.ok) successCount++;
-        } else {
-          const ex = alloc[emp.id]?.[day];
-          if (ex?.absences && ex.absences.length > 0) { skipCount++; continue; }
-          if ((ex?.slots?.length || 0) >= 2) { skipCount++; continue; }
-
-          const taskId = Object.entries(taskMap).find(([_, tc]) => tc === code)?.[0];
-          if (!taskId || !currentWeek) { skipCount++; continue; }
-
-          const existingSlots = alloc[emp.id]?.[day]?.slots?.length || 0;
-          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              user_id: emp.id, task_id: taskId, day_of_week: day,
-              week_id: currentWeek.id, time_slot: existingSlots + 1,
-            }),
-          });
-          if (resp.ok) successCount++;
-        }
-      } catch (err) {
-        console.error('❌ Bulk error for', emp.first_name, err);
-      }
-    }
-
-    await fetchAllocations();
-    await fetchAbsences();
-    setBulkLoading(false);
-
-    const label = isAbsence
-      ? T.de.abs[code as keyof typeof T.de.abs]
-      : (JOB_COLORS[code as keyof typeof JOB_COLORS]?.label || code);
-    showToast(`${label} → ${t.days[day]}: ${successCount} ✓${skipCount > 0 ? ` · ${skipCount} ${t.skipped}` : ''}`, 'ok');
-  };
-
-  // ── Bulk drop: apply code to ALL 6 days for a given employee (row header) ──
-  const dropOnEmployee = async (userId: string, code: string) => {
-    if (!code || bulkLoading) return;
-    setBulkLoading(true);
-    const empName = users.find(e => e.id === userId)?.first_name || 'Unknown';
-    console.log('📥 BULK DROP on employee', empName, 'code=', code, '→ 6 days');
-
-    const isAbsence = Object.keys(T.de.abs).includes(code);
-    const token = localStorage.getItem('token');
-    const currentKW = getKW(dates[0]);
-    const currentYear = dates[0].getFullYear();
-    const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear && w.schedule_type === 'GARTEN_TIEFBAU')
-      || weeks.find(w => w.week_number === currentKW && w.year === currentYear);
-
-    let successCount = 0;
-    let skipCount = 0;
-
-    for (let day = 0; day < 6; day++) {
-      try {
-        if (isAbsence) {
-          const existing = alloc[userId]?.[day]?.absences || [];
-          if (existing.includes(code)) { skipCount++; continue; }
-
-          const absenceDate = format(dates[day], 'yyyy-MM-dd');
-          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/absences`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ userId, date: absenceDate, absenceCode: parseInt(code), source: 'MANUAL' }),
-          });
-          if (resp.ok) successCount++;
-        } else {
-          const ex = alloc[userId]?.[day];
-          if (ex?.absences && ex.absences.length > 0) { skipCount++; continue; }
-          if ((ex?.slots?.length || 0) >= 2) { skipCount++; continue; }
-
-          const taskId = Object.entries(taskMap).find(([_, tc]) => tc === code)?.[0];
-          if (!taskId || !currentWeek) { skipCount++; continue; }
-
-          const existingSlots = alloc[userId]?.[day]?.slots?.length || 0;
-          const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({
-              user_id: userId, task_id: taskId, day_of_week: day,
-              week_id: currentWeek.id, time_slot: existingSlots + 1,
-            }),
-          });
-          if (resp.ok) successCount++;
-        }
-      } catch (err) {
-        console.error('❌ Bulk error for day', day, err);
-      }
-    }
-
-    await fetchAllocations();
-    await fetchAbsences();
-    setBulkLoading(false);
-
-    const label = isAbsence
-      ? T.de.abs[code as keyof typeof T.de.abs]
-      : (JOB_COLORS[code as keyof typeof JOB_COLORS]?.label || code);
-    showToast(`${label} → ${empName} (Mo–Sa): ${successCount} ✓${skipCount > 0 ? ` · ${skipCount} ${t.skipped}` : ''}`, 'ok');
-  };
-
-  const rm = async (userId: string, day: number) => {
-    const token = localStorage.getItem('token');
-
-    try {
-      const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const r = await fetch(`${API}/api/v1/allocations`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ user_id: userId, task_id: taskId, day_of_week: day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
       });
-      const data = await resp.json();
-
-      const allocToDelete = data.data?.find((a: Allocation) => a.user_id === userId && a.day_of_week === day);
-
-      if (allocToDelete) {
-        const delResp = await fetch(
-          `${import.meta.env.VITE_API_URL || ''}/api/v1/allocations/${allocToDelete.id}`,
-          {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (delResp.ok) {
-          setAlloc(prev => {
-            const newAlloc = { ...prev };
-            if (newAlloc[userId]?.[day]?.slots) {
-              const taskCode = taskMap[allocToDelete.task_id];
-              if (taskCode) {
-                newAlloc[userId][day] = {
-                  ...newAlloc[userId][day],
-                  slots: newAlloc[userId][day].slots!.filter(s => s !== taskCode),
-                };
-              }
-            }
-            return { ...newAlloc };
-          });
-          showToast(t.removed, 'info');
-          console.log('✅ Allocation deleted');
-        }
-      }
-    } catch (err) {
-      console.error('❌ Error deleting allocation:', err);
-    }
+      if (r.ok) {
+        const empName = users.find(u => u.id === userId)?.first_name || '';
+        const taskName = taskById[taskId]?.name || '';
+        showToast(`${taskName} → ${empName}`);
+        await fetchAllocations();
+      } else { showToast('Fehler', true); }
+    } catch { showToast('Netzwerkfehler', true); }
+    setPicker(null);
   };
 
-  const rmAbsence = async (userId: string, day: number, absenceCode: string) => {
-    const token = localStorage.getItem('token');
-    const absenceDate = format(dates[day], 'yyyy-MM-dd');
-
+  const removeAlloc = async (allocId: string, taskId: string) => {
     try {
-      const resp = await fetch(
-        `${import.meta.env.VITE_API_URL || ''}/api/v1/absences?userId=${userId}&startDate=${absenceDate}&endDate=${absenceDate}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const data = await resp.json();
+      const r = await fetch(`${API}/api/v1/allocations/${allocId}`, { method: 'DELETE', headers });
+      if (r.ok) { showToast(t.removed); await fetchAllocations(); }
+    } catch { showToast('Fehler', true); }
+  };
 
-      const absToDelete = data.data?.find(
-        (a: any) => String(a.absence_code) === absenceCode
-      );
-
-      if (absToDelete) {
-        const delResp = await fetch(
-          `${import.meta.env.VITE_API_URL || ''}/api/v1/absences/${absToDelete.id}`,
-          {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (delResp.ok) {
-          console.log('✅ Absence deleted from DB');
-          setAlloc(prev => {
-            const newAlloc = { ...prev };
-            if (newAlloc[userId]?.[day]?.absences) {
-              newAlloc[userId][day] = {
-                ...newAlloc[userId][day],
-                absences: newAlloc[userId][day].absences!.filter(a => a !== absenceCode),
-              };
-            }
-            return { ...newAlloc };
-          });
-          showToast(t.removed, 'info');
-        } else {
-          const err = await delResp.json();
-          showToast(`Error: ${err.message || 'Failed to delete'}`, 'err');
-        }
+  const assignAbsence = async (userId: string, day: number, code: string) => {
+    try {
+      const r = await fetch(`${API}/api/v1/absences`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ userId, date: format(dates[day], 'yyyy-MM-dd'), absenceCode: parseInt(code), source: 'MANUAL' }),
+      });
+      if (r.ok) {
+        showToast(`${t.abs[code]} → ${users.find(u => u.id === userId)?.first_name || ''}`);
       }
-    } catch (err) {
-      console.error('❌ Error deleting absence:', err);
-      showToast('Network error', 'err');
+    } catch { showToast('Fehler', true); }
+    setAbsModal(null);
+  };
+
+  /* ─── Filtered picker tasks ─── */
+  const pickerTasks = useMemo(() => {
+    if (!picker) return [];
+    const s = pickerSearch.toLowerCase();
+    let list = tasks.filter(t => t.status !== 'CANCELLED');
+    if (s) {
+      list = list.filter(t =>
+        t.name.toLowerCase().includes(s) ||
+        t.code.toLowerCase().includes(s) ||
+        (t.customer?.name || '').toLowerCase().includes(s)
+      );
     }
+    // Sort: tasks already used this week first, then alphabetically
+    const usedIds = activeTaskIds;
+    list.sort((a, b) => {
+      const aUsed = usedIds.has(a.id) ? 0 : 1;
+      const bUsed = usedIds.has(b.id) ? 0 : 1;
+      if (aUsed !== bUsed) return aUsed - bUsed;
+      return a.name.localeCompare(b.name);
+    });
+    return list.slice(0, 50); // cap at 50 for performance
+  }, [picker, pickerSearch, tasks, activeTaskIds]);
+
+  const getTaskColor = (taskId: string) => {
+    const task = taskById[taskId];
+    return task?.color && task.color !== '#8B7355' ? task.color : hashColor(taskId);
   };
 
-  const jobBg = (code: string) => {
-    const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
-    return isDark ? job?.bgD : job?.bgL;
-  };
-
-  const jobText = (code: string) => {
-    const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
-    return isDark ? job?.textD : job?.textL;
-  };
-
-  const absBg = (code: string) => {
-    const abs = ABS[code as unknown as keyof typeof ABS];
-    return abs?.bg || '#333';
-  };
-
-  const absText = (code: string) => {
-    const abs = ABS[code as unknown as keyof typeof ABS];
-    return isDark ? abs?.textD : abs?.textL;
-  };
-
-  const deptLabel = (d: string) =>
-    d === 'garten' ? t.gartenFull : d === 'unterhalt' ? t.unterhaltFull : t.bothDept;
+  const deptLabel = (d: string) => d === 'garten' ? t.gartenFull : d === 'unterhalt' ? t.unterhaltFull : t.bothDept;
 
   return (
-    <div
-      style={{
-        fontFamily: "'Cormorant Garamond','Garamond','Georgia',serif",
-        background: th.bg,
-        color: th.text,
-        minHeight: '100vh',
-        transition: 'background 0.4s ease, color 0.4s ease',
-        opacity: bulkLoading ? 0.7 : 1,
-        pointerEvents: bulkLoading ? 'none' : 'auto',
-      }}
-    >
-      <link
-        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet"
-      />
+    <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", background: th.bg, color: th.text, minHeight: '100vh' }}>
 
-      {/* TOAST */}
+      {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 24,
-            right: 24,
-            zIndex: 1000,
-            background: toast.type === 'err' ? th.toastErrBg : th.toastBg,
-            color: toast.type === 'err' ? th.toastErrText : th.toastText,
-            padding: '12px 20px',
-            borderRadius: 2,
-            fontSize: 12,
-            fontFamily: "'Outfit',sans-serif",
-            fontWeight: 500,
-            letterSpacing: 0.3,
-            border: `1px solid ${toast.type === 'err' ? th.toastErrBorder : th.toastBorder}`,
-            backdropFilter: 'blur(20px)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-            animation: 'fadeSlide 0.35s cubic-bezier(0.16,1,0.3,1)',
-          }}
-        >
-          {toast.msg}
-        </div>
+        <div style={{
+          position: 'fixed', top: 24, right: 24, zIndex: 9999, padding: '12px 20px', borderRadius: 6,
+          background: toast.err ? th.toastErrBg : th.toastBg, color: toast.err ? th.toastErrText : th.toastText,
+          border: `1px solid ${toast.err ? th.toastErrBorder : th.toastBorder}`, fontSize: 12, fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,.3)', animation: 'fadeSlide .3s ease',
+        }}>{toast.msg}</div>
       )}
 
-      {/* BULK LOADING INDICATOR */}
-      {bulkLoading && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 3,
-            background: `linear-gradient(90deg, transparent, ${th.gold}, transparent)`,
-            zIndex: 1001,
-            animation: 'bulkProgress 1.5s ease-in-out infinite',
-          }}
-        />
-      )}
-
-      {/* MAIN */}
-      <main style={{ padding: '20px 24px', minHeight: '100vh' }}>
-        {/* Week nav + stats */}
+      <main style={{ padding: '20px 24px' }}>
+        {/* ── Header: week nav + stats ── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={() => setWeekOff(w => w - 1)}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
-                border: `1px solid ${th.goldFaint}`,
-                background: 'transparent',
-                color: th.gold,
-                cursor: 'pointer',
-                fontSize: 14,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = th.switchActive;
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-              }}
-            >
-              ‹
-            </button>
-
+            <button onClick={() => setWeekOff(w => w - 1)} style={navBtn(th)}>‹</button>
             <div style={{ textAlign: 'center', minWidth: 130 }}>
-              <div style={{ fontSize: 32, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>
-                KW {kw}
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: th.textDim,
-                  marginTop: 4,
-                  fontFamily: "'Outfit',sans-serif",
-                  fontWeight: 400,
-                  letterSpacing: 0.5,
-                }}
-              >
-                {fmtDate(dates[0])} — {fmtDate(dates[5])}
+              <div style={{ fontSize: 32, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>KW {kw}</div>
+              <div style={{ fontSize: 10, color: th.textDim, marginTop: 4, fontWeight: 400, letterSpacing: .5 }}>
+                {fmtDate(dates[0])} — {fmtDate(dates[5])} {year}
               </div>
             </div>
-
-            <button
-              onClick={() => setWeekOff(w => w + 1)}
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
-                border: `1px solid ${th.goldFaint}`,
-                background: 'transparent',
-                color: th.gold,
-                cursor: 'pointer',
-                fontSize: 14,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = th.switchActive;
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-              }}
-            >
-              ›
-            </button>
-
-            <button
-              onClick={() => setWeekOff(0)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 2,
-                border: 'none',
-                background: th.switchActive,
-                color: th.gold,
-                cursor: 'pointer',
-                fontSize: 9,
-                fontWeight: 600,
-                letterSpacing: 1.5,
-                textTransform: 'uppercase',
-                fontFamily: "'Outfit',sans-serif",
-              }}
-            >
-              {t.today}
-            </button>
+            <button onClick={() => setWeekOff(w => w + 1)} style={navBtn(th)}>›</button>
+            <button onClick={() => setWeekOff(0)} style={{
+              padding: '6px 12px', borderRadius: 4, border: 'none', background: th.switchActive,
+              color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const,
+            }}>{t.today}</button>
+            {/* Dept filter */}
+            <div style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
+              {['all', 'garten', 'unterhalt'].map(d => (
+                <button key={d} onClick={() => setDept(d)} style={{
+                  padding: '5px 10px', borderRadius: 4, border: `1px solid ${dept === d ? th.gold : th.border}`,
+                  background: dept === d ? (isDark ? 'rgba(200,169,110,.1)' : 'rgba(200,169,110,.08)') : 'transparent',
+                  color: dept === d ? th.gold : th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600,
+                }}>{d === 'all' ? 'Alle' : d === 'garten' ? 'GT' : 'UH'}</button>
+              ))}
+            </div>
           </div>
-
           <div style={{ display: 'flex', gap: 20 }}>
             {[
               { v: emps.length, l: t.employees },
               { v: totalSlots, l: t.assignments },
-              { v: totalAbs, l: t.absences },
-              { v: activeJobs.size, l: t.objects },
+              { v: activeTaskIds.size, l: t.objects },
             ].map((s, i) => (
               <div key={s.l} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 300, color: th.statColors?.[i] || th.gold, lineHeight: 1 }}>
-                  {s.v}
-                </div>
-                <div
-                  style={{
-                    fontSize: 8,
-                    color: th.textGhost,
-                    marginTop: 3,
-                    fontFamily: "'Outfit',sans-serif",
-                    fontWeight: 600,
-                    letterSpacing: 1,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {s.l}
-                </div>
+                <div style={{ fontSize: 20, fontWeight: 300, color: th.gold, lineHeight: 1 }}>{s.v}</div>
+                <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>{s.l}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* GRID */}
-        <div
-          style={{
-            background: th.bgCard,
-            borderRadius: 2,
-            border: `1px solid ${th.border}`,
-            overflow: 'hidden',
-            boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.04)',
-          }}
-        >
+        {/* ── Schedule Grid ── */}
+        <div style={{ background: th.bgCard, borderRadius: 4, border: `1px solid ${th.border}`, overflow: 'visible', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 32 }} />
-              <col style={{ width: 140 }} />
-              {t.days.map((_, i) => (
-                <col key={i} />
-              ))}
+              <col style={{ width: 150 }} />
+              {t.days.map((_, i) => <col key={i} />)}
             </colgroup>
             <thead>
-              <tr style={{ height: 32 }}>
-                <th
-                  style={{
-                    padding: '0',
-                    borderBottom: `1px solid ${th.border}`,
-                    borderRight: `1px solid ${th.borderFaint}`,
-                    background: th.goldGhost,
-                  }}
-                />
-                <th
-                  style={{
-                    padding: '6px 12px',
-                    textAlign: 'left',
-                    borderBottom: `1px solid ${th.border}`,
-                    borderRight: `1px solid ${th.borderFaint}`,
-                    background: th.goldGhost,
-                    fontSize: 8,
-                    color: th.goldDim,
-                    fontFamily: "'Outfit',sans-serif",
-                    fontWeight: 600,
-                    letterSpacing: 2,
-                    textTransform: 'uppercase',
-                  }}
-                >
+              <tr style={{ height: 36 }}>
+                <th style={{ ...thBase(th), background: th.goldGhost }} />
+                <th style={{ ...thBase(th), background: th.goldGhost, textAlign: 'left' as const, padding: '6px 12px', fontSize: 9, color: th.goldDim, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const }}>
                   {t.employees}
                 </th>
                 {t.days.map((d, i) => (
-                  <th
-                    key={d}
-                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-                    onDragEnter={e => {
-                      e.preventDefault();
-                      (e.currentTarget as HTMLElement).style.background = th.switchActive;
-                      (e.currentTarget as HTMLElement).style.boxShadow = `inset 0 -3px 0 ${th.gold}`;
-                    }}
-                    onDragLeave={e => {
-                      (e.currentTarget as HTMLElement).style.background = th.goldGhost;
-                      (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                    }}
-                    onDrop={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      (e.currentTarget as HTMLElement).style.background = th.goldGhost;
-                      (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                      const code = e.dataTransfer.getData('text/plain');
-                      console.log('📥 BULK DROP on column header', d, 'day=', i, 'code=', code);
-                      dropOnDay(i, code);
-                    }}
-                    style={{
-                      padding: '4px 4px',
-                      textAlign: 'center',
-                      borderBottom: `1px solid ${th.border}`,
-                      borderRight: i < 5 ? `1px solid ${th.borderFaint}` : 'none',
-                      background: th.goldGhost,
-                      cursor: 'copy',
-                      transition: 'background 0.15s ease, box-shadow 0.15s ease',
-                    }}
-                  >
-                    <div style={{ fontSize: 11, fontWeight: 400, color: th.gold, letterSpacing: 0.5 }}>
-                      {d}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 8,
-                        color: th.textGhost,
-                        marginTop: 0,
-                        fontFamily: "'Outfit',sans-serif",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {fmtDate(dates[i])}
-                    </div>
+                  <th key={d} style={{ ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '4px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: th.gold }}>{d}</div>
+                    <div style={{ fontSize: 8, color: th.textGhost, fontWeight: 500 }}>{fmtDate(dates[i])}</div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {emps.map((emp, idx) => {
-                const isSel = selectedEmp === emp.id;
-                return (
-                  <tr
-                    key={emp.id}
-                    style={{
-                      height: 28,
-                      borderTop: idx > 0 ? `1px solid ${th.borderFaint}` : 'none',
-                      background: isSel ? th.goldGhost : 'transparent',
-                      transition: 'background 0.15s ease',
-                    }}
-                    onMouseEnter={e => {
-                      if (!isSel) (e.currentTarget as HTMLTableRowElement).style.background = th.rowHover;
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLTableRowElement).style.background = isSel ? th.goldGhost : 'transparent';
-                    }}
-                  >
-                    <td
-                      style={{
-                        padding: '0',
-                        textAlign: 'center',
-                        borderRight: `1px solid ${th.borderFaint}`,
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: emp.department === 'garten' ? th.roleV : th.roleM,
+              {emps.map((emp, idx) => (
+                <tr key={emp.id} style={{ height: 40, borderTop: idx > 0 ? `1px solid ${th.borderFaint}` : 'none' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = th.rowHover)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  {/* Role badge */}
+                  <td style={{ textAlign: 'center' as const, borderRight: `1px solid ${th.borderFaint}`, fontSize: 9, fontWeight: 700, color: emp.department === 'garten' ? th.roleV : th.roleM }}>
+                    {emp.department === 'garten' ? 'GT' : 'UH'}
+                  </td>
+                  {/* Name */}
+                  <td style={{ padding: '4px 12px', borderRight: `1px solid ${th.borderFaint}` }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: th.empName }}>{emp.first_name} {emp.last_name}</div>
+                    <div style={{ fontSize: 8, color: th.textGhost, fontWeight: 500, letterSpacing: 1, textTransform: 'uppercase' as const }}>
+                      {deptLabel(emp.department)}
+                    </div>
+                  </td>
+                  {/* Day cells */}
+                  {t.days.map((_, di) => {
+                    const cell = getCell(emp.id, di);
+                    const hasTasks = cell.taskIds.length > 0;
+                    return (
+                      <td key={di} style={{
+                        borderRight: di < 5 ? `1px solid ${th.borderFaint}` : 'none',
+                        padding: '2px 3px', position: 'relative' as const, cursor: 'pointer', verticalAlign: 'middle' as const,
                       }}
-                    >
-                      {emp.department === 'garten' ? 'V' : 'M'}
-                    </td>
-                    <td
-                      style={{
-                        padding: '4px 12px',
-                        borderRight: `1px solid ${th.borderFaint}`,
-                        cursor: 'pointer',
-                        transition: 'background 0.15s ease, box-shadow 0.15s ease',
-                      }}
-                      onClick={() => setSelectedEmp(selectedEmp === emp.id ? null : emp.id)}
-                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-                      onDragEnter={e => {
-                        e.preventDefault();
-                        (e.currentTarget as HTMLElement).style.background = th.switchActive;
-                        (e.currentTarget as HTMLElement).style.boxShadow = `inset 3px 0 0 ${th.gold}`;
-                      }}
-                      onDragLeave={e => {
-                        (e.currentTarget as HTMLElement).style.background = 'transparent';
-                        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                      }}
-                      onDrop={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        (e.currentTarget as HTMLElement).style.background = 'transparent';
-                        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                        const code = e.dataTransfer.getData('text/plain');
-                        console.log('📥 BULK DROP on employee', emp.first_name, 'code=', code);
-                        dropOnEmployee(emp.id, code);
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 500,
-                          color: isSel ? th.empNameSel : th.empName,
-                          letterSpacing: 0.3,
-                        }}
+                        onClick={e => openPicker(emp.id, di, e)}
                       >
-                        {emp.first_name} {emp.last_name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 7,
-                          color: isSel ? th.goldDim : th.textGhost,
-                          fontFamily: "'Outfit',sans-serif",
-                          fontWeight: 500,
-                          letterSpacing: 1,
-                          textTransform: 'uppercase',
-                          marginTop: 0,
-                        }}
-                      >
-                        {deptLabel(emp.department)}
-                      </div>
-                    </td>
-                    {t.days.map((_, di) => {
-                      const a = getA(emp.id, di);
-                      const isHover = hover?.e === emp.id && hover?.d === di;
-
-                      return (
-                        <td
-                          key={di}
-                          style={{
-                            background: isHover ? th.cellHover : 'transparent',
-                            borderRight: di < 5 ? `1px solid ${th.borderFaint}` : 'none',
-                            cursor: 'pointer',
-                            position: 'relative',
-                            padding: '2px 1px',
-                            overflow: 'hidden',
-                            height: 28,
-                          }}
-                          onMouseEnter={() => setHover({ e: emp.id, d: di })}
-                          onMouseLeave={() => setHover(null)}
-                          onDragEnter={e => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setHover({ e: emp.id, d: di });
-                          }}
-                          onDragOver={e => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            e.dataTransfer.dropEffect = 'copy';
-                          }}
-                          onDragLeave={e => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (e.target === e.currentTarget) setHover(null);
-                          }}
-                          onDrop={e => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const code = e.dataTransfer.getData('text/plain');
-                            console.log('📥 DROP on', emp.id, di, 'code=', code);
-                            drop(emp.id, di, code);
-                            setHover(null);
-                          }}
-                          onClick={() => {
-                            if ((!a?.slots || a.slots.length === 0) && (!a?.absences || a.absences.length === 0)) {
-                              setAbsModal({ user_id: emp.id, day: di });
-                            }
-                          }}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'row', gap: '1px', height: '100%', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-                            {a?.absences?.map((absCode, idx) => (
-                              <div
-                                key={`abs-${idx}`}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  rmAbsence(emp.id, di, absCode);
-                                }}
-                                style={{
-                                  background: absBg(absCode),
-                                  color: absText(absCode),
-                                  padding: '2px 3px',
-                                  borderRadius: '2px',
-                                  fontSize: '8px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                  transition: 'opacity 0.2s',
-                                  flex: 1,
-                                  textAlign: 'center',
-                                  minHeight: '100%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '1px',
-                                  borderLeft: `2px solid ${absBg(absCode)}`,
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.opacity = '0.8';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.opacity = '1';
-                                }}
-                                title={T.de.abs[absCode as keyof typeof T.de.abs]}
-                              >
-                                <span style={{ flexShrink: 0 }}>{ABS[absCode as unknown as keyof typeof ABS]?.icon}</span>
-                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '7px' }}>
-                                  {T.de.abs[absCode as keyof typeof T.de.abs]}
-                                </span>
-                              </div>
-                            ))}
-                            {a?.slots?.map((code, idx) => (
-                              <div
-                                key={`slot-${idx}`}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  rm(emp.id, di);
-                                }}
-                                style={{
-                                  background: jobBg(code),
-                                  color: jobText(code),
-                                  padding: '2px 4px',
-                                  borderRadius: '2px',
-                                  fontSize: '10px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer',
-                                  transition: 'opacity 0.2s',
-                                  flex: 1,
-                                  textAlign: 'center',
-                                  minHeight: '100%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.opacity = '0.8';
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.opacity = '1';
-                                }}
-                              >
-                                {code.toUpperCase()}
-                              </div>
-                            ))}
-                            {isHover && (!a?.slots || a.slots.length === 0) && (!a?.absences || a.absences.length === 0) && (
-                              <div style={{ color: th.goldFaint, fontSize: 14, fontWeight: 300 }}>+</div>
-                            )}
+                        {hasTasks ? (
+                          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 1, height: '100%', justifyContent: 'center' }}>
+                            {cell.taskIds.map((tid, idx) => {
+                              const task = taskById[tid];
+                              const color = getTaskColor(tid);
+                              return (
+                                <div key={tid} style={{
+                                  background: isDark ? `${color}33` : `${color}22`,
+                                  borderLeft: `3px solid ${color}`,
+                                  borderRadius: 3, padding: '2px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                  minHeight: 16,
+                                }} title={task?.name || tid}>
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 600, color: isDark ? '#ddd' : '#333',
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, flex: 1,
+                                  }}>
+                                    {task?.name || task?.code || '?'}
+                                  </span>
+                                  <span style={{
+                                    fontSize: 10, color: th.textDim, cursor: 'pointer', marginLeft: 4, lineHeight: 1, flexShrink: 0,
+                                  }}
+                                    onClick={e => { e.stopPropagation(); removeAlloc(cell.allocIds[idx], tid); }}
+                                    title="Entfernen"
+                                  >×</span>
+                                </div>
+                              );
+                            })}
                           </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: th.textGhost, fontSize: 16, fontWeight: 300 }}>
+                            +
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* LEGEND - TASKS */}
-        <div
-          style={{
-            marginTop: 16,
-            padding: '16px 20px',
-            background: th.bgCard,
-            borderRadius: 2,
-            border: `1px solid ${th.border}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 8,
-              color: th.goldDim,
-              marginBottom: 12,
-              fontFamily: "'Outfit',sans-serif",
-              fontWeight: 600,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-            }}
-          >
-            {t.objectDir} · KW {kw}
+        {/* ── Active Tasks Legend ── */}
+        <div style={{ marginTop: 16, padding: '16px 20px', background: th.bgCard, borderRadius: 4, border: `1px solid ${th.border}` }}>
+          <div style={{ fontSize: 9, color: th.goldDim, marginBottom: 12, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const }}>
+            {t.objectDir} · KW {kw} · {activeTaskIds.size} aktiv
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-              gap: 4,
-            }}
-          >
-            {Object.entries(JOB_COLORS).map(([code, job]) => {
-              const count = Object.values(alloc).reduce((s, userAlloc) => {
-                return (
-                  s +
-                  Object.values(userAlloc).reduce((us, dayAlloc: any) => {
-                    return us + (dayAlloc.slots?.filter((x: string) => x === code).length || 0);
-                  }, 0)
-                );
-              }, 0);
-
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 4 }}>
+            {Array.from(activeTaskIds).map(tid => {
+              const task = taskById[tid];
+              if (!task) return null;
+              const color = getTaskColor(tid);
+              const count = Object.values(allocMap).reduce((s, u) => s + Object.values(u).reduce((ss, d) => ss + (d.taskIds.includes(tid) ? 1 : 0), 0), 0);
               return (
-                <div
-                  key={code}
-                  draggable
-                  onDragStart={e => {
-                    e.dataTransfer.effectAllowed = 'copy';
-                    e.dataTransfer.setData('text/plain', code);
-                    console.log('🎯 Drag START from legend:', code);
-                  }}
-                  onDragEnd={() => {
-                    console.log('🎯 Drag END from legend');
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    background: th.legendItemBg,
-                    borderRadius: 2,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    borderLeft: '2px solid transparent',
-                    backgroundImage: `linear-gradient(${th.bgCard},${th.bgCard}), ${isDark ? job.bgD : job.bgL}`,
-                    backgroundOrigin: 'padding-box, border-box',
-                    backgroundClip: 'padding-box, border-box',
-                    border: '1px solid transparent',
-                    cursor: 'grab',
-                    transition: 'transform 0.15s ease',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLDivElement).style.transform = 'translateX(3px)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLDivElement).style.transform = 'translateX(0)';
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 2,
-                        background: isDark ? job.bgD : job.bgL,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: isDark ? job.textD : job.textL,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.2)' : '0 1px 2px rgba(0,0,0,0.08)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {code.toUpperCase()}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 500,
-                        color: th.textMuted,
-                        fontFamily: "'Outfit',sans-serif",
-                      }}
-                    >
-                      {job.label}
-                    </span>
+                <div key={tid} style={{
+                  padding: '6px 10px', background: th.legendItemBg, borderRadius: 4,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  borderLeft: `3px solid ${color}`,
+                }}>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{task.name}</div>
+                    <div style={{ fontSize: 8, color: th.textDim }}>{task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}</div>
                   </div>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: count > 0 ? th.legendCountActive : th.legendCountInactive,
-                      fontFamily: "'Outfit',sans-serif",
-                      fontWeight: 600,
-                      flexShrink: 0,
-                      marginLeft: 8,
-                    }}
-                  >
-                    {count}
-                  </span>
+                  <span style={{ fontSize: 11, color: th.gold, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{count}</span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* LEGEND - ABSENCES */}
-        <div
-          style={{
-            marginTop: 16,
-            padding: '16px 20px',
-            background: th.bgCard,
-            borderRadius: 2,
-            border: `1px solid ${th.border}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 8,
-              color: th.goldDim,
-              marginBottom: 12,
-              fontFamily: "'Outfit',sans-serif",
-              fontWeight: 600,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-            }}
-          >
-            {t.absenzen} · KW {kw}
+        {/* ── Absences Legend (draggable to set) ── */}
+        <div style={{ marginTop: 16, padding: '16px 20px', background: th.bgCard, borderRadius: 4, border: `1px solid ${th.border}` }}>
+          <div style={{ fontSize: 9, color: th.goldDim, marginBottom: 12, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const }}>
+            {t.absenzen}
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-              gap: 4,
-            }}
-          >
-            {Object.entries(T.de.abs).map(([code, label]) => {
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 4 }}>
+            {Object.entries(t.abs).map(([code, label]) => {
               const abs = ABS[code as unknown as keyof typeof ABS];
-              const count = Object.values(alloc).reduce((s, userAlloc) => {
-                return (
-                  s +
-                  Object.values(userAlloc).reduce((us, dayAlloc: any) => {
-                    return us + (dayAlloc.absences?.filter((x: string) => x === code).length || 0);
-                  }, 0)
-                );
-              }, 0);
-
               return (
-                <div
-                  key={code}
-                  draggable
-                  onDragStart={e => {
-                    e.dataTransfer.effectAllowed = 'copy';
-                    e.dataTransfer.setData('text/plain', code);
-                    console.log('🎯 Drag START absence:', code);
-                  }}
-                  onDragEnd={() => {
-                    console.log('🎯 Drag END absence');
-                  }}
-                  style={{
-                    padding: '8px 10px',
-                    background: th.legendItemBg,
-                    borderRadius: 2,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    borderLeft: '2px solid transparent',
-                    backgroundImage: `linear-gradient(${th.bgCard},${th.bgCard}), ${ABS[code as unknown as keyof typeof ABS]?.bg}`,
-                    backgroundOrigin: 'padding-box, border-box',
-                    backgroundClip: 'padding-box, border-box',
-                    border: '1px solid transparent',
-                    cursor: 'grab',
-                    transition: 'transform 0.15s ease',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLDivElement).style.transform = 'translateX(3px)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLDivElement).style.transform = 'translateX(0)';
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 2,
-                        background: abs?.bg,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: isDark ? abs?.textD : abs?.textL,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.2)' : '0 1px 2px rgba(0,0,0,0.08)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {abs?.icon}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 500,
-                        color: th.textMuted,
-                        fontFamily: "'Outfit',sans-serif",
-                      }}
-                    >
-                      {label}
-                    </span>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: count > 0 ? th.legendCountActive : th.legendCountInactive,
-                      fontFamily: "'Outfit',sans-serif",
-                      fontWeight: 600,
-                      flexShrink: 0,
-                      marginLeft: 8,
-                    }}
-                  >
-                    {count}
-                  </span>
+                <div key={code} style={{
+                  padding: '6px 10px', background: th.legendItemBg, borderRadius: 4,
+                  display: 'flex', alignItems: 'center', gap: 8, borderLeft: `3px solid ${abs?.bg || '#666'}`,
+                }}>
+                  <span style={{ fontSize: 14 }}>{abs?.icon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 500, color: th.textMuted }}>{label}</span>
                 </div>
               );
             })}
@@ -1462,140 +435,121 @@ export function SchedulePage() {
         </div>
       </main>
 
-      {/* ABSENCE MODAL (Alternative method) */}
+      {/* ── TASK PICKER DROPDOWN ── */}
+      {picker && (
+        <div ref={pickerRef} style={{
+          position: 'fixed',
+          top: Math.min(picker.rect.bottom + 4, window.innerHeight - 400),
+          left: Math.min(picker.rect.left, window.innerWidth - 340),
+          width: 320, maxHeight: 380,
+          background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 8,
+          boxShadow: isDark ? '0 12px 40px rgba(0,0,0,.6)' : '0 12px 40px rgba(0,0,0,.15)',
+          zIndex: 9999, display: 'flex', flexDirection: 'column' as const, overflow: 'hidden',
+          animation: 'scaleIn .15s ease',
+        }}>
+          {/* Search */}
+          <div style={{ padding: '10px 12px', borderBottom: `1px solid ${th.border}` }}>
+            <div style={{ fontSize: 9, color: th.goldDim, fontWeight: 700, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' as const }}>
+              {users.find(u => u.id === picker.userId)?.first_name} · {t.daysShort[picker.day]}
+            </div>
+            <input ref={searchRef} placeholder={t.searchTasks} value={pickerSearch}
+              onChange={e => setPickerSearch(e.target.value)}
+              style={{
+                width: '100%', padding: '8px 10px', borderRadius: 4, border: `1px solid ${th.border}`,
+                background: th.bg, color: th.text, fontSize: 12, outline: 'none',
+              }}
+            />
+          </div>
+          {/* Task list */}
+          <div style={{ flex: 1, overflowY: 'auto' as const, padding: '4px 0' }}>
+            {pickerTasks.length === 0 ? (
+              <div style={{ padding: 20, textAlign: 'center' as const, color: th.textDim, fontSize: 12 }}>{t.noMatch}</div>
+            ) : pickerTasks.map(task => {
+              const color = getTaskColor(task.id);
+              const isAssigned = getCell(picker.userId, picker.day).taskIds.includes(task.id);
+              const isUsedThisWeek = activeTaskIds.has(task.id);
+              return (
+                <div key={task.id}
+                  onClick={() => assignTask(task.id)}
+                  style={{
+                    padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+                    background: isAssigned ? (isDark ? 'rgba(200,169,110,.1)' : 'rgba(200,169,110,.08)') : 'transparent',
+                    borderLeft: isAssigned ? `3px solid ${th.gold}` : '3px solid transparent',
+                    transition: 'background .1s',
+                  }}
+                  onMouseEnter={e => { if (!isAssigned) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)'; }}
+                  onMouseLeave={e => { if (!isAssigned) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                      {task.name}
+                    </div>
+                    <div style={{ fontSize: 9, color: th.textDim }}>
+                      {task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}
+                      {task.customer ? ` · ${task.customer.name}` : ''}
+                    </div>
+                  </div>
+                  {isAssigned && <span style={{ color: th.gold, fontSize: 14, flexShrink: 0 }}>✓</span>}
+                  {!isAssigned && isUsedThisWeek && <span style={{ fontSize: 8, color: th.textDim, flexShrink: 0, background: th.switchActive, padding: '2px 5px', borderRadius: 3 }}>KW</span>}
+                </div>
+              );
+            })}
+          </div>
+          {/* Absence shortcut */}
+          <div style={{ borderTop: `1px solid ${th.border}`, padding: '8px 12px', display: 'flex', gap: 4, flexWrap: 'wrap' as const }}>
+            {Object.entries(t.abs).map(([code, label]) => {
+              const abs = ABS[code as unknown as keyof typeof ABS];
+              return (
+                <button key={code} onClick={() => { assignAbsence(picker.userId, picker.day, code); setPicker(null); }}
+                  style={{
+                    padding: '4px 8px', borderRadius: 4, border: 'none', background: `${abs?.bg}33`,
+                    color: isDark ? abs?.textD : abs?.textL, fontSize: 9, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                  title={label}
+                >
+                  <span>{abs?.icon}</span>{label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Absence modal (fallback) */}
       {absModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: th.modalBg,
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 500,
-            animation: 'fadeIn 0.2s ease',
-          }}
-          onClick={() => setAbsModal(null)}
-        >
-          <div
-            style={{
-              background: th.modalCard,
-              border: `1px solid ${th.border}`,
-              borderRadius: 2,
-              padding: 24,
-              width: 280,
-              boxShadow: isDark ? '0 16px 48px rgba(0,0,0,0.5)' : '0 16px 48px rgba(0,0,0,0.1)',
-              animation: 'scaleIn 0.25s cubic-bezier(0.16,1,0.3,1)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div
-              style={{
-                fontSize: 8,
-                color: th.goldDim,
-                marginBottom: 6,
-                fontFamily: "'Outfit',sans-serif",
-                fontWeight: 600,
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-              }}
-            >
-              {t.setAbsence}
+        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500 }}
+          onClick={() => setAbsModal(null)}>
+          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 8, padding: 24, width: 280 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 9, color: th.goldDim, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase' as const, marginBottom: 6 }}>{t.setAbsence}</div>
+            <div style={{ fontSize: 16, fontWeight: 400, color: th.gold, marginBottom: 16 }}>
+              {users.find(u => u.id === absModal.userId)?.first_name} · {t.days[absModal.day]}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 400, color: th.gold, marginBottom: 3 }}>
-              {users.find(e => e.id === absModal.user_id)?.first_name}
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                color: th.textDim,
-                marginBottom: 16,
-                fontFamily: "'Outfit',sans-serif",
-              }}
-            >
-              {t.days[absModal.day]}, {fmtDate(dates[absModal.day])}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {Object.entries(T.de.abs).map(([code, label]) => {
-                const abs = ABS[code as unknown as keyof typeof ABS];
-                return (
-                  <button
-                    key={code}
-                    onClick={() => {
-                      if (absModal) drop(absModal.user_id, absModal.day, code);
-                      setAbsModal(null);
-                    }}
-                    style={{
-                      padding: '9px 12px',
-                      borderRadius: 2,
-                      border: 'none',
-                      background: th.btnBg,
-                      borderLeft: `2px solid ${abs?.bg}`,
-                      color: th.textMuted,
-                      fontSize: 11,
-                      fontWeight: 500,
-                      fontFamily: "'Outfit',sans-serif",
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLButtonElement).style.background = th.btnBgHover;
-                      (e.currentTarget as HTMLButtonElement).style.color = th.gold;
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLButtonElement).style.background = th.btnBg;
-                      (e.currentTarget as HTMLButtonElement).style.color = th.textMuted;
-                    }}
-                  >
-                    <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>
-                      {abs?.icon}
-                    </span>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => setAbsModal(null)}
-              style={{
-                marginTop: 12,
-                width: '100%',
-                padding: '8px',
-                borderRadius: 2,
-                border: `1px solid ${th.borderFaint}`,
-                background: 'transparent',
-                color: th.textDim,
-                cursor: 'pointer',
-                fontSize: 9,
-                fontFamily: "'Outfit',sans-serif",
-                fontWeight: 500,
-                letterSpacing: 1,
-                textTransform: 'uppercase',
-                transition: 'color 0.2s ease',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.color = th.textMuted;
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.color = th.textDim;
-              }}
-            >
-              {t.cancel}
-            </button>
+            {Object.entries(t.abs).map(([code, label]) => {
+              const abs = ABS[code as unknown as keyof typeof ABS];
+              return (
+                <button key={code} onClick={() => assignAbsence(absModal.userId, absModal.day, code)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', marginBottom: 3,
+                    borderRadius: 4, border: 'none', background: th.btnBg, borderLeft: `3px solid ${abs?.bg}`,
+                    color: th.textMuted, fontSize: 11, fontWeight: 500, cursor: 'pointer', textAlign: 'left' as const,
+                  }}
+                ><span style={{ fontSize: 14 }}>{abs?.icon}</span>{label}</button>
+              );
+            })}
+            <button onClick={() => setAbsModal(null)} style={{
+              marginTop: 12, width: '100%', padding: 8, borderRadius: 4, border: `1px solid ${th.borderFaint}`,
+              background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const,
+            }}>{t.cancel}</button>
           </div>
         </div>
       )}
 
       <style>{`
         @keyframes fadeSlide { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes bulkProgress { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        @keyframes scaleIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1603,4 +557,12 @@ export function SchedulePage() {
       `}</style>
     </div>
   );
+}
+
+/* ─── Style helpers ─── */
+function navBtn(th: Record<string, string>): React.CSSProperties {
+  return { width: 32, height: 32, borderRadius: 4, border: `1px solid ${th.goldFaint}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+}
+function thBase(th: Record<string, string>): React.CSSProperties {
+  return { padding: 0, borderBottom: `1px solid ${th.border}`, borderRight: `1px solid ${th.borderFaint}` };
 }
