@@ -361,8 +361,17 @@ export function StatsPage() {
         fetch(`${API}/api/v1/machines/allocations`, { headers: h }),
       ]);
       if (!mounted.current) return;
-      const json = async (r: PromiseSettledResult<Response>) =>
-        r.status === 'fulfilled' && r.value.ok ? r.value.json() : [];
+      const json = async (r: PromiseSettledResult<Response>): Promise<any[]> => {
+        if (r.status !== 'fulfilled' || !r.value.ok) return [];
+        try {
+            const data = await r.value.json();
+            if (Array.isArray(data)) return data;
+            if (data && Array.isArray(data.data)) return data.data;
+            return [];
+        } catch {
+            return [];
+        }
+      };
       setUsers(await json(uRes));
       setWeeks(await json(wRes));
       setAllocations(await json(aRes));
