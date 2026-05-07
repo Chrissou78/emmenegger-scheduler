@@ -5,8 +5,8 @@ import jwt from 'jsonwebtoken';
 
 export const allocationsRouter = Router();
 
-// GET /api/v1/allocations?weekId=xxx
-allocationsRouter.get('/', async (req, res, next) => {
+// GET /api/v1/allocations?week_id=xxx
+allocationsRouter.get('/', async (req: any, res, next) => {
   try {
     const { week_id, user_id } = req.query;
     let query = supabase.from('allocations').select('*');
@@ -18,6 +18,28 @@ allocationsRouter.get('/', async (req, res, next) => {
       query = query.eq('user_id', user_id);
     }
 
+    // LOCAL_MANAGER: only show allocations for their team
+    const currentUserId = req.user.userId || req.user.id;
+    if (req.user.role === 'LOCAL_MANAGER' && currentUserId) {
+      const { data: teamUsers } = await supabase
+        .from('users')
+        .select('id')
+        .or(`manager_id.eq.${currentUserId},id.eq.${currentUserId}`);
+
+      const teamIds = (teamUsers || []).map((u: any) => u.id);
+      if (teamIds.length > 0) {
+        query = query.in('user_id', teamIds);
+      } else {
+        // No team found — return only own allocations
+        query = query.eq('user_id', currentUserId);
+      }
+    }
+
+    // ARBEITER: only their own allocations
+    if (req.user.role === 'ARBEITER' && currentUserId) {
+      query = query.eq('user_id', currentUserId);
+    }
+
     const { data, error } = await query.order('day_of_week', { ascending: true });
     if (error) throw error;
 
@@ -27,8 +49,8 @@ allocationsRouter.get('/', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/allocations (create with conflict check)
-allocationsRouter.post('/', async (req, res, next) => {
+// POST /api/v1/allocations
+allocationsRouter.post('/', async (req: any, res, next) => {
   try {
     const { user_id, task_id, week_id, day_of_week, time_slot } = req.body;
     const token = req.headers.authorization?.split(' ')[1];
@@ -42,6 +64,20 @@ allocationsRouter.post('/', async (req, res, next) => {
 
     if (!createdById) {
       return res.status(401).json({ error: 'Unauthorized', message: 'User ID not found in token' });
+    }
+
+    // LOCAL_MANAGER can only create allocations for their team
+    if (req.user.role === 'LOCAL_MANAGER') {
+      const currentUserId = req.user.userId || req.user.id;
+      const { data: targetUser } = await supabase
+        .from('users')
+        .select('id, manager_id')
+        .eq('id', user_id)
+        .single();
+
+      if (targetUser && targetUser.id !== currentUserId && targetUser.manager_id !== currentUserId) {
+        return res.status(403).json({ success: false, message: 'Cannot allocate for users outside your team' });
+      }
     }
 
     const { data, error } = await supabase
@@ -72,7 +108,7 @@ allocationsRouter.post('/', async (req, res, next) => {
 allocationsRouter.delete(
   '/:id',
   requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
-  async (req, res, next) => {
+  async (req: any, res, next) => {
     try {
       const { id } = req.params;
 
@@ -83,10 +119,7 @@ allocationsRouter.delete(
         .single();
 
       if (fetchError || !allocation) {
-        return res.status(404).json({
-          success: false,
-          message: 'Allocation not found',
-        });
+        return res.status(404).json({ success: false, message: 'Allocation not found' });
       }
 
       const { error: deleteError } = await supabase
@@ -96,11 +129,7 @@ allocationsRouter.delete(
 
       if (deleteError) throw deleteError;
 
-      // Real-time updates handled by Supabase Realtime on the frontend
-      res.json({
-        success: true,
-        message: 'Allocation deleted',
-      });
+      res.json({ success: true, message: 'Allocation deleted' });
     } catch (err) {
       console.error('❌ Allocations DELETE error:', err);
       next(err);
@@ -112,22 +141,34 @@ allocationsRouter.delete(
 allocationsRouter.post(
   '/copy-week',
   requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
-  async (req, res, next) => {
+  async (req: any, res, next) => {
     try {
       const { sourceWeekId, targetWeekId } = req.body;
+      const currentUserId = req.user.userId || req.user.id;
 
-      const { data: sourceAllocations, error: fetchError } = await supabase
+      let sourceQuery = supabase
         .from('allocations')
         .select('user_id, task_id, day_of_week, time_slot')
         .eq('week_id', sourceWeekId);
 
+      // LOCAL_MANAGER: only copy their team's allocations
+      if (req.user.role === 'LOCAL_MANAGER' && currentUserId) {
+        const { data: teamUsers } = await supabase
+          .from('users')
+          .select('id')
+          .or(`manager_id.eq.${currentUserId},id.eq.${currentUserId}`);
+
+        const teamIds = (teamUsers || []).map((u: any) => u.id);
+        if (teamIds.length > 0) {
+          sourceQuery = sourceQuery.in('user_id', teamIds);
+        }
+      }
+
+      const { data: sourceAllocations, error: fetchError } = await sourceQuery;
       if (fetchError) throw fetchError;
 
       if (!sourceAllocations || sourceAllocations.length === 0) {
-        return res.json({
-          success: true,
-          data: { copied: 0 },
-        });
+        return res.json({ success: true, data: { copied: 0 } });
       }
 
       const allocationsToCreate = sourceAllocations.map((a) => ({
@@ -145,10 +186,7 @@ allocationsRouter.post(
 
       if (createError) throw createError;
 
-      res.json({
-        success: true,
-        data: { copied: created?.length || 0 },
-      });
+      res.json({ success: true, data: { copied: created?.length || 0 } });
     } catch (err) {
       console.error('❌ Allocations COPY error:', err);
       next(err);

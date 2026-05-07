@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
-import { themes, T } from '../i18n/translations';
+import { themes } from '../i18n/translations';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 export function LoginPage() {
@@ -10,21 +10,15 @@ export function LoginPage() {
   const th = isDark ? themes.dark : themes.light;
   const navigate = useNavigate();
   const { login, loading, error: authError } = useAuthStore();
-  
+
   const [email, setEmail] = useState('admin@emmenegger.ch');
   const [password, setPassword] = useState('admin');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
-  const setDevAccount = () => {
-    setEmail('admin@emmenegger.ch');
-    setPassword('admin');
-  };
-
-  const setMarcoAccount = () => {
-    setEmail('marco.cancela@emmenegger.ch');
-    setPassword('emmenegger2026');
-  };
+  const setDevAccount = () => { setEmail('admin@emmenegger.ch'); setPassword('admin'); };
+  const setMarcoAccount = () => { setEmail('marco.cancela@emmenegger.ch'); setPassword('emmenegger2026'); };
+  const setWorkerAccount = () => { setEmail('worker@emmenegger.ch'); setPassword('worker2026'); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +26,22 @@ export function LoginPage() {
 
     try {
       await login(email, password);
-      navigate('/schedule');
+
+      // Role-based redirect — read user from store after login
+      const user = useAuthStore.getState().user;
+      const role = (user?.role || '').toUpperCase();
+
+      switch (role) {
+        case 'ARBEITER':
+          navigate('/reports');
+          break;
+        case 'LOCAL_MANAGER':
+        case 'GLOBAL_MANAGER':
+          navigate('/schedule');
+          break;
+        default:
+          navigate('/reports');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
@@ -69,44 +78,20 @@ export function LoginPage() {
         </p>
 
         <form onSubmit={handleSubmit}>
-          {/* Email Input */}
+          {/* Email */}
           <div style={{ marginBottom: '20px' }}>
-            <label
-              style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontSize: '13px',
-                fontWeight: '500',
-                color: th.text,
-              }}
-            >
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500', color: th.text }}>
               Email
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Mail
-                size={18}
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  color: th.textMuted,
-                }}
-              />
+              <Mail size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@emmenegger.ch"
-                required
+                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@emmenegger.ch" required
                 style={{
-                  width: '100%',
-                  padding: '12px 12px 12px 40px',
-                  border: `1px solid ${th.border}`,
-                  borderRadius: '6px',
-                  backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
-                  color: th.text,
-                  fontSize: '14px',
-                  outline: 'none',
-                  transition: 'border-color 0.2s',
+                  width: '100%', padding: '12px 12px 12px 40px', border: `1px solid ${th.border}`,
+                  borderRadius: '6px', backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
+                  color: th.text, fontSize: '14px', outline: 'none', transition: 'border-color 0.2s',
                 }}
                 onFocus={(e) => (e.target.style.borderColor = th.gold)}
                 onBlur={(e) => (e.target.style.borderColor = th.border)}
@@ -114,169 +99,105 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Password Input */}
+          {/* Password */}
           <div style={{ marginBottom: '20px' }}>
-            <label
-              style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontSize: '13px',
-                fontWeight: '500',
-                color: th.text,
-              }}
-            >
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '500', color: th.text }}>
               Password
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Lock
-                size={18}
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  color: th.textMuted,
-                }}
-              />
+              <Lock size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
               <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
+                type={showPassword ? 'text' : 'password'} value={password}
+                onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required
                 style={{
-                  width: '100%',
-                  padding: '12px 40px 12px 40px',
-                  border: `1px solid ${th.border}`,
-                  borderRadius: '6px',
-                  backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
-                  color: th.text,
-                  fontSize: '14px',
-                  outline: 'none',
+                  width: '100%', padding: '12px 40px 12px 40px', border: `1px solid ${th.border}`,
+                  borderRadius: '6px', backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
+                  color: th.text, fontSize: '14px', outline: 'none',
                 }}
                 onFocus={(e) => (e.target.style.borderColor = th.gold)}
                 onBlur={(e) => (e.target.style.borderColor = th.border)}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: th.textMuted,
-                  display: 'flex',
-                  padding: '0',
-                  alignItems: 'center',
-                }}
-              >
+              <button type="button" onClick={() => setShowPassword(!showPassword)}
+                style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted, display: 'flex', padding: '0', alignItems: 'center' }}>
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
 
-          {/* Forgot Password Link */}
+          {/* Forgot Password */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-            <Link
-              to="/forgot-password"
-              style={{
-                fontSize: '13px',
-                color: th.gold,
-                textDecoration: 'none',
-              }}
+            <Link to="/forgot-password"
+              style={{ fontSize: '13px', color: th.gold, textDecoration: 'none' }}
               onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
-              onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}
-            >
+              onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}>
               Forgot password?
             </Link>
           </div>
 
-          {/* Error Message */}
+          {/* Error */}
           {(error || authError) && (
-            <div
-              style={{
-                padding: '12px',
-                backgroundColor: isDark ? 'rgba(139,58,58,0.3)' : 'rgba(248,215,218,0.8)',
-                color: isDark ? '#ff9999' : '#721c24',
-                borderRadius: '6px',
-                marginBottom: '20px',
-                fontSize: '13px',
-              }}
-            >
+            <div style={{
+              padding: '12px', backgroundColor: isDark ? 'rgba(139,58,58,0.3)' : 'rgba(248,215,218,0.8)',
+              color: isDark ? '#ff9999' : '#721c24', borderRadius: '6px', marginBottom: '20px', fontSize: '13px',
+            }}>
               {error || authError}
             </div>
           )}
 
           {/* Login Button */}
-          <button
-            type="submit"
-            disabled={loading}
+          <button type="submit" disabled={loading}
             style={{
-              width: '100%',
-              padding: '12px',
-              backgroundColor: loading ? th.textMuted : th.gold,
-              color: isDark ? '#0a0a0a' : '#1a1a0a',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'opacity 0.2s',
-              marginBottom: '20px',
+              width: '100%', padding: '12px', backgroundColor: loading ? th.textMuted : th.gold,
+              color: isDark ? '#0a0a0a' : '#1a1a0a', border: 'none', borderRadius: '6px',
+              fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'opacity 0.2s', marginBottom: '20px',
             }}
-            onMouseOver={(e) =>
-              !loading && (e.currentTarget.style.opacity = '0.9')
-            }
-            onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
-          >
+            onMouseOver={(e) => !loading && (e.currentTarget.style.opacity = '0.9')}
+            onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}>
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        {/* Dev Quick Buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-          <button
-            onClick={setDevAccount}
+        {/* Dev Quick Buttons — 3 columns */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
+          <button onClick={setDevAccount}
             style={{
-              padding: '10px',
-              backgroundColor: th.btnBg,
-              border: `1px solid ${th.border}`,
-              borderRadius: '6px',
-              color: th.text,
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
+              padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`,
+              borderRadius: '6px', color: th.gold, fontSize: '11px', fontWeight: '600',
+              cursor: 'pointer', transition: 'background-color 0.2s',
             }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}
-          >
-            Admin
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            👑 Admin
           </button>
-          <button
-            onClick={setMarcoAccount}
+          <button onClick={setMarcoAccount}
             style={{
-              padding: '10px',
-              backgroundColor: th.btnBg,
-              border: `1px solid ${th.border}`,
-              borderRadius: '6px',
-              color: th.text,
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
+              padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`,
+              borderRadius: '6px', color: '#6495ed', fontSize: '11px', fontWeight: '600',
+              cursor: 'pointer', transition: 'background-color 0.2s',
             }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}
-          >
-            Marco
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            📋 Manager
+          </button>
+          <button onClick={setWorkerAccount}
+            style={{
+              padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`,
+              borderRadius: '6px', color: '#4caf50', fontSize: '11px', fontWeight: '600',
+              cursor: 'pointer', transition: 'background-color 0.2s',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            🔧 Arbeiter
           </button>
         </div>
 
-        {/* Default Password Note */}
-        <p style={{ fontSize: '11px', color: th.textMuted, textAlign: 'center', marginBottom: '0' }}>
-          🔑 Dev: <code style={{ color: th.gold }}>admin</code> / <code style={{ color: th.gold }}>emmenegger2026</code>
-        </p>
+        {/* Credentials hint */}
+        <div style={{ fontSize: '11px', color: th.textMuted, textAlign: 'center', lineHeight: 1.8 }}>
+          <div>👑 <code style={{ color: th.gold }}>admin@emmenegger.ch</code> / <code style={{ color: th.gold }}>admin</code></div>
+          <div>📋 <code style={{ color: '#6495ed' }}>marco.cancela@emmenegger.ch</code> / <code style={{ color: '#6495ed' }}>emmenegger2026</code></div>
+          <div>🔧 <code style={{ color: '#4caf50' }}>worker@emmenegger.ch</code> / <code style={{ color: '#4caf50' }}>worker2026</code></div>
+        </div>
       </div>
     </div>
   );
