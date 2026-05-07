@@ -12,6 +12,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { AdminPage } from './pages/AdminPage';
 import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { TasksPage } from './pages/TasksPage';
 
 /* ─── Auth guard ─── */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -68,6 +69,12 @@ function AppContent() {
           <Route path="/machines" element={
             <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
               <MachinesPage />
+            </RequireRole>
+          } />
+
+          <Route path="/tasks" element={
+            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+              <TasksPage />
             </RequireRole>
           } />
 

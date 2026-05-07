@@ -13,7 +13,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { path: '/schedule',  label: 'Disposition',        icon: '📅', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
   { path: '/machines',  label: 'Maschinen',          icon: '🚜', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
-  { path: '/reports',   label: 'Meine Woche',        icon: '📋' },
+  { path: '/tasks',     label: 'Aufträge',           icon: '📋', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
+  { path: '/reports',   label: 'Meine Woche',        icon: '📝' },
   { path: '/stats',     label: 'Statistiken',        icon: '📊', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
   { path: '/admin',     label: 'Benutzerverwaltung', icon: '👥', roles: ['GLOBAL_MANAGER'] },
   { path: '/profile',   label: 'Profil',             icon: '👤' },
@@ -33,7 +34,7 @@ export function AppShell() {
 
   /* ─── Redirect workers away from manager-only pages ─── */
   useEffect(() => {
-    const managerOnlyPaths = ['/schedule', '/machines', '/stats', '/admin'];
+    const managerOnlyPaths = ['/schedule', '/machines', '/tasks', '/stats', '/admin'];
     if (isWorker && managerOnlyPaths.some(p => location.pathname.startsWith(p))) {
       navigate('/reports', { replace: true });
     }
