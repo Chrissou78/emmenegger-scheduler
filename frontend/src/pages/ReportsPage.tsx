@@ -62,7 +62,7 @@ interface ReportModal {
 
 // ─── TRANSLATIONS ───
 
-const T = {
+const T: Record<string, Record<string, any>> = {
   de: {
     mySchedule: 'Mein Wochenplan',
     today: 'Heute',
@@ -80,7 +80,9 @@ const T = {
     plannedHours: 'Geplant',
     actualHours: 'Effektiv',
     description: 'Beschreibung der Arbeit',
+    descriptionPlaceholder: 'Was wurde gemacht...',
     notes: 'Zusätzliche Bemerkungen',
+    notesPlaceholder: 'Zusätzliche Arbeiten, Materialien, Besonderes...',
     photos: 'Fotos',
     addPhoto: 'Foto hinzufügen',
     save: 'Speichern',
@@ -91,14 +93,146 @@ const T = {
     reported: 'Erfasst',
     notReported: 'Offen',
     uploadingPhoto: 'Foto wird hochgeladen...',
+    uploadFailed: 'Foto-Upload fehlgeschlagen',
     removePhoto: 'Foto entfernen',
     clickToReport: 'Antippen zum Erfassen',
+    loading: 'Laden...',
+    kw: 'KW',
     status: {
       PLANNED: 'Geplant',
       COMPLETED: 'Erledigt',
       PARTIAL: 'Teilweise',
       NOT_DONE: 'Nicht erledigt',
       ADDED: 'Zusätzlich',
+    } as Record<string, string>,
+  },
+  en: {
+    mySchedule: 'My Weekly Plan',
+    today: 'Today',
+    tasks: 'Tasks',
+    absences: 'Absences',
+    days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    abs: { '1': 'Vacation', '2': 'School', '3': 'Course', '4': 'Accident', '5': 'Sick', '6': 'Part-time' } as Record<string, string>,
+    greeting: 'Hello',
+    yourWeek: 'Your week at a glance',
+    free: 'Free',
+    reportTime: 'Log Time',
+    startTime: 'Start Time',
+    endTime: 'End Time',
+    totalHours: 'Total Hours',
+    plannedHours: 'Planned',
+    actualHours: 'Actual',
+    description: 'Work Description',
+    descriptionPlaceholder: 'What was done...',
+    notes: 'Additional Notes',
+    notesPlaceholder: 'Additional work, materials, special notes...',
+    photos: 'Photos',
+    addPhoto: 'Add Photo',
+    save: 'Save',
+    cancel: 'Cancel',
+    saved: 'Report saved',
+    updated: 'Report updated',
+    error: 'Error saving report',
+    reported: 'Reported',
+    notReported: 'Open',
+    uploadingPhoto: 'Uploading photo...',
+    uploadFailed: 'Photo upload failed',
+    removePhoto: 'Remove photo',
+    clickToReport: 'Tap to log time',
+    loading: 'Loading...',
+    kw: 'CW',
+    status: {
+      PLANNED: 'Planned',
+      COMPLETED: 'Completed',
+      PARTIAL: 'Partial',
+      NOT_DONE: 'Not done',
+      ADDED: 'Added',
+    } as Record<string, string>,
+  },
+  fr: {
+    mySchedule: 'Mon planning hebdomadaire',
+    today: "Aujourd'hui",
+    tasks: 'Tâches',
+    absences: 'Absences',
+    days: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
+    abs: { '1': 'Vacances', '2': 'École', '3': 'Cours inter.', '4': 'Accident', '5': 'Maladie', '6': 'Temps partiel' } as Record<string, string>,
+    greeting: 'Bonjour',
+    yourWeek: "Votre semaine en un coup d'œil",
+    free: 'Libre',
+    reportTime: 'Saisir le temps',
+    startTime: 'Heure de début',
+    endTime: 'Heure de fin',
+    totalHours: 'Heures totales',
+    plannedHours: 'Planifié',
+    actualHours: 'Effectif',
+    description: 'Description du travail',
+    descriptionPlaceholder: "Qu'est-ce qui a été fait...",
+    notes: 'Remarques supplémentaires',
+    notesPlaceholder: 'Travaux supplémentaires, matériaux, particularités...',
+    photos: 'Photos',
+    addPhoto: 'Ajouter une photo',
+    save: 'Enregistrer',
+    cancel: 'Annuler',
+    saved: 'Rapport enregistré',
+    updated: 'Rapport mis à jour',
+    error: "Erreur lors de l'enregistrement",
+    reported: 'Saisi',
+    notReported: 'Ouvert',
+    uploadingPhoto: 'Téléchargement de la photo...',
+    uploadFailed: 'Échec du téléchargement de la photo',
+    removePhoto: 'Supprimer la photo',
+    clickToReport: 'Appuyer pour saisir',
+    loading: 'Chargement...',
+    kw: 'SC',
+    status: {
+      PLANNED: 'Planifié',
+      COMPLETED: 'Terminé',
+      PARTIAL: 'Partiel',
+      NOT_DONE: 'Non réalisé',
+      ADDED: 'Ajouté',
+    } as Record<string, string>,
+  },
+  pt: {
+    mySchedule: 'Meu plano semanal',
+    today: 'Hoje',
+    tasks: 'Tarefas',
+    absences: 'Ausências',
+    days: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
+    abs: { '1': 'Férias', '2': 'Escola', '3': 'Curso', '4': 'Acidente', '5': 'Doente', '6': 'Meio período' } as Record<string, string>,
+    greeting: 'Olá',
+    yourWeek: 'Sua semana resumida',
+    free: 'Livre',
+    reportTime: 'Registrar tempo',
+    startTime: 'Hora de início',
+    endTime: 'Hora de fim',
+    totalHours: 'Horas totais',
+    plannedHours: 'Planeado',
+    actualHours: 'Efetivo',
+    description: 'Descrição do trabalho',
+    descriptionPlaceholder: 'O que foi feito...',
+    notes: 'Notas adicionais',
+    notesPlaceholder: 'Trabalhos adicionais, materiais, observações...',
+    photos: 'Fotos',
+    addPhoto: 'Adicionar foto',
+    save: 'Guardar',
+    cancel: 'Cancelar',
+    saved: 'Relatório guardado',
+    updated: 'Relatório atualizado',
+    error: 'Erro ao guardar',
+    reported: 'Registrado',
+    notReported: 'Em aberto',
+    uploadingPhoto: 'A carregar foto...',
+    uploadFailed: 'Falha no upload da foto',
+    removePhoto: 'Remover foto',
+    clickToReport: 'Toque para registrar',
+    loading: 'A carregar...',
+    kw: 'SC',
+    status: {
+      PLANNED: 'Planeado',
+      COMPLETED: 'Concluído',
+      PARTIAL: 'Parcial',
+      NOT_DONE: 'Não realizado',
+      ADDED: 'Adicional',
     } as Record<string, string>,
   },
 };
@@ -149,9 +283,9 @@ function hoursToDisplay(h: number): string {
 // ─── COMPONENT ───
 
 export function ReportsPage() {
-  const { isDark } = useTheme();
+  const { isDark, lang } = useTheme();
   const th = isDark ? themes.dark : themes.light;
-  const t = T.de;
+  const t = T[lang] || T.de;
   const { user } = useAuthStore();
 
   const [weekOff, setWeekOff] = useState(0);
@@ -388,7 +522,7 @@ export function ReportsPage() {
       setFormPhotos(prev => [...prev, urlData.publicUrl]);
     } catch (err) {
       console.error('❌ Photo upload error:', err);
-      showToast('Foto-Upload fehlgeschlagen', 'err');
+      showToast(t.uploadFailed, 'err');
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -435,7 +569,6 @@ export function ReportsPage() {
 
       if (resp.ok) {
         const result = await resp.json();
-        // Update local reports state
         if (modal.existingReport) {
           setReports(prev => prev.map(r => r.id === modal.existingReport!.id ? result.data : r));
           showToast(t.updated, 'ok');
@@ -514,7 +647,7 @@ export function ReportsPage() {
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}>‹</button>
 
           <div style={{ textAlign: 'center', minWidth: 140 }}>
-            <div style={{ fontSize: 36, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>KW {kw}</div>
+            <div style={{ fontSize: 36, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>{t.kw} {kw}</div>
             <div style={{ fontSize: 11, color: th.textDim, marginTop: 4, fontFamily: "'Outfit',sans-serif", fontWeight: 400, letterSpacing: 0.5 }}>
               {fmtDate(dates[0])} — {fmtDate(dates[5])}
             </div>
@@ -543,7 +676,7 @@ export function ReportsPage() {
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>Laden...</div>
+        <div style={{ textAlign: 'center', padding: 40, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>{t.loading}</div>
       )}
 
       {/* Day cards */}
@@ -751,7 +884,7 @@ export function ReportsPage() {
                 <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
                   {t.description}
                 </label>
-                <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} rows={3} placeholder="Was wurde gemacht..."
+                <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} rows={3} placeholder={t.descriptionPlaceholder}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 12, fontFamily: "'Outfit',sans-serif", outline: 'none', resize: 'vertical' }} />
               </div>
 
@@ -760,7 +893,7 @@ export function ReportsPage() {
                 <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
                   {t.notes}
                 </label>
-                <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} placeholder="Zusätzliche Arbeiten, Materialien, Besonderes..."
+                <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} placeholder={t.notesPlaceholder}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 12, fontFamily: "'Outfit',sans-serif", outline: 'none', resize: 'vertical' }} />
               </div>
 
@@ -776,7 +909,7 @@ export function ReportsPage() {
                     {formPhotos.map((url, idx) => (
                       <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: 2, overflow: 'hidden', border: `1px solid ${th.borderFaint}` }}>
                         <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <button onClick={() => removePhoto(url)}
+                        <button onClick={() => removePhoto(url)} title={t.removePhoto}
                           style={{
                             position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%',
                             background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer',

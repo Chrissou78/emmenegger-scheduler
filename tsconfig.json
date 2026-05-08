@@ -10,9 +10,8 @@
     "resolveJsonModule": true,
     "outDir": ".vercel/output",
     "rootDir": ".",
-    "baseUrl": ".",
     "paths": {
-      "@emmenegger/shared/*": ["shared/*"]
+      "@emmenegger/shared/*": ["./shared/*"]
     }
   },
   "include": ["api/**/*", "backend/src/**/*", "shared/**/*"],

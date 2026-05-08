@@ -14,17 +14,66 @@ interface Task { id: string; code: string; name: string; color: string; schedule
 
 const API = import.meta.env.VITE_API_URL || '';
 
-const T = {
+const T: Record<string, any> = {
   de: {
     employees: 'Mitarbeiter', assignments: 'Zuweisungen', absences: 'Absenzen',
     objects: 'Objekte', today: 'Heute', absenzen: 'Absenzen', objectDir: 'Aufträge',
-    bothDept: 'Beide Abt.', gartenFull: 'Garten & Tiefbau', unterhaltFull: 'Unterhalt',
+    bothDept: 'Alle', gartenFull: 'Garten & Tiefbau', unterhaltFull: 'Unterhalt',
     days: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
     daysShort: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'],
     abs: { '1': 'Ferien', '2': 'Schule', '3': 'ÜK', '4': 'Unfall', '5': 'Krank', '6': 'Teilzeit' } as Record<string, string>,
     removed: 'Entfernt', cancel: 'Abbrechen', setAbsence: 'Absenz setzen',
     searchTasks: 'Auftrag suchen...', noMatch: 'Kein Treffer', max2: 'Max. 2 Aufträge',
     blocked: 'Blockiert (Absenz)', skipped: 'übersprungen',
+    activeTasks: 'Aktive Aufträge', absenceLegend: 'Absenzen',
+    kw: 'KW', bulkDay: 'Ganzer Tag', bulkEmployee: 'Ganze Woche',
+    networkError: 'Netzwerkfehler', error: 'Fehler', weekNotFound: 'Woche nicht gefunden',
+    remove: 'Entfernen',
+  },
+  en: {
+    employees: 'Employees', assignments: 'Assignments', absences: 'Absences',
+    objects: 'Objects', today: 'Today', absenzen: 'Absences', objectDir: 'Tasks',
+    bothDept: 'All', gartenFull: 'Garden & Civil Eng.', unterhaltFull: 'Maintenance',
+    days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    daysShort: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    abs: { '1': 'Vacation', '2': 'School', '3': 'Course', '4': 'Accident', '5': 'Sick', '6': 'Part-time' } as Record<string, string>,
+    removed: 'Removed', cancel: 'Cancel', setAbsence: 'Set Absence',
+    searchTasks: 'Search task...', noMatch: 'No match', max2: 'Max. 2 tasks',
+    blocked: 'Blocked (Absence)', skipped: 'skipped',
+    activeTasks: 'Active Tasks', absenceLegend: 'Absences',
+    kw: 'CW', bulkDay: 'Entire Day', bulkEmployee: 'Entire Week',
+    networkError: 'Network error', error: 'Error', weekNotFound: 'Week not found',
+    remove: 'Remove',
+  },
+  fr: {
+    employees: 'Employés', assignments: 'Affectations', absences: 'Absences',
+    objects: 'Objets', today: "Aujourd'hui", absenzen: 'Absences', objectDir: 'Tâches',
+    bothDept: 'Tous', gartenFull: 'Jardin & Génie civil', unterhaltFull: 'Entretien',
+    days: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
+    daysShort: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'],
+    abs: { '1': 'Vacances', '2': 'École', '3': 'Cours', '4': 'Accident', '5': 'Maladie', '6': 'Temps partiel' } as Record<string, string>,
+    removed: 'Supprimé', cancel: 'Annuler', setAbsence: 'Définir absence',
+    searchTasks: 'Rechercher une tâche...', noMatch: 'Aucun résultat', max2: 'Max. 2 tâches',
+    blocked: 'Bloqué (Absence)', skipped: 'ignoré',
+    activeTasks: 'Tâches actives', absenceLegend: 'Absences',
+    kw: 'S', bulkDay: 'Journée entière', bulkEmployee: 'Semaine entière',
+    networkError: 'Erreur réseau', error: 'Erreur', weekNotFound: 'Semaine introuvable',
+    remove: 'Supprimer',
+  },
+  pt: {
+    employees: 'Funcionários', assignments: 'Alocações', absences: 'Ausências',
+    objects: 'Objetos', today: 'Hoje', absenzen: 'Ausências', objectDir: 'Tarefas',
+    bothDept: 'Todos', gartenFull: 'Jardim & Eng. Civil', unterhaltFull: 'Manutenção',
+    days: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
+    daysShort: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+    abs: { '1': 'Férias', '2': 'Escola', '3': 'Curso', '4': 'Acidente', '5': 'Doente', '6': 'Meio período' } as Record<string, string>,
+    removed: 'Removido', cancel: 'Cancelar', setAbsence: 'Definir ausência',
+    searchTasks: 'Pesquisar tarefa...', noMatch: 'Sem resultado', max2: 'Máx. 2 tarefas',
+    blocked: 'Bloqueado (Ausência)', skipped: 'ignorado',
+    activeTasks: 'Tarefas ativas', absenceLegend: 'Ausências',
+    kw: 'S', bulkDay: 'Dia inteiro', bulkEmployee: 'Semana inteira',
+    networkError: 'Erro de rede', error: 'Erro', weekNotFound: 'Semana não encontrada',
+    remove: 'Remover',
   },
 };
 
@@ -55,9 +104,9 @@ function getKW(d: Date) {
 }
 
 export function SchedulePage() {
-  const { isDark } = useTheme();
+  const { isDark, lang } = useTheme();
   const th: Theme = isDark ? themes.dark : themes.light;
-  const t = T.de;
+  const t = T[lang] || T.de;
 
   /* ─── State ─── */
   const [weekOff, setWeekOff] = useState(0);
@@ -110,7 +159,7 @@ export function SchedulePage() {
 
   const taskById = useMemo(() => {
     const m: Record<string, Task> = {};
-    tasks.forEach(t => { m[t.id] = t; });
+    tasks.forEach(tk => { m[tk.id] = tk; });
     return m;
   }, [tasks]);
 
@@ -202,7 +251,7 @@ export function SchedulePage() {
 
     const task = taskById[taskId];
     const week = matchingWeeks.find(w => task && w.schedule_type === task.schedule_type) || matchingWeeks[0];
-    if (!week) { showToast('Week not found', true); setPicker(null); return; }
+    if (!week) { showToast(t.weekNotFound, true); setPicker(null); return; }
 
     try {
       const r = await fetch(`${API}/api/v1/allocations`, {
@@ -213,8 +262,8 @@ export function SchedulePage() {
         const empName = users.find(u => u.id === userId)?.first_name || '';
         showToast(`${task?.name || ''} → ${empName}`);
         await fetchAllocations();
-      } else { showToast('Fehler', true); }
-    } catch { showToast('Netzwerkfehler', true); }
+      } else { showToast(t.error, true); }
+    } catch { showToast(t.networkError, true); }
     setPicker(null);
   };
 
@@ -222,7 +271,7 @@ export function SchedulePage() {
     try {
       const r = await fetch(`${API}/api/v1/allocations/${allocId}`, { method: 'DELETE', headers });
       if (r.ok) { showToast(t.removed); await fetchAllocations(); }
-    } catch { showToast('Fehler', true); }
+    } catch { showToast(t.networkError, true); }
   };
 
   const assignAbsence = async (userId: string, day: number, code: string) => {
@@ -234,7 +283,7 @@ export function SchedulePage() {
       if (r.ok) {
         showToast(`${t.abs[code]} → ${users.find(u => u.id === userId)?.first_name || ''}`);
       }
-    } catch { showToast('Fehler', true); }
+    } catch { showToast(t.networkError, true); }
     setAbsModal(null);
     setPicker(null);
   };
@@ -245,7 +294,7 @@ export function SchedulePage() {
     setBulkLoading(true);
     const task = taskById[taskId];
     const week = matchingWeeks.find(w => task && w.schedule_type === task.schedule_type) || matchingWeeks[0];
-    if (!week) { showToast('Week not found', true); setBulkPicker(null); setBulkLoading(false); return; }
+    if (!week) { showToast(t.weekNotFound, true); setBulkPicker(null); setBulkLoading(false); return; }
 
     let success = 0, skip = 0;
 
@@ -388,7 +437,7 @@ export function SchedulePage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => setWeekOff(w => w - 1)} style={navBtn(th)}>‹</button>
             <div style={{ textAlign: 'center', minWidth: 130 }}>
-              <div style={{ fontSize: 32, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>KW {kw}</div>
+              <div style={{ fontSize: 32, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>{t.kw} {kw}</div>
               <div style={{ fontSize: 10, color: th.textDim, marginTop: 4, fontWeight: 400, letterSpacing: .5 }}>
                 {fmtDate(dates[0])} — {fmtDate(dates[5])} {year}
               </div>
@@ -404,7 +453,7 @@ export function SchedulePage() {
                   padding: '5px 10px', borderRadius: 4, border: `1px solid ${dept === d ? th.gold : th.border}`,
                   background: dept === d ? (isDark ? 'rgba(200,169,110,.1)' : 'rgba(200,169,110,.08)') : 'transparent',
                   color: dept === d ? th.gold : th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600,
-                }}>{d === 'all' ? 'Alle' : d === 'garten' ? 'GT' : 'UH'}</button>
+                }}>{d === 'all' ? t.bothDept : d === 'garten' ? 'GT' : 'UH'}</button>
               ))}
             </div>
           </div>
@@ -428,7 +477,7 @@ export function SchedulePage() {
             <colgroup>
               <col style={{ width: 32 }} />
               <col style={{ width: 150 }} />
-              {t.days.map((_, i) => <col key={i} />)}
+              {t.days.map((_: string, i: number) => <col key={i} />)}
             </colgroup>
             <thead>
               <tr style={{ height: 36 }}>
@@ -440,7 +489,7 @@ export function SchedulePage() {
                 }}>
                   {t.employees}
                 </th>
-                {t.days.map((d, i) => (
+                {t.days.map((d: string, i: number) => (
                   <th key={d}
                     style={{ ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '4px', cursor: 'pointer' }}
                     onClick={e => {
@@ -449,11 +498,11 @@ export function SchedulePage() {
                       setBulkPicker({ type: 'day', day: i, rect });
                       setBulkSearch('');
                     }}
-                    title={`Klick: Auftrag für alle ${t.days[i]}`}
+                    title={`${t.bulkDay}: ${t.days[i]}`}
                   >
                     <div style={{ fontSize: 11, fontWeight: 500, color: th.gold }}>{d}</div>
                     <div style={{ fontSize: 8, color: th.textGhost, fontWeight: 500 }}>{fmtDate(dates[i])}</div>
-                    <div style={{ fontSize: 7, color: th.goldDim, marginTop: 1 }}>▼ Spalte</div>
+                    <div style={{ fontSize: 7, color: th.goldDim, marginTop: 1 }}>▼</div>
                   </th>
                 ))}
               </tr>
@@ -479,7 +528,7 @@ export function SchedulePage() {
                       setBulkPicker({ type: 'employee', userId: emp.id, rect });
                       setBulkSearch('');
                     }}
-                    title={`Klick: Auftrag für ganze Woche ${emp.first_name}`}
+                    title={`${t.bulkEmployee}: ${emp.first_name}`}
                   >
                     <div style={{ fontSize: 12, fontWeight: 600, color: th.empName }}>
                       {emp.first_name} {emp.last_name}
@@ -488,11 +537,11 @@ export function SchedulePage() {
                       fontSize: 8, color: th.textGhost, fontWeight: 500,
                       letterSpacing: 1, textTransform: 'uppercase' as const,
                     }}>
-                      {deptLabel(emp.department)} · ▶ Zeile
+                      {deptLabel(emp.department)} · ▶
                     </div>
                   </td>
                   {/* Day cells */}
-                  {t.days.map((_, di) => {
+                  {t.days.map((_: string, di: number) => {
                     const cell = getCell(emp.id, di);
                     const hasTasks = cell.taskIds.length > 0;
                     return (
@@ -528,7 +577,7 @@ export function SchedulePage() {
                                     marginLeft: 4, lineHeight: 1, flexShrink: 0,
                                   }}
                                     onClick={e => { e.stopPropagation(); removeAlloc(cell.allocIds[tidx]); }}
-                                    title="Entfernen"
+                                    title={t.remove}
                                   >×</span>
                                 </div>
                               );
@@ -555,7 +604,7 @@ export function SchedulePage() {
             fontSize: 9, color: th.goldDim, marginBottom: 12, fontWeight: 700,
             letterSpacing: 2, textTransform: 'uppercase' as const,
           }}>
-            {t.objectDir} · KW {kw} · {activeTaskIds.size} aktiv
+            {t.activeTasks} · {t.kw} {kw} · {activeTaskIds.size}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 4 }}>
             {Array.from(activeTaskIds).map(tid => {
@@ -592,7 +641,7 @@ export function SchedulePage() {
             fontSize: 9, color: th.goldDim, marginBottom: 12, fontWeight: 700,
             letterSpacing: 2, textTransform: 'uppercase' as const,
           }}>
-            {t.absenzen}
+            {t.absenceLegend}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 4 }}>
             {Object.entries(t.abs).map(([code, label]) => {
@@ -604,7 +653,7 @@ export function SchedulePage() {
                   borderLeft: `3px solid ${abs?.bg || '#666'}`,
                 }}>
                   <span style={{ fontSize: 14 }}>{abs?.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 500, color: th.textMuted }}>{label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 500, color: th.textMuted }}>{label as string}</span>
                 </div>
               );
             })}
@@ -674,7 +723,7 @@ export function SchedulePage() {
                     <span style={{
                       fontSize: 8, color: th.textDim, flexShrink: 0,
                       background: th.switchActive, padding: '2px 5px', borderRadius: 3,
-                    }}>KW</span>
+                    }}>{t.kw}</span>
                   )}
                 </div>
               );
@@ -691,8 +740,8 @@ export function SchedulePage() {
                     color: isDark ? abs?.textD : abs?.textL, fontSize: 9, fontWeight: 600, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 4,
                   }}
-                  title={label}
-                ><span>{abs?.icon}</span>{label}</button>
+                  title={label as string}
+                ><span>{abs?.icon}</span>{label as string}</button>
               );
             })}
           </div>
@@ -722,8 +771,8 @@ export function SchedulePage() {
               marginBottom: 6, textTransform: 'uppercase' as const,
             }}>
               {bulkPicker.type === 'day'
-                ? `▼ ${t.days[bulkPicker.day!]} — alle Mitarbeiter`
-                : `▶ ${users.find(u => u.id === bulkPicker.userId)?.first_name} ${users.find(u => u.id === bulkPicker.userId)?.last_name} — Mo–Sa`
+                ? `▼ ${t.days[bulkPicker.day!]} — ${t.bulkDay}`
+                : `▶ ${users.find(u => u.id === bulkPicker.userId)?.first_name} ${users.find(u => u.id === bulkPicker.userId)?.last_name} — ${t.bulkEmployee}`
               }
             </div>
             <input ref={bulkSearchRef} placeholder={t.searchTasks} value={bulkSearch}
@@ -765,7 +814,7 @@ export function SchedulePage() {
                     <span style={{
                       fontSize: 8, color: th.textDim, flexShrink: 0,
                       background: th.switchActive, padding: '2px 5px', borderRadius: 3,
-                    }}>KW</span>
+                    }}>{t.kw}</span>
                   )}
                 </div>
               );
@@ -781,8 +830,8 @@ export function SchedulePage() {
                     color: isDark ? abs?.textD : abs?.textL, fontSize: 9, fontWeight: 600, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 4,
                   }}
-                  title={label}
-                ><span>{abs?.icon}</span>{label}</button>
+                  title={label as string}
+                ><span>{abs?.icon}</span>{label as string}</button>
               );
             })}
           </div>
@@ -817,7 +866,7 @@ export function SchedulePage() {
                     color: th.textMuted, fontSize: 11, fontWeight: 500, cursor: 'pointer',
                     textAlign: 'left' as const,
                   }}
-                ><span style={{ fontSize: 14 }}>{abs?.icon}</span>{label}</button>
+                ><span style={{ fontSize: 14 }}>{abs?.icon}</span>{label as string}</button>
               );
             })}
             <button onClick={() => setAbsModal(null)} style={{

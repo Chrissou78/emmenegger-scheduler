@@ -70,6 +70,11 @@ const translations: Record<Lang, Record<string, any>> = {
     save: 'Speichern', cancel: 'Abbrechen', delete: 'Löschen', add: 'Hinzufügen',
     search: 'Suchen...', noResults: 'Keine Ergebnisse', loading: 'Laden...',
     darkMode: 'Dunkelmodus', lightMode: 'Hellmodus', language: 'Sprache',
+    // Sidebar nav labels
+    navSchedule: 'Disposition', navMachines: 'Maschinen', navTasks: 'Aufträge',
+    navCustomers: 'Kunden', navQuotations: 'Offerten', navInvoices: 'Rechnungen',
+    navReports: 'Meine Woche', navStats: 'Statistiken', navAdmin: 'Benutzerverwaltung',
+    navProfile: 'Profil',
   },
   en: {
     brand: 'Emmenegger', sub: 'Scheduling & Planning',
@@ -85,6 +90,10 @@ const translations: Record<Lang, Record<string, any>> = {
     save: 'Save', cancel: 'Cancel', delete: 'Delete', add: 'Add',
     search: 'Search...', noResults: 'No results', loading: 'Loading...',
     darkMode: 'Dark mode', lightMode: 'Light mode', language: 'Language',
+    navSchedule: 'Schedule', navMachines: 'Machines', navTasks: 'Tasks',
+    navCustomers: 'Customers', navQuotations: 'Quotations', navInvoices: 'Invoices',
+    navReports: 'My Week', navStats: 'Statistics', navAdmin: 'User Management',
+    navProfile: 'Profile',
   },
   fr: {
     brand: 'Emmenegger', sub: 'Disposition & Planification',
@@ -100,6 +109,10 @@ const translations: Record<Lang, Record<string, any>> = {
     save: 'Enregistrer', cancel: 'Annuler', delete: 'Supprimer', add: 'Ajouter',
     search: 'Rechercher...', noResults: 'Aucun résultat', loading: 'Chargement...',
     darkMode: 'Mode sombre', lightMode: 'Mode clair', language: 'Langue',
+    navSchedule: 'Disposition', navMachines: 'Machines', navTasks: 'Tâches',
+    navCustomers: 'Clients', navQuotations: 'Devis', navInvoices: 'Factures',
+    navReports: 'Ma Semaine', navStats: 'Statistiques', navAdmin: 'Gestion des utilisateurs',
+    navProfile: 'Profil',
   },
   pt: {
     brand: 'Emmenegger', sub: 'Disposição & Planejamento',
@@ -115,6 +128,10 @@ const translations: Record<Lang, Record<string, any>> = {
     save: 'Salvar', cancel: 'Cancelar', delete: 'Excluir', add: 'Adicionar',
     search: 'Pesquisar...', noResults: 'Sem resultados', loading: 'Carregando...',
     darkMode: 'Modo escuro', lightMode: 'Modo claro', language: 'Idioma',
+    navSchedule: 'Disposição', navMachines: 'Máquinas', navTasks: 'Tarefas',
+    navCustomers: 'Clientes', navQuotations: 'Orçamentos', navInvoices: 'Faturas',
+    navReports: 'Minha Semana', navStats: 'Estatísticas', navAdmin: 'Gestão de utilizadores',
+    navProfile: 'Perfil',
   },
 };
 

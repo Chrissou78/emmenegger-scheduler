@@ -2,40 +2,77 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 
-const roleLabel = (r: string) =>
-  r === 'GLOBAL_MANAGER' ? 'Global Manager' : r === 'LOCAL_MANAGER' ? 'Lokal Manager' : 'Arbeiter';
+// ─── TRANSLATIONS (defined before the component so they're available) ───
+
+const L_ALL: Record<string, Record<string, string>> = {
+  de: {
+    title: 'Mein Profil', personal: 'Persönliche Daten', security: 'Sicherheit',
+    stats: 'Meine Statistiken', firstName: 'Vorname', lastName: 'Nachname',
+    email: 'E-Mail', phone: 'Telefon', memberSince: 'Mitglied seit',
+    currentPassword: 'Aktuelles Passwort', newPassword: 'Neues Passwort',
+    confirmPassword: 'Passwort bestätigen', changePassword: 'Passwort ändern',
+    save: 'Speichern', saved: 'Gespeichert', error: 'Fehler',
+    passwordMismatch: 'Passwörter stimmen nicht überein', passwordChanged: 'Passwort geändert',
+    passwordTooShort: 'Mindestens 6 Zeichen', thisWeek: 'Diese Woche',
+    tasks: 'Aufgaben', absences: 'Abwesenheiten', reports: 'Berichte', hoursLogged: 'Erfasste Stunden',
+  },
+  en: {
+    title: 'My Profile', personal: 'Personal Data', security: 'Security',
+    stats: 'My Statistics', firstName: 'First Name', lastName: 'Last Name',
+    email: 'Email', phone: 'Phone', memberSince: 'Member since',
+    currentPassword: 'Current Password', newPassword: 'New Password',
+    confirmPassword: 'Confirm Password', changePassword: 'Change Password',
+    save: 'Save', saved: 'Saved', error: 'Error',
+    passwordMismatch: 'Passwords do not match', passwordChanged: 'Password changed',
+    passwordTooShort: 'At least 6 characters', thisWeek: 'This Week',
+    tasks: 'Tasks', absences: 'Absences', reports: 'Reports', hoursLogged: 'Hours Logged',
+  },
+  fr: {
+    title: 'Mon Profil', personal: 'Données personnelles', security: 'Sécurité',
+    stats: 'Mes Statistiques', firstName: 'Prénom', lastName: 'Nom',
+    email: 'E-mail', phone: 'Téléphone', memberSince: 'Membre depuis',
+    currentPassword: 'Mot de passe actuel', newPassword: 'Nouveau mot de passe',
+    confirmPassword: 'Confirmer le mot de passe', changePassword: 'Changer le mot de passe',
+    save: 'Enregistrer', saved: 'Enregistré', error: 'Erreur',
+    passwordMismatch: 'Les mots de passe ne correspondent pas', passwordChanged: 'Mot de passe changé',
+    passwordTooShort: 'Minimum 6 caractères', thisWeek: 'Cette semaine',
+    tasks: 'Tâches', absences: 'Absences', reports: 'Rapports', hoursLogged: 'Heures enregistrées',
+  },
+  pt: {
+    title: 'Meu Perfil', personal: 'Dados Pessoais', security: 'Segurança',
+    stats: 'Minhas Estatísticas', firstName: 'Nome', lastName: 'Apelido',
+    email: 'E-mail', phone: 'Telefone', memberSince: 'Membro desde',
+    currentPassword: 'Senha atual', newPassword: 'Nova senha',
+    confirmPassword: 'Confirmar senha', changePassword: 'Alterar senha',
+    save: 'Salvar', saved: 'Salvo', error: 'Erro',
+    passwordMismatch: 'As senhas não coincidem', passwordChanged: 'Senha alterada',
+    passwordTooShort: 'Mínimo 6 caracteres', thisWeek: 'Esta semana',
+    tasks: 'Tarefas', absences: 'Ausências', reports: 'Relatórios', hoursLogged: 'Horas registadas',
+  },
+};
+
+const ROLE_LABELS: Record<string, Record<string, string>> = {
+  de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter' },
+  en: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Local Manager', ARBEITER: 'Worker' },
+  fr: { GLOBAL_MANAGER: 'Directeur général', LOCAL_MANAGER: 'Chef de chantier', ARBEITER: 'Ouvrier' },
+  pt: { GLOBAL_MANAGER: 'Gerente Global', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabalhador' },
+};
+
+const DATE_LOCALES: Record<string, string> = {
+  de: 'de-CH',
+  en: 'en-GB',
+  fr: 'fr-CH',
+  pt: 'pt-BR',
+};
+
+// ─── COMPONENT ───
 
 export function ProfilePage() {
-  const { isDark, th } = useTheme();
+  const { isDark, th, lang } = useTheme();
+  const L = L_ALL[lang] || L_ALL.de;
+  const roleLabel = (r: string) => (ROLE_LABELS[lang] || ROLE_LABELS.de)[r] || r;
   const { user, token } = useAuthStore();
   const API = import.meta.env.VITE_API_URL || '';
-
-  const L = {
-    title: 'Mein Profil',
-    personal: 'Persönliche Daten',
-    security: 'Sicherheit',
-    stats: 'Meine Statistiken',
-    firstName: 'Vorname',
-    lastName: 'Nachname',
-    email: 'E-Mail',
-    phone: 'Telefon',
-    memberSince: 'Mitglied seit',
-    currentPassword: 'Aktuelles Passwort',
-    newPassword: 'Neues Passwort',
-    confirmPassword: 'Passwort bestätigen',
-    changePassword: 'Passwort ändern',
-    save: 'Speichern',
-    saved: 'Gespeichert',
-    error: 'Fehler',
-    passwordMismatch: 'Passwörter stimmen nicht überein',
-    passwordChanged: 'Passwort geändert',
-    passwordTooShort: 'Mindestens 6 Zeichen',
-    thisWeek: 'Diese Woche',
-    tasks: 'Aufgaben',
-    absences: 'Abwesenheiten',
-    reports: 'Berichte',
-    hoursLogged: 'Erfasste Stunden',
-  };
 
   /* state */
   const [profile, setProfile] = useState<any>(null);
@@ -43,6 +80,7 @@ export function ProfilePage() {
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [toastType, setToastType] = useState<'ok' | 'err'>('ok');
   const [stats, setStats] = useState({ tasks: 0, absences: 0, reports: 0, hours: 0 });
 
   const hdrs = useCallback(() => ({
@@ -50,7 +88,11 @@ export function ProfilePage() {
     Authorization: `Bearer ${token}`,
   }), [token]);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
+    setToast(msg);
+    setToastType(type);
+    setTimeout(() => setToast(''), 3000);
+  };
 
   /* fetch profile */
   useEffect(() => {
@@ -106,15 +148,15 @@ export function ProfilePage() {
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error();
-      showToast(L.saved);
-    } catch { showToast(L.error); }
+      showToast(L.saved, 'ok');
+    } catch { showToast(L.error, 'err'); }
     setSaving(false);
   };
 
   /* change password */
   const changePassword = async () => {
-    if (pwForm.newPw !== pwForm.confirm) { showToast(L.passwordMismatch); return; }
-    if (pwForm.newPw.length < 6) { showToast(L.passwordTooShort); return; }
+    if (pwForm.newPw !== pwForm.confirm) { showToast(L.passwordMismatch, 'err'); return; }
+    if (pwForm.newPw.length < 6) { showToast(L.passwordTooShort, 'err'); return; }
     setSaving(true);
     try {
       const res = await fetch(`${API}/api/v1/users/${user?.id}`, {
@@ -123,8 +165,8 @@ export function ProfilePage() {
       });
       if (!res.ok) throw new Error();
       setPwForm({ current: '', newPw: '', confirm: '' });
-      showToast(L.passwordChanged);
-    } catch { showToast(L.error); }
+      showToast(L.passwordChanged, 'ok');
+    } catch { showToast(L.error, 'err'); }
     setSaving(false);
   };
 
@@ -146,6 +188,7 @@ export function ProfilePage() {
   };
 
   const initials = profile ? `${profile.first_name?.[0] || ''}${profile.last_name?.[0] || ''}` : '?';
+  const dateLocale = DATE_LOCALES[lang] || DATE_LOCALES.de;
 
   return (
     <div style={{ background: th.bg, minHeight: '100vh', padding: '24px 32px', color: th.text, fontFamily: "'Inter','Segoe UI',sans-serif" }}>
@@ -153,8 +196,8 @@ export function ProfilePage() {
       {toast && (
         <div style={{
           position: 'fixed', top: 20, right: 20, zIndex: 2000,
-          background: toast.includes(L.error) || toast.includes('nicht') ? '#6B3A3A' : (isDark ? '#2a4a2a' : '#e8f5e9'),
-          color: toast.includes(L.error) || toast.includes('nicht') ? '#fff' : th.text,
+          background: toastType === 'err' ? '#6B3A3A' : (isDark ? '#2a4a2a' : '#e8f5e9'),
+          color: toastType === 'err' ? '#fff' : th.text,
           padding: '12px 24px', borderRadius: 10, fontWeight: 600,
           boxShadow: '0 4px 20px rgba(0,0,0,.3)',
         }}>{toast}</div>
@@ -194,7 +237,7 @@ export function ProfilePage() {
             )}
             {profile?.created_at && (
               <p style={{ margin: '14px 0 0', fontSize: 12, color: th.textDim }}>
-                {L.memberSince}: {new Date(profile.created_at).toLocaleDateString('de-CH')}
+                {L.memberSince}: {new Date(profile.created_at).toLocaleDateString(dateLocale)}
               </p>
             )}
           </div>

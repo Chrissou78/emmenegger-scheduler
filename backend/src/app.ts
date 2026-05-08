@@ -12,6 +12,9 @@ import { machinesRouter } from './api/machines.routes';
 import { weeksRouter } from './api/weeks.routes';
 import { reportsRouter } from './api/reports.routes';
 import { customersRouter } from './api/customers.routes';
+import { contactsRouter } from './api/contacts.routes';
+import { quotationsRouter } from './api/quotations.routes';
+import { invoicesRouter } from './api/invoices.routes';
 import { statsRouter } from './api/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { authMiddleware } from './middleware/auth';
@@ -63,6 +66,9 @@ app.use('/api/v1/machines', authMiddleware, machinesRouter);
 app.use('/api/v1/weeks', authMiddleware, weeksRouter);
 app.use('/api/v1/reports', authMiddleware, reportsRouter);
 app.use('/api/v1/customers', authMiddleware, customersRouter);
+app.use('/api/v1/contacts', authMiddleware, contactsRouter);
+app.use('/api/v1/quotations', authMiddleware, quotationsRouter);
+app.use('/api/v1/invoices', authMiddleware, invoicesRouter);
 app.use('/api/v1/stats', authMiddleware, statsRouter);
 
 // ─── ERROR HANDLER ───

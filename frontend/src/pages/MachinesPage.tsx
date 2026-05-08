@@ -46,45 +46,57 @@ const emptyAlloc: AllocForm = { machine_id: '', user_id: '', task_id: '', date: 
 
 const STATUS_OPTIONS: Machine['status'][] = ['AVAILABLE', 'IN_USE', 'MAINTENANCE', 'OUT_OF_SERVICE'];
 
-const L = {
-  title: 'Maschinenpark',
-  machines: 'Maschinen',
-  allocations: 'Zuweisungen',
-  addMachine: 'Neue Maschine',
-  editMachine: 'Maschine bearbeiten',
-  addAlloc: 'Neue Zuweisung',
-  name: 'Name',
-  category: 'Kategorie',
-  status: 'Status',
-  notes: 'Notizen',
-  save: 'Speichern',
-  cancel: 'Abbrechen',
-  delete: 'Löschen',
-  search: 'Suchen…',
-  allCategories: 'Alle Kategorien',
-  noMachines: 'Keine Maschinen',
-  noAllocs: 'Keine Zuweisungen',
-  machine: 'Maschine',
-  employee: 'Mitarbeiter',
-  task: 'Auftrag',
-  date: 'Datum',
-  startTime: 'Startzeit',
-  endTime: 'Endzeit',
-  saved: 'Gespeichert',
-  deleted: 'Gelöscht',
-  error: 'Fehler',
-  available: 'Verfügbar',
-  inUse: 'In Gebrauch',
-  maintenance: 'Wartung',
-  outOfService: 'Ausser Betrieb',
-  total: 'Total',
-  today: 'Heute',
+const L_ALL: Record<string, Record<string, string>> = {
+  de: {
+    title: 'Maschinenpark', machines: 'Maschinen', allocations: 'Zuweisungen',
+    addMachine: 'Neue Maschine', editMachine: 'Maschine bearbeiten', addAlloc: 'Neue Zuweisung',
+    name: 'Name', category: 'Kategorie', status: 'Status', notes: 'Notizen',
+    save: 'Speichern', cancel: 'Abbrechen', delete: 'Löschen', search: 'Suchen…',
+    allCategories: 'Alle Kategorien', allStatuses: 'Alle Status',
+    noMachines: 'Keine Maschinen', noAllocs: 'Keine Zuweisungen',
+    machine: 'Maschine', employee: 'Mitarbeiter', task: 'Auftrag', date: 'Datum',
+    startTime: 'Startzeit', endTime: 'Endzeit', saved: 'Gespeichert', deleted: 'Gelöscht',
+    error: 'Fehler', available: 'Verfügbar', inUse: 'In Gebrauch', maintenance: 'Wartung',
+    outOfService: 'Ausser Betrieb', total: 'Total', today: 'Heute',
+  },
+  en: {
+    title: 'Machine Park', machines: 'Machines', allocations: 'Allocations',
+    addMachine: 'New Machine', editMachine: 'Edit Machine', addAlloc: 'New Allocation',
+    name: 'Name', category: 'Category', status: 'Status', notes: 'Notes',
+    save: 'Save', cancel: 'Cancel', delete: 'Delete', search: 'Search…',
+    allCategories: 'All Categories', allStatuses: 'All Statuses',
+    noMachines: 'No machines', noAllocs: 'No allocations',
+    machine: 'Machine', employee: 'Employee', task: 'Task', date: 'Date',
+    startTime: 'Start Time', endTime: 'End Time', saved: 'Saved', deleted: 'Deleted',
+    error: 'Error', available: 'Available', inUse: 'In Use', maintenance: 'Maintenance',
+    outOfService: 'Out of Service', total: 'Total', today: 'Today',
+  },
+  fr: {
+    title: 'Parc machines', machines: 'Machines', allocations: 'Affectations',
+    addMachine: 'Nouvelle machine', editMachine: 'Modifier machine', addAlloc: 'Nouvelle affectation',
+    name: 'Nom', category: 'Catégorie', status: 'Statut', notes: 'Notes',
+    save: 'Enregistrer', cancel: 'Annuler', delete: 'Supprimer', search: 'Rechercher…',
+    allCategories: 'Toutes catégories', allStatuses: 'Tous les statuts',
+    noMachines: 'Aucune machine', noAllocs: 'Aucune affectation',
+    machine: 'Machine', employee: 'Employé', task: 'Tâche', date: 'Date',
+    startTime: 'Heure début', endTime: 'Heure fin', saved: 'Enregistré', deleted: 'Supprimé',
+    error: 'Erreur', available: 'Disponible', inUse: 'En service', maintenance: 'Maintenance',
+    outOfService: 'Hors service', total: 'Total', today: "Aujourd'hui",
+  },
+  pt: {
+    title: 'Parque de Máquinas', machines: 'Máquinas', allocations: 'Alocações',
+    addMachine: 'Nova Máquina', editMachine: 'Editar Máquina', addAlloc: 'Nova Alocação',
+    name: 'Nome', category: 'Categoria', status: 'Estado', notes: 'Notas',
+    save: 'Salvar', cancel: 'Cancelar', delete: 'Excluir', search: 'Pesquisar…',
+    allCategories: 'Todas categorias', allStatuses: 'Todos os estados',
+    noMachines: 'Sem máquinas', noAllocs: 'Sem alocações',
+    machine: 'Máquina', employee: 'Funcionário', task: 'Tarefa', date: 'Data',
+    startTime: 'Hora início', endTime: 'Hora fim', saved: 'Salvo', deleted: 'Excluído',
+    error: 'Erro', available: 'Disponível', inUse: 'Em uso', maintenance: 'Manutenção',
+    outOfService: 'Fora de serviço', total: 'Total', today: 'Hoje',
+  },
 };
 
-const statusLabel = (s: string) => {
-  const map: Record<string, string> = { AVAILABLE: L.available, IN_USE: L.inUse, MAINTENANCE: L.maintenance, OUT_OF_SERVICE: L.outOfService };
-  return map[s] || s;
-};
 const statusColor = (s: string) => {
   const map: Record<string, string> = { AVAILABLE: '#4caf50', IN_USE: '#C8A96E', MAINTENANCE: '#ff9800', OUT_OF_SERVICE: '#f44336' };
   return map[s] || '#888';
@@ -93,10 +105,22 @@ const statusColor = (s: string) => {
 const CATEGORIES = ['Bagger', 'Dumper', 'Rasenmäher', 'Kettensäge', 'Heckenschere', 'Laubbläser', 'Transporter', 'Sonstiges'];
 
 export function MachinesPage() {
-  const { isDark, th } = useTheme();
+  const { isDark, th, lang } = useTheme();
+  const L = L_ALL[lang] || L_ALL.de;
   const { user, token } = useAuthStore();
   const API = import.meta.env.VITE_API_URL || '';
   const isManager = user?.role === 'GLOBAL_MANAGER' || user?.role === 'LOCAL_MANAGER';
+
+  // ← statusLabel moved INSIDE the component so it can read the current L
+  const statusLabel = (s: string) => {
+    const map: Record<string, string> = {
+      AVAILABLE: L.available,
+      IN_USE: L.inUse,
+      MAINTENANCE: L.maintenance,
+      OUT_OF_SERVICE: L.outOfService,
+    };
+    return map[s] || s;
+  };
 
   /* state */
   const [tab, setTab] = useState<'machines' | 'allocations'>('machines');
@@ -327,7 +351,7 @@ export function MachinesPage() {
             </select>
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
               style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">Alle Status</option>
+              <option value="">{L.allStatuses}</option>
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
           </div>

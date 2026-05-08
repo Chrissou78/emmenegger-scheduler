@@ -5,20 +5,32 @@ import { useAuthStore } from '../../contexts/authStore';
 
 interface NavItem {
   path: string;
-  label: string;
+  labelKey: string;
   icon: string;
   roles?: string[];
+  section?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/schedule',  label: 'Disposition',        icon: '📅', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
-  { path: '/machines',  label: 'Maschinen',          icon: '🚜', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
-  { path: '/tasks',     label: 'Aufträge',           icon: '📋', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
-  { path: '/reports',   label: 'Meine Woche',        icon: '📝' },
-  { path: '/stats',     label: 'Statistiken',        icon: '📊', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
-  { path: '/admin',     label: 'Benutzerverwaltung', icon: '👥', roles: ['GLOBAL_MANAGER'] },
-  { path: '/profile',   label: 'Profil',             icon: '👤' },
+  { path: '/schedule',    labelKey: 'navSchedule',    icon: '📅', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'planning' },
+  { path: '/machines',    labelKey: 'navMachines',    icon: '🚜', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'planning' },
+  { path: '/tasks',       labelKey: 'navTasks',       icon: '📋', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'planning' },
+  { path: '/customers',   labelKey: 'navCustomers',   icon: '🏢', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'crm' },
+  { path: '/quotations',  labelKey: 'navQuotations',  icon: '📄', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'crm' },
+  { path: '/invoices',    labelKey: 'navInvoices',    icon: '💰', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'crm' },
+  { path: '/reports',     labelKey: 'navReports',     icon: '📝' },
+  { path: '/stats',       labelKey: 'navStats',       icon: '📊', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
+  { path: '/admin',       labelKey: 'navAdmin',       icon: '👥', roles: ['GLOBAL_MANAGER'] },
+  { path: '/profile',     labelKey: 'navProfile',     icon: '👤' },
 ];
+
+const CRM_LABEL: Record<string, string> = { de: 'CRM', en: 'CRM', fr: 'CRM', pt: 'CRM' };
+const ROLE_LABELS: Record<string, Record<string, string>> = {
+  de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter' },
+  en: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Local Manager', ARBEITER: 'Worker' },
+  fr: { GLOBAL_MANAGER: 'Directeur général', LOCAL_MANAGER: 'Chef de chantier', ARBEITER: 'Ouvrier' },
+  pt: { GLOBAL_MANAGER: 'Gerente Global', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabalhador' },
+};
 
 export function AppShell() {
   const { isDark, th, t, lang, toggleTheme, setLanguage } = useTheme();
@@ -32,9 +44,8 @@ export function AppShell() {
   const userRole = (user?.role || '').toUpperCase();
   const isWorker = userRole === 'ARBEITER';
 
-  /* ─── Redirect workers away from manager-only pages ─── */
   useEffect(() => {
-    const managerOnlyPaths = ['/schedule', '/machines', '/tasks', '/stats', '/admin'];
+    const managerOnlyPaths = ['/schedule', '/machines', '/tasks', '/customers', '/quotations', '/invoices', '/stats', '/admin'];
     if (isWorker && managerOnlyPaths.some(p => location.pathname.startsWith(p))) {
       navigate('/reports', { replace: true });
     }
@@ -50,9 +61,12 @@ export function AppShell() {
     return item.roles.some(r => r.toUpperCase() === userRole);
   });
 
+  const getLabel = (key: string): string => (t as any)[key] || key;
+
+  let lastSection = '';
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: th.bg }}>
-      {/* ─── SIDEBAR ─── */}
       <aside style={{
         width: sideW, minHeight: '100vh', background: th.bgCard,
         borderRight: `1px solid ${th.border}`, display: 'flex', flexDirection: 'column',
@@ -89,38 +103,52 @@ export function AppShell() {
         </div>
 
         {/* nav */}
-        <nav style={{ flex: 1, padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {visibleItems.map(item => {
+        <nav style={{ flex: 1, padding: '12px 0', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+          {visibleItems.map((item, idx) => {
             const active = location.pathname === item.path;
+            const showDivider = item.section && item.section !== lastSection && idx > 0;
+            lastSection = item.section || lastSection;
+            const label = getLabel(item.labelKey);
+
             return (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: collapsed ? '12px 0' : '12px 18px',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  background: active
-                    ? (isDark ? 'rgba(200,169,110,.12)' : 'rgba(200,169,110,.1)')
-                    : 'transparent',
-                  border: 'none', cursor: 'pointer', width: '100%',
-                  borderLeft: active ? `3px solid ${gold}` : '3px solid transparent',
-                  color: active ? gold : th.text,
-                  fontSize: 13, fontWeight: active ? 700 : 500,
-                  transition: 'all .15s', textAlign: 'left',
-                  fontFamily: "'Inter','Segoe UI',sans-serif",
-                }}
-                onMouseEnter={e => {
-                  if (!active) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)';
-                }}
-                onMouseLeave={e => {
-                  if (!active) e.currentTarget.style.background = 'transparent';
-                }}
-                title={collapsed ? item.label : undefined}
-              >
-                <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
-                {!collapsed && <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{item.label}</span>}
-              </button>
+              <div key={item.path}>
+                {showDivider && !collapsed && (
+                  <div style={{ height: 1, background: th.borderFaint, margin: '8px 18px' }} />
+                )}
+                {showDivider && !collapsed && item.section === 'crm' && (
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase',
+                    color: th.textGhost, padding: '4px 18px 4px', marginTop: 2,
+                  }}>{CRM_LABEL[lang] || 'CRM'}</div>
+                )}
+                <button
+                  onClick={() => navigate(item.path)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: collapsed ? '12px 0' : '12px 18px',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    background: active
+                      ? (isDark ? 'rgba(200,169,110,.12)' : 'rgba(200,169,110,.1)')
+                      : 'transparent',
+                    border: 'none', cursor: 'pointer', width: '100%',
+                    borderLeft: active ? `3px solid ${gold}` : '3px solid transparent',
+                    color: active ? gold : th.text,
+                    fontSize: 13, fontWeight: active ? 700 : 500,
+                    transition: 'all .15s', textAlign: 'left',
+                    fontFamily: "'Inter','Segoe UI',sans-serif",
+                  }}
+                  onMouseEnter={e => {
+                    if (!active) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)';
+                  }}
+                  onMouseLeave={e => {
+                    if (!active) e.currentTarget.style.background = 'transparent';
+                  }}
+                  title={collapsed ? label : undefined}
+                >
+                  <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+                  {!collapsed && <span style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{label}</span>}
+                </button>
+              </div>
             );
           })}
         </nav>
@@ -133,10 +161,9 @@ export function AppShell() {
           {!collapsed && user && (
             <div style={{ padding: '8px 0', marginBottom: 4 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{user.email}</div>
-              <div style={{ fontSize: 11, color: th.textDim }}>{
-                userRole === 'GLOBAL_MANAGER' ? 'Global Manager' :
-                userRole === 'LOCAL_MANAGER' ? 'Lokal Manager' : 'Arbeiter'
-              }</div>
+              <div style={{ fontSize: 11, color: th.textDim }}>
+                {(ROLE_LABELS[lang] || ROLE_LABELS.de)[userRole] || userRole}
+              </div>
             </div>
           )}
 
@@ -147,8 +174,8 @@ export function AppShell() {
             padding: collapsed ? '0 4px' : '0',
           }}>
             {(['de', 'en', 'fr', 'pt'] as const).map(l => (
-              <button key={l} 
-                onClick={() => { if (setLanguage) setLanguage(l); }}
+              <button key={l}
+                onClick={() => setLanguage(l)}
                 style={{
                   padding: collapsed ? '4px 6px' : '4px 8px',
                   borderRadius: 4, border: 'none', cursor: 'pointer',
@@ -193,7 +220,6 @@ export function AppShell() {
         </div>
       </aside>
 
-      {/* ─── MAIN ─── */}
       <main style={{ flex: 1, minHeight: '100vh', overflow: 'auto' }}>
         <Outlet />
       </main>
