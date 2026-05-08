@@ -1,484 +1,1072 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-interface QuoteItem {
-  id?: string;
-  sort_order: number;
+/* ────────────────── interfaces ────────────────── */
+interface Customer {
+  id: string;
+  name: string;
+  street?: string;
+  postal_code?: string;
+  city?: string;
+  email?: string;
+  phone?: string;
+}
+
+interface Task {
+  id: string;
+  name: string;
+  short_code: string;
+  description?: string;
+  estimated_hours?: number;
+  color_bg?: string;
+  schedule_type?: string;
+}
+
+interface QuotationLine {
+  id: string;
+  position: number;
   description: string;
-  detail?: string;
+  task_id?: string;
+  task_name?: string;
   quantity: number;
   unit: string;
   unit_price: number;
-  discount_percent: number;
-  vat_rate: number;
+  discount: number;
   total: number;
-  task_id?: string;
 }
 
 interface Quotation {
   id: string;
-  quote_number: string;
+  number: string;
   customer_id: string;
-  contact_id?: string;
+  customer?: Customer;
   title: string;
-  description?: string;
-  status: string;
-  quote_date: string;
-  valid_until?: string;
-  sent_date?: string;
-  accepted_date?: string;
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED';
+  date: string;
+  valid_until: string;
+  lines: QuotationLine[];
   subtotal: number;
+  vat_rate: number;
   vat_amount: number;
-  discount_amount: number;
-  total_gross: number;
-  currency: string;
-  payment_terms: number;
+  total: number;
   notes?: string;
-  customer?: { id: string; name: string; city?: string };
-  contact?: { id: string; first_name: string; last_name: string };
-  items?: QuoteItem[];
   created_at: string;
 }
 
-interface Customer { id: string; name: string; city?: string; }
-interface Contact { id: string; first_name: string; last_name: string; }
-
+/* ────────────────── translations ────────────────── */
 const T: Record<string, Record<string, string>> = {
   de: {
-    title: 'Offerten', search: 'Suchen...', newQuote: 'Neue Offerte',
-    number: 'Nr.', customer: 'Kunde', quoteTitle: 'Titel', date: 'Datum',
-    status: 'Status', total: 'Total', all: 'Alle',
-    draft: 'Entwurf', sent: 'Gesendet', accepted: 'Angenommen',
-    rejected: 'Abgelehnt', expired: 'Abgelaufen', invoiced: 'Verrechnet',
-    save: 'Speichern', cancel: 'Abbrechen', delete: 'Löschen',
-    addItem: 'Position hinzufügen', description: 'Beschreibung',
-    quantity: 'Menge', unit: 'Einheit', price: 'Preis', discount: 'Rabatt',
-    vat: 'MwSt', lineTotal: 'Total', subtotal: 'Zwischensumme',
-    vatTotal: 'MwSt', grandTotal: 'Gesamttotal', validUntil: 'Gültig bis',
-    notes: 'Notizen', convertToInvoice: 'In Rechnung umwandeln',
+    title: 'Offerten', add: '+ Neue Offerte', search: 'Suchen…',
+    allStatuses: 'Alle Status', number: 'Nr.', customer: 'Kunde',
+    offerTitle: 'Titel', date: 'Datum', validUntil: 'Gültig bis',
+    status: 'Status', total: 'Total', lines: 'Positionen',
+    description: 'Beschreibung', quantity: 'Menge', unit: 'Einheit',
+    unitPrice: 'Einheitspreis', discount: 'Rabatt %', lineTotal: 'Total',
+    addLine: '+ Position', removeLine: 'Entfernen',
+    subtotal: 'Zwischensumme', vat: 'MwSt', vatRate: 'MwSt-Satz %',
+    grandTotal: 'Gesamttotal', notes: 'Bemerkungen',
+    save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten',
+    delete: 'Löschen', confirmDelete: 'Wirklich löschen?',
+    yes: 'Ja', no: 'Nein', back: '← Zurück zur Liste',
     saved: 'Gespeichert', deleted: 'Gelöscht', error: 'Fehler',
-    converted: 'In Rechnung umgewandelt', detail: 'Detail',
-    selectCustomer: 'Kunde wählen', paymentTerms: 'Zahlungsfrist',
+    noQuotations: 'Keine Offerten gefunden.',
+    searchTask: 'Auftrag suchen…', orTypeManually: 'oder manuell eingeben',
+    selectTask: 'Auftrag auswählen', clearTask: '✕ Verknüpfung lösen',
+    fromTask: 'Aus Auftrag', freeText: 'Freitext',
+    DRAFT: 'Entwurf', SENT: 'Gesendet', ACCEPTED: 'Angenommen',
+    REJECTED: 'Abgelehnt', EXPIRED: 'Abgelaufen',
+    loading: 'Laden…', duplicate: 'Duplizieren',
+    hours: 'Stunden', pieces: 'Stück', m2: 'm²', m3: 'm³',
+    flatRate: 'Pauschale', days: 'Tage',
+    chf: 'CHF',
   },
   en: {
-    title: 'Quotations', search: 'Search...', newQuote: 'New Quote',
-    number: 'No.', customer: 'Customer', quoteTitle: 'Title', date: 'Date',
-    status: 'Status', total: 'Total', all: 'All',
-    draft: 'Draft', sent: 'Sent', accepted: 'Accepted',
-    rejected: 'Rejected', expired: 'Expired', invoiced: 'Invoiced',
-    save: 'Save', cancel: 'Cancel', delete: 'Delete',
-    addItem: 'Add Item', description: 'Description',
-    quantity: 'Qty', unit: 'Unit', price: 'Price', discount: 'Discount',
-    vat: 'VAT', lineTotal: 'Total', subtotal: 'Subtotal',
-    vatTotal: 'VAT', grandTotal: 'Grand Total', validUntil: 'Valid Until',
-    notes: 'Notes', convertToInvoice: 'Convert to Invoice',
+    title: 'Quotations', add: '+ New Quotation', search: 'Search…',
+    allStatuses: 'All Statuses', number: 'No.', customer: 'Customer',
+    offerTitle: 'Title', date: 'Date', validUntil: 'Valid Until',
+    status: 'Status', total: 'Total', lines: 'Line Items',
+    description: 'Description', quantity: 'Quantity', unit: 'Unit',
+    unitPrice: 'Unit Price', discount: 'Discount %', lineTotal: 'Total',
+    addLine: '+ Line Item', removeLine: 'Remove',
+    subtotal: 'Subtotal', vat: 'VAT', vatRate: 'VAT Rate %',
+    grandTotal: 'Grand Total', notes: 'Notes',
+    save: 'Save', cancel: 'Cancel', edit: 'Edit',
+    delete: 'Delete', confirmDelete: 'Really delete?',
+    yes: 'Yes', no: 'No', back: '← Back to list',
     saved: 'Saved', deleted: 'Deleted', error: 'Error',
-    converted: 'Converted to Invoice', detail: 'Detail',
-    selectCustomer: 'Select Customer', paymentTerms: 'Payment Terms',
+    noQuotations: 'No quotations found.',
+    searchTask: 'Search task…', orTypeManually: 'or type manually',
+    selectTask: 'Select task', clearTask: '✕ Clear link',
+    fromTask: 'From Task', freeText: 'Free Text',
+    DRAFT: 'Draft', SENT: 'Sent', ACCEPTED: 'Accepted',
+    REJECTED: 'Rejected', EXPIRED: 'Expired',
+    loading: 'Loading…', duplicate: 'Duplicate',
+    hours: 'Hours', pieces: 'Pieces', m2: 'm²', m3: 'm³',
+    flatRate: 'Flat Rate', days: 'Days',
+    chf: 'CHF',
   },
   fr: {
-    title: 'Devis', search: 'Rechercher...', newQuote: 'Nouveau devis',
-    number: 'N°', customer: 'Client', quoteTitle: 'Titre', date: 'Date',
-    status: 'Statut', total: 'Total', all: 'Tous',
-    draft: 'Brouillon', sent: 'Envoyé', accepted: 'Accepté',
-    rejected: 'Refusé', expired: 'Expiré', invoiced: 'Facturé',
-    save: 'Enregistrer', cancel: 'Annuler', delete: 'Supprimer',
-    addItem: 'Ajouter une ligne', description: 'Description',
-    quantity: 'Qté', unit: 'Unité', price: 'Prix', discount: 'Remise',
-    vat: 'TVA', lineTotal: 'Total', subtotal: 'Sous-total',
-    vatTotal: 'TVA', grandTotal: 'Total TTC', validUntil: 'Valide jusqu\'au',
-    notes: 'Notes', convertToInvoice: 'Convertir en facture',
+    title: 'Devis', add: '+ Nouveau devis', search: 'Rechercher…',
+    allStatuses: 'Tous les statuts', number: 'N°', customer: 'Client',
+    offerTitle: 'Titre', date: 'Date', validUntil: 'Valable jusqu\'au',
+    status: 'Statut', total: 'Total', lines: 'Postes',
+    description: 'Description', quantity: 'Quantité', unit: 'Unité',
+    unitPrice: 'Prix unitaire', discount: 'Remise %', lineTotal: 'Total',
+    addLine: '+ Poste', removeLine: 'Supprimer',
+    subtotal: 'Sous-total', vat: 'TVA', vatRate: 'Taux TVA %',
+    grandTotal: 'Total général', notes: 'Remarques',
+    save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier',
+    delete: 'Supprimer', confirmDelete: 'Vraiment supprimer ?',
+    yes: 'Oui', no: 'Non', back: '← Retour à la liste',
     saved: 'Enregistré', deleted: 'Supprimé', error: 'Erreur',
-    converted: 'Converti en facture', detail: 'Détail',
-    selectCustomer: 'Choisir un client', paymentTerms: 'Délai de paiement',
+    noQuotations: 'Aucun devis trouvé.',
+    searchTask: 'Rechercher tâche…', orTypeManually: 'ou saisir manuellement',
+    selectTask: 'Choisir tâche', clearTask: '✕ Supprimer le lien',
+    fromTask: 'Depuis tâche', freeText: 'Texte libre',
+    DRAFT: 'Brouillon', SENT: 'Envoyé', ACCEPTED: 'Accepté',
+    REJECTED: 'Refusé', EXPIRED: 'Expiré',
+    loading: 'Chargement…', duplicate: 'Dupliquer',
+    hours: 'Heures', pieces: 'Pièces', m2: 'm²', m3: 'm³',
+    flatRate: 'Forfait', days: 'Jours',
+    chf: 'CHF',
   },
   pt: {
-    title: 'Orçamentos', search: 'Pesquisar...', newQuote: 'Novo Orçamento',
-    number: 'Nº', customer: 'Cliente', quoteTitle: 'Título', date: 'Data',
-    status: 'Estado', total: 'Total', all: 'Todos',
-    draft: 'Rascunho', sent: 'Enviado', accepted: 'Aceite',
-    rejected: 'Rejeitado', expired: 'Expirado', invoiced: 'Faturado',
-    save: 'Salvar', cancel: 'Cancelar', delete: 'Excluir',
-    addItem: 'Adicionar item', description: 'Descrição',
-    quantity: 'Qtd', unit: 'Unidade', price: 'Preço', discount: 'Desconto',
-    vat: 'IVA', lineTotal: 'Total', subtotal: 'Subtotal',
-    vatTotal: 'IVA', grandTotal: 'Total Geral', validUntil: 'Válido até',
-    notes: 'Notas', convertToInvoice: 'Converter em fatura',
-    saved: 'Salvo', deleted: 'Excluído', error: 'Erro',
-    converted: 'Convertido em fatura', detail: 'Detalhe',
-    selectCustomer: 'Selecionar cliente', paymentTerms: 'Prazo de pagamento',
+    title: 'Orçamentos', add: '+ Novo orçamento', search: 'Pesquisar…',
+    allStatuses: 'Todos os estados', number: 'N.º', customer: 'Cliente',
+    offerTitle: 'Título', date: 'Data', validUntil: 'Válido até',
+    status: 'Estado', total: 'Total', lines: 'Itens',
+    description: 'Descrição', quantity: 'Quantidade', unit: 'Unidade',
+    unitPrice: 'Preço unitário', discount: 'Desconto %', lineTotal: 'Total',
+    addLine: '+ Item', removeLine: 'Remover',
+    subtotal: 'Subtotal', vat: 'IVA', vatRate: 'Taxa IVA %',
+    grandTotal: 'Total geral', notes: 'Observações',
+    save: 'Guardar', cancel: 'Cancelar', edit: 'Editar',
+    delete: 'Eliminar', confirmDelete: 'Eliminar mesmo?',
+    yes: 'Sim', no: 'Não', back: '← Voltar à lista',
+    saved: 'Guardado', deleted: 'Eliminado', error: 'Erro',
+    noQuotations: 'Nenhum orçamento encontrado.',
+    searchTask: 'Pesquisar tarefa…', orTypeManually: 'ou digitar manualmente',
+    selectTask: 'Selecionar tarefa', clearTask: '✕ Remover ligação',
+    fromTask: 'Da tarefa', freeText: 'Texto livre',
+    DRAFT: 'Rascunho', SENT: 'Enviado', ACCEPTED: 'Aceite',
+    REJECTED: 'Rejeitado', EXPIRED: 'Expirado',
+    loading: 'A carregar…', duplicate: 'Duplicar',
+    hours: 'Horas', pieces: 'Peças', m2: 'm²', m3: 'm³',
+    flatRate: 'Forfait', days: 'Dias',
+    chf: 'CHF',
   },
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: '#6b7280', SENT: '#3b82f6', ACCEPTED: '#22c55e',
-  REJECTED: '#ef4444', EXPIRED: '#f59e0b', INVOICED: '#8b5cf6',
+  DRAFT: '#95a5a6', SENT: '#3498db', ACCEPTED: '#4ecdc4',
+  REJECTED: '#e74c3c', EXPIRED: '#f39c12',
 };
 
+const UNIT_OPTIONS = ['hours', 'pieces', 'm2', 'm3', 'flatRate', 'days'];
+
+/* ────────────────── TaskSearchDropdown component ────────────────── */
+interface TaskSearchProps {
+  tasks: Task[];
+  value: string;
+  taskId?: string;
+  onSelectTask: (task: Task) => void;
+  onClearTask: () => void;
+  onChange: (val: string) => void;
+  t: Record<string, string>;
+  inputStyle: React.CSSProperties;
+  isDark: boolean;
+  th: any;
+}
+
+function TaskSearchDropdown({
+  tasks, value, taskId, onSelectTask, onClearTask, onChange, t, inputStyle, isDark, th,
+}: TaskSearchProps) {
+  const [mode, setMode] = useState<'free' | 'task'>(taskId ? 'task' : 'free');
+  const [taskSearch, setTaskSearch] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filteredTasks = useMemo(() => {
+    if (!taskSearch) return tasks.slice(0, 20);
+    const q = taskSearch.toLowerCase();
+    return tasks.filter(
+      (tk) =>
+        tk.name.toLowerCase().includes(q) ||
+        tk.short_code.toLowerCase().includes(q) ||
+        (tk.description || '').toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [tasks, taskSearch]);
+
+  /* close dropdown on outside click */
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const dimText = isDark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.4)';
+
+  const toggleBtn = (active: boolean): React.CSSProperties => ({
+    padding: '4px 12px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 600,
+    cursor: 'pointer', transition: 'all .15s',
+    background: active ? (th.accent || '#4ecdc4') : (isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)'),
+    color: active ? '#fff' : dimText,
+  });
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        <button
+          type="button"
+          onClick={() => { setMode('free'); setDropdownOpen(false); }}
+          style={toggleBtn(mode === 'free')}
+        >
+          {t.freeText}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setMode('task'); setDropdownOpen(true); }}
+          style={toggleBtn(mode === 'task')}
+        >
+          {t.fromTask}
+        </button>
+      </div>
+
+      {mode === 'free' && (
+        <>
+          {/* If previously linked to a task, show clear button */}
+          {taskId && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+              padding: '4px 10px', borderRadius: 6, fontSize: 12,
+              background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)',
+              color: '#4ecdc4', fontWeight: 600,
+            }}>
+              <span>🔗 {t.fromTask}</span>
+              <button
+                type="button"
+                onClick={onClearTask}
+                style={{
+                  background: 'none', border: 'none', color: '#e74c3c',
+                  cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0,
+                }}
+              >
+                {t.clearTask}
+              </button>
+            </div>
+          )}
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            rows={2}
+            style={{ ...inputStyle, resize: 'vertical' }}
+            placeholder={t.description}
+          />
+        </>
+      )}
+
+      {mode === 'task' && (
+        <>
+          {/* Task search input */}
+          <input
+            value={taskSearch}
+            onChange={(e) => { setTaskSearch(e.target.value); setDropdownOpen(true); }}
+            onFocus={() => setDropdownOpen(true)}
+            placeholder={t.searchTask}
+            style={inputStyle}
+          />
+
+          {/* Dropdown results */}
+          {dropdownOpen && (
+            <div
+              style={{
+                position: 'absolute', top: '100%', left: 0, right: 0,
+                zIndex: 100, maxHeight: 240, overflowY: 'auto',
+                background: isDark ? '#1e1e3a' : '#fff',
+                border: `1px solid ${th.border}`,
+                borderRadius: 8, marginTop: 4,
+                boxShadow: '0 8px 30px rgba(0,0,0,.25)',
+              }}
+            >
+              {filteredTasks.length === 0 && (
+                <div style={{ padding: '12px 14px', color: dimText, fontSize: 13 }}>
+                  —
+                </div>
+              )}
+              {filteredTasks.map((tk) => (
+                <div
+                  key={tk.id}
+                  onClick={() => {
+                    onSelectTask(tk);
+                    setTaskSearch('');
+                    setDropdownOpen(false);
+                    setMode('free');
+                  }}
+                  style={{
+                    padding: '10px 14px', cursor: 'pointer',
+                    transition: 'background .1s',
+                    borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.04)'}`,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = isDark
+                      ? 'rgba(255,255,255,.06)'
+                      : 'rgba(0,0,0,.03)')
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = 'transparent')
+                  }
+                >
+                  <div
+                    style={{
+                      width: 32, height: 32, borderRadius: 6,
+                      background: tk.color_bg || '#C8A96E', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 700, fontSize: 11, flexShrink: 0,
+                    }}
+                  >
+                    {tk.short_code}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: th.text }}>
+                      {tk.name}
+                    </div>
+                    {tk.description && (
+                      <div style={{
+                        fontSize: 11, color: dimText, marginTop: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {tk.description}
+                      </div>
+                    )}
+                  </div>
+                  {tk.estimated_hours != null && (
+                    <span style={{ fontSize: 11, color: dimText, flexShrink: 0 }}>
+                      {tk.estimated_hours}h
+                    </span>
+                  )}
+                </div>
+              ))}
+              <div
+                style={{
+                  padding: '8px 14px', fontSize: 11, color: dimText,
+                  borderTop: `1px solid ${th.border}`, textAlign: 'center',
+                }}
+              >
+                {t.orTypeManually} →{' '}
+                <button
+                  type="button"
+                  onClick={() => { setMode('free'); setDropdownOpen(false); }}
+                  style={{
+                    background: 'none', border: 'none', color: th.accent || '#4ecdc4',
+                    cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: 0,
+                  }}
+                >
+                  {t.freeText}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ────────────────── helpers ────────────────── */
+function makeLineId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function emptyLine(position: number): QuotationLine {
+  return {
+    id: makeLineId(), position, description: '', task_id: undefined,
+    task_name: undefined, quantity: 1, unit: 'hours', unit_price: 0,
+    discount: 0, total: 0,
+  };
+}
+
+function calcLineTotal(line: QuotationLine): number {
+  const sub = line.quantity * line.unit_price;
+  return Math.round((sub - sub * (line.discount / 100)) * 100) / 100;
+}
+
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function in30Days(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().split('T')[0];
+}
+
+/* ────────────────── component ────────────────── */
 export function QuotationsPage() {
   const { th, isDark, lang } = useTheme();
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const t = T[lang] || T.de;
+  const isManager = ['LOCAL_MANAGER', 'GLOBAL_MANAGER'].includes((user?.role || '').toUpperCase());
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const [quotes, setQuotes] = useState<Quotation[]>([]);
-  const [total, setTotal] = useState(0);
+  /* ── state ── */
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL');
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [filterStatus, setFilterStatus] = useState('');
 
-  // Editor
-  const [editing, setEditing] = useState<Quotation | null>(null);
-  const [form, setForm] = useState<Partial<Quotation>>({});
-  const [items, setItems] = useState<QuoteItem[]>([]);
+  const [selected, setSelected] = useState<Quotation | null>(null);
+  const [editing, setEditing] = useState(false);
 
-  const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
+  /* form state */
+  const [formTitle, setFormTitle] = useState('');
+  const [formCustomerId, setFormCustomerId] = useState('');
+  const [formDate, setFormDate] = useState(todayStr());
+  const [formValidUntil, setFormValidUntil] = useState(in30Days());
+  const [formStatus, setFormStatus] = useState<Quotation['status']>('DRAFT');
+  const [formLines, setFormLines] = useState<QuotationLine[]>([emptyLine(1)]);
+  const [formVatRate, setFormVatRate] = useState(8.1);
+  const [formNotes, setFormNotes] = useState('');
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const showToast = (msg: string, err = false) => {
-    setToast({ msg, err });
+  function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ msg, type });
     toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }
+
+  function closeDetail() {
+    setSelected(null);
+    setEditing(false);
+    setConfirmDelete(false);
+  }
+
+  const panelOpen = selected !== null || editing;
+
+  /* ── derived calculations ── */
+  const formSubtotal = useMemo(
+    () => formLines.reduce((sum, l) => sum + calcLineTotal(l), 0),
+    [formLines],
+  );
+  const formVatAmount = Math.round(formSubtotal * (formVatRate / 100) * 100) / 100;
+  const formTotal = Math.round((formSubtotal + formVatAmount) * 100) / 100;
+
+  /* ── style helpers ── */
+  const dimText = isDark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.4)';
+  const inputBg = isDark ? '#1a1a3e' : '#faf7f2';
+  const panelBg = isDark ? '#1e1e3a' : '#fff';
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', borderRadius: 8,
+    border: `1px solid ${th.border}`, background: inputBg,
+    color: th.text, fontSize: 14, outline: 'none',
+  };
+  const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as const };
+  const btnPrimary: React.CSSProperties = {
+    padding: '8px 18px', borderRadius: 8, border: 'none',
+    background: th.accent || '#4ecdc4', color: '#fff',
+    fontWeight: 600, cursor: 'pointer', fontSize: 14,
+  };
+  const btnDanger: React.CSSProperties = { ...btnPrimary, background: '#e74c3c' };
+  const btnSecondary: React.CSSProperties = {
+    padding: '8px 18px', borderRadius: 8,
+    border: `1px solid ${th.border}`,
+    background: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)',
+    color: th.text, fontWeight: 600, cursor: 'pointer', fontSize: 14,
+  };
+  const btnBack: React.CSSProperties = {
+    padding: '6px 14px', borderRadius: 8, border: 'none',
+    background: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)',
+    color: th.text, fontWeight: 600, cursor: 'pointer', fontSize: 13,
+    marginBottom: 16,
+  };
+  const labelStyle: React.CSSProperties = { fontSize: 12, color: dimText, fontWeight: 600, marginBottom: 4, display: 'block' };
+  const thStyle: React.CSSProperties = {
+    textAlign: 'left' as const, padding: '10px 12px',
+    borderBottom: `2px solid ${th.border}`, color: dimText,
+    fontWeight: 600, fontSize: 12, textTransform: 'uppercase' as const,
+  };
+  const tdStyleBase: React.CSSProperties = {
+    padding: '10px 12px', borderBottom: `1px solid ${th.border}`,
   };
 
-  const headers = useCallback(() => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  }), [token]);
-
-  const fetchQuotes = useCallback(async () => {
+  /* ── data fetching ── */
+  const fetchQuotations = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (search) params.set('search', search);
-      if (filterStatus !== 'ALL') params.set('status', filterStatus);
-      params.set('limit', '100');
-
-      const res = await fetch(`${API}/api/v1/quotations?${params}`, { headers: headers() });
+      const res = await fetch(`${API}/api/v1/quotations`, { headers });
+      if (!res.ok) throw new Error();
       const json = await res.json();
-      setQuotes(json.data || []);
-      setTotal(json.meta?.total || 0);
-    } catch { showToast(t.error, true); }
-    setLoading(false);
-  }, [search, filterStatus, headers, t.error]);
+      setQuotations(json.data ?? json ?? []);
+    } catch {
+      showToast(t.error, 'err');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   const fetchCustomers = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/v1/customers?limit=200`, { headers: headers() });
+      const res = await fetch(`${API}/api/v1/customers?pageSize=9999`, { headers });
+      if (!res.ok) throw new Error();
       const json = await res.json();
-      setCustomers(json.data || []);
-    } catch {}
-  }, [headers]);
+      setCustomers(json.data ?? json ?? []);
+    } catch { /* silent */ }
+  }, [token]);
 
-  useEffect(() => { fetchQuotes(); }, [fetchQuotes]);
-  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/tasks`, { headers });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setTasks(json.data ?? json ?? []);
+    } catch { /* silent */ }
+  }, [token]);
 
-  // Fetch contacts when customer changes in form
-  useEffect(() => {
-    if (!form.customer_id) { setContacts([]); return; }
-    fetch(`${API}/api/v1/contacts?customer_id=${form.customer_id}`, { headers: headers() })
-      .then(r => r.json())
-      .then(j => setContacts(j.data || []))
-      .catch(() => {});
-  }, [form.customer_id, headers]);
+  useEffect(() => { fetchQuotations(); fetchCustomers(); fetchTasks(); }, [fetchQuotations, fetchCustomers, fetchTasks]);
 
-  const openNew = () => {
-    setEditing(null);
-    setForm({
-      status: 'DRAFT', currency: 'CHF', payment_terms: 30,
-      quote_date: new Date().toISOString().split('T')[0],
+  /* ── populate form from quotation ── */
+  function populateForm(q: Quotation) {
+    setFormTitle(q.title || '');
+    setFormCustomerId(q.customer_id || '');
+    setFormDate(q.date || todayStr());
+    setFormValidUntil(q.valid_until || in30Days());
+    setFormStatus(q.status || 'DRAFT');
+    setFormLines(
+      q.lines && q.lines.length > 0
+        ? q.lines.map((l, i) => ({ ...l, id: l.id || makeLineId(), position: i + 1, total: calcLineTotal(l) }))
+        : [emptyLine(1)],
+    );
+    setFormVatRate(q.vat_rate ?? 8.1);
+    setFormNotes(q.notes || '');
+  }
+
+  function resetForm() {
+    setFormTitle('');
+    setFormCustomerId('');
+    setFormDate(todayStr());
+    setFormValidUntil(in30Days());
+    setFormStatus('DRAFT');
+    setFormLines([emptyLine(1)]);
+    setFormVatRate(8.1);
+    setFormNotes('');
+  }
+
+  /* ── line item handlers ── */
+  function updateLine(id: string, updates: Partial<QuotationLine>) {
+    setFormLines((prev) =>
+      prev.map((l) => {
+        if (l.id !== id) return l;
+        const updated = { ...l, ...updates };
+        updated.total = calcLineTotal(updated);
+        return updated;
+      }),
+    );
+  }
+
+  function addLine() {
+    setFormLines((prev) => [...prev, emptyLine(prev.length + 1)]);
+  }
+
+  function removeLine(id: string) {
+    setFormLines((prev) => {
+      const filtered = prev.filter((l) => l.id !== id);
+      return filtered.length === 0 ? [emptyLine(1)] : filtered.map((l, i) => ({ ...l, position: i + 1 }));
     });
-    setItems([{ sort_order: 1, description: '', quantity: 1, unit: 'Std', unit_price: 0, discount_percent: 0, vat_rate: 8.1, total: 0 }]);
-  };
+  }
 
-  const openEdit = async (id: string) => {
+  function handleSelectTask(lineId: string, task: Task) {
+    updateLine(lineId, {
+      task_id: task.id,
+      task_name: task.name,
+      description: task.description || task.name,
+    });
+  }
+
+  function handleClearTask(lineId: string) {
+    updateLine(lineId, { task_id: undefined, task_name: undefined });
+  }
+
+  /* ── CRUD ── */
+  async function saveQuotation() {
     try {
-      const res = await fetch(`${API}/api/v1/quotations/${id}`, { headers: headers() });
-      const json = await res.json();
-      const q = json.data;
-      setEditing(q);
-      setForm(q);
-      setItems(q.items || []);
-    } catch { showToast(t.error, true); }
-  };
-
-  const calcItemTotal = (it: QuoteItem) => {
-    return Math.round((it.quantity || 0) * (it.unit_price || 0) * (1 - (it.discount_percent || 0) / 100) * 100) / 100;
-  };
-
-  const updateItem = (idx: number, field: string, value: any) => {
-    const updated = [...items];
-    (updated[idx] as any)[field] = value;
-    updated[idx].total = calcItemTotal(updated[idx]);
-    setItems(updated);
-  };
-
-  const addItem = () => {
-    setItems([...items, {
-      sort_order: items.length + 1, description: '', quantity: 1,
-      unit: 'Std', unit_price: 0, discount_percent: 0, vat_rate: 8.1, total: 0,
-    }]);
-  };
-
-  const removeItem = (idx: number) => {
-    setItems(items.filter((_, i) => i !== idx).map((it, i) => ({ ...it, sort_order: i + 1 })));
-  };
-
-  const subtotal = items.reduce((s, it) => s + calcItemTotal(it), 0);
-  const vatTotal = items.reduce((s, it) => s + calcItemTotal(it) * (it.vat_rate || 0) / 100, 0);
-  const grandTotal = subtotal + vatTotal;
-
-  const saveQuote = async () => {
-    try {
-      const body = { ...form, items };
-      const isNew = !editing;
-      const url = isNew ? `${API}/api/v1/quotations` : `${API}/api/v1/quotations/${editing!.id}`;
-      const res = await fetch(url, { method: isNew ? 'POST' : 'PUT', headers: headers(), body: JSON.stringify(body) });
+      const body = {
+        title: formTitle,
+        customer_id: formCustomerId || undefined,
+        date: formDate,
+        valid_until: formValidUntil,
+        status: formStatus,
+        lines: formLines.map((l) => ({
+          description: l.description,
+          task_id: l.task_id || undefined,
+          quantity: l.quantity,
+          unit: l.unit,
+          unit_price: l.unit_price,
+          discount: l.discount,
+        })),
+        vat_rate: formVatRate,
+        notes: formNotes || undefined,
+      };
+      const method = selected ? 'PUT' : 'POST';
+      const url = selected
+        ? `${API}/api/v1/quotations/${selected.id}`
+        : `${API}/api/v1/quotations`;
+      const res = await fetch(url, { method, headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error();
       showToast(t.saved);
-      setEditing(null);
-      setForm({});
-      setItems([]);
-      fetchQuotes();
-    } catch { showToast(t.error, true); }
-  };
+      closeDetail();
+      fetchQuotations();
+    } catch {
+      showToast(t.error, 'err');
+    }
+  }
 
-  const deleteQuote = async (id: string) => {
-    if (!confirm('Delete?')) return;
+  async function deleteQuotation() {
+    if (!selected) return;
     try {
-      await fetch(`${API}/api/v1/quotations/${id}`, { method: 'DELETE', headers: headers() });
-      showToast(t.deleted);
-      setEditing(null);
-      setForm({});
-      fetchQuotes();
-    } catch { showToast(t.error, true); }
-  };
-
-  const convertToInvoice = async (id: string) => {
-    try {
-      const res = await fetch(`${API}/api/v1/quotations/${id}/convert-to-invoice`, { method: 'POST', headers: headers() });
+      const res = await fetch(`${API}/api/v1/quotations/${selected.id}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error();
-      showToast(t.converted);
-      fetchQuotes();
-    } catch { showToast(t.error, true); }
-  };
+      showToast(t.deleted);
+      closeDetail();
+      fetchQuotations();
+    } catch {
+      showToast(t.error, 'err');
+    }
+  }
 
-  const chf = (n?: number) => n != null ? `CHF ${n.toLocaleString('de-CH', { minimumFractionDigits: 2 })}` : '–';
-  const statusLabel = (s: string) => t[s.toLowerCase()] || s;
+  /* ── filtered list ── */
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return quotations.filter((qt) => {
+      const ms = !q || (qt.title || '').toLowerCase().includes(q) || (qt.number || '').toLowerCase().includes(q) || (qt.customer?.name || '').toLowerCase().includes(q);
+      const mst = !filterStatus || qt.status === filterStatus;
+      return ms && mst;
+    });
+  }, [quotations, search, filterStatus]);
 
-  const inp = (ov?: React.CSSProperties): React.CSSProperties => ({
-    width: '100%', padding: '8px 12px', borderRadius: 6, fontSize: 13,
-    border: `1px solid ${th.border}`, background: th.bg, color: th.text,
-    outline: 'none', fontFamily: "'Inter',sans-serif", ...ov,
-  });
+  const customerName = (id: string) => customers.find((c) => c.id === id)?.name || '–';
 
-  const btn = (primary = false): React.CSSProperties => ({
-    padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-    border: primary ? 'none' : `1px solid ${th.border}`,
-    background: primary ? th.gold : 'transparent',
-    color: primary ? '#fff' : th.text, cursor: 'pointer',
-    fontFamily: "'Inter',sans-serif",
-  });
+  function formatChf(val: number): string {
+    return val.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
-  const isEditorOpen = editing !== null || (form.status !== undefined);
-
+  /* ────────────────── render ────────────────── */
   return (
-    <div style={{ padding: 24, fontFamily: "'Inter','Segoe UI',sans-serif", color: th.text, minHeight: '100vh' }}>
+    <div style={{ padding: '24px 16px', maxWidth: 1400, margin: '0 auto', color: th.text }}>
+
+      {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 24px', borderRadius: 8,
-          background: toast.err ? th.toastErrBg : th.toastBg, color: toast.err ? th.toastErrText : th.toastText,
-          border: `1px solid ${toast.err ? th.toastErrBorder : th.toastBorder}`, fontSize: 13, fontWeight: 600,
-          boxShadow: '0 4px 20px rgba(0,0,0,.3)',
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          padding: '12px 24px', borderRadius: 10,
+          background: toast.type === 'err' ? '#e74c3c' : '#4ecdc4',
+          color: '#fff', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.25)',
         }}>{toast.msg}</div>
       )}
 
-      {!isEditorOpen ? (
-        <>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <div>
-              <h1 style={{ fontSize: 24, fontWeight: 300, letterSpacing: 2, color: th.gold, margin: 0 }}>{t.title}</h1>
-              <div style={{ fontSize: 12, color: th.textDim, marginTop: 4 }}>{total} {t.title}</div>
-            </div>
-            <button style={btn(true)} onClick={openNew}>{t.newQuote}</button>
-          </div>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <h1 style={{ margin: 0, fontSize: 26, color: th.text }}>{t.title}</h1>
+        {!panelOpen && isManager && (
+          <button
+            onClick={() => { resetForm(); setSelected(null); setEditing(true); }}
+            style={btnPrimary}
+          >{t.add}</button>
+        )}
+      </div>
 
+      {/* ═══════════════ LIST VIEW ═══════════════ */}
+      {!panelOpen && (
+        <>
           {/* Filters */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-            <input type="text" placeholder={t.search} value={search} onChange={e => setSearch(e.target.value)} style={inp({ maxWidth: 280 })} />
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={inp({ maxWidth: 160 })}>
-              <option value="ALL">{t.all}</option>
-              {['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED', 'INVOICED'].map(s => (
-                <option key={s} value={s}>{statusLabel(s)}</option>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <input
+              placeholder={t.search} value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 260 }}
+            />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{ ...selectStyle, maxWidth: 180 }}
+            >
+              <option value="">{t.allStatuses}</option>
+              {(['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED'] as const).map((s) => (
+                <option key={s} value={s}>{t[s]}</option>
               ))}
             </select>
           </div>
 
-          {/* Table */}
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: th.textDim }}>⏳</div>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: th.bgHeader, borderBottom: `1px solid ${th.border}` }}>
-                  {[t.number, t.customer, t.quoteTitle, t.date, t.status, t.total].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: th.textMuted, fontSize: 11, letterSpacing: .5, textTransform: 'uppercase' }}>{h}</th>
-                  ))}
-                  <th style={{ width: 100 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {quotes.map(q => (
-                  <tr key={q.id} style={{ borderBottom: `1px solid ${th.borderFaint}`, cursor: 'pointer' }}
-                    onClick={() => openEdit(q.id)}
-                    onMouseEnter={e => e.currentTarget.style.background = th.rowHover}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <td style={{ padding: '10px 12px', fontWeight: 600, color: th.gold }}>{q.quote_number}</td>
-                    <td style={{ padding: '10px 12px' }}>{q.customer?.name || '–'}</td>
-                    <td style={{ padding: '10px 12px' }}>{q.title}</td>
-                    <td style={{ padding: '10px 12px', color: th.textMuted }}>{q.quote_date}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{
-                        padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700,
-                        background: `${STATUS_COLORS[q.status] || '#6b7280'}22`,
-                        color: STATUS_COLORS[q.status] || '#6b7280',
-                      }}>{statusLabel(q.status)}</span>
-                    </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 600 }}>{chf(q.total_gross)}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      {q.status === 'ACCEPTED' && (
-                        <button style={{ ...btn(true), fontSize: 10, padding: '4px 8px' }}
-                          onClick={e => { e.stopPropagation(); convertToInvoice(q.id); }}>
-                          → {t.convertToInvoice}
-                        </button>
-                      )}
-                    </td>
+          {loading && <div style={{ textAlign: 'center', padding: 40, color: dimText }}>⏳ {t.loading}</div>}
+
+          {!loading && filtered.length === 0 && (
+            <p style={{ color: dimText, textAlign: 'center', padding: 40 }}>{t.noQuotations}</p>
+          )}
+
+          {!loading && filtered.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr>
+                    {[t.number, t.offerTitle, t.customer, t.date, t.status, t.total].map((h) => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filtered.map((q) => (
+                    <tr
+                      key={q.id}
+                      onClick={() => { setSelected(q); populateForm(q); setEditing(false); setConfirmDelete(false); setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }}
+                      style={{ cursor: 'pointer', transition: 'background .15s' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.02)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td style={{ ...tdStyleBase, color: th.text, fontWeight: 600 }}>{q.number || '–'}</td>
+                      <td style={{ ...tdStyleBase, color: th.text }}>{q.title || '–'}</td>
+                      <td style={{ ...tdStyleBase, color: dimText }}>{q.customer?.name || customerName(q.customer_id)}</td>
+                      <td style={{ ...tdStyleBase, color: dimText }}>{q.date || '–'}</td>
+                      <td style={tdStyleBase}>
+                        <span style={{
+                          display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+                          fontSize: 12, fontWeight: 600,
+                          background: `${STATUS_COLORS[q.status] || '#95a5a6'}22`,
+                          color: STATUS_COLORS[q.status] || '#95a5a6',
+                        }}>{t[q.status] || q.status}</span>
+                      </td>
+                      <td style={{ ...tdStyleBase, color: th.text, fontWeight: 600, textAlign: 'right' }}>
+                        {t.chf} {formatChf(q.total || 0)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
-      ) : (
-        /* ─── Quote Editor ─── */
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 300, color: th.gold, margin: 0 }}>
-              {editing ? `${editing.quote_number} – ${editing.title}` : t.newQuote}
-            </h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {editing && <button style={{ ...btn(), color: '#ef4444' }} onClick={() => deleteQuote(editing.id)}>{t.delete}</button>}
-              <button style={btn()} onClick={() => { setEditing(null); setForm({}); setItems([]); }}>{t.cancel}</button>
-              <button style={btn(true)} onClick={saveQuote}>{t.save}</button>
-            </div>
-          </div>
+      )}
 
-          {/* Meta fields */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, marginBottom: 24, background: th.bgCard, padding: 20, borderRadius: 12, border: `1px solid ${th.border}` }}>
-            <div>
-              <label style={{ fontSize: 11, color: th.textDim, display: 'block', marginBottom: 4 }}>{t.customer} *</label>
-              <select style={inp()} value={form.customer_id || ''} onChange={e => setForm({ ...form, customer_id: e.target.value })}>
-                <option value="">{t.selectCustomer}</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}{c.city ? ` (${c.city})` : ''}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: th.textDim, display: 'block', marginBottom: 4 }}>{t.quoteTitle}</label>
-              <input style={inp()} value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: th.textDim, display: 'block', marginBottom: 4 }}>{t.status}</label>
-              <select style={inp()} value={form.status || 'DRAFT'} onChange={e => setForm({ ...form, status: e.target.value })}>
-                {['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED'].map(s => (
-                  <option key={s} value={s}>{statusLabel(s)}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: th.textDim, display: 'block', marginBottom: 4 }}>{t.validUntil}</label>
-              <input type="date" style={inp()} value={form.valid_until || ''} onChange={e => setForm({ ...form, valid_until: e.target.value })} />
-            </div>
-          </div>
+      {/* ═══════════════ DETAIL / EDIT PANEL ═══════════════ */}
+      {panelOpen && (
+        <div ref={panelRef}>
+          <button onClick={closeDetail} style={btnBack}>{t.back}</button>
 
-          {/* Line Items */}
-          <div style={{ background: th.bgCard, padding: 20, borderRadius: 12, border: `1px solid ${th.border}`, marginBottom: 24 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${th.border}` }}>
-                  <th style={{ textAlign: 'left', padding: 8, color: th.textMuted, fontSize: 10, width: '30%' }}>{t.description}</th>
-                  <th style={{ textAlign: 'right', padding: 8, color: th.textMuted, fontSize: 10, width: 70 }}>{t.quantity}</th>
-                  <th style={{ textAlign: 'center', padding: 8, color: th.textMuted, fontSize: 10, width: 60 }}>{t.unit}</th>
-                  <th style={{ textAlign: 'right', padding: 8, color: th.textMuted, fontSize: 10, width: 90 }}>{t.price}</th>
-                  <th style={{ textAlign: 'right', padding: 8, color: th.textMuted, fontSize: 10, width: 60 }}>{t.discount}</th>
-                  <th style={{ textAlign: 'right', padding: 8, color: th.textMuted, fontSize: 10, width: 60 }}>{t.vat}</th>
-                  <th style={{ textAlign: 'right', padding: 8, color: th.textMuted, fontSize: 10, width: 100 }}>{t.lineTotal}</th>
-                  <th style={{ width: 40 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it, idx) => (
-                  <tr key={idx} style={{ borderBottom: `1px solid ${th.borderFaint}` }}>
-                    <td style={{ padding: 4 }}>
-                      <input style={inp({ fontSize: 12 })} value={it.description} onChange={e => updateItem(idx, 'description', e.target.value)} />
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <input type="number" step="0.5" style={inp({ textAlign: 'right', fontSize: 12 })} value={it.quantity} onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <select style={inp({ fontSize: 12, textAlign: 'center' })} value={it.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}>
-                        {['Std', 'Stk', 'm²', 'm³', 'lfm', 'kg', 'Pauschal'].map(u => <option key={u}>{u}</option>)}
-                      </select>
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <input type="number" step="0.05" style={inp({ textAlign: 'right', fontSize: 12 })} value={it.unit_price} onChange={e => updateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)} />
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <input type="number" step="0.5" style={inp({ textAlign: 'right', fontSize: 12 })} value={it.discount_percent} onChange={e => updateItem(idx, 'discount_percent', parseFloat(e.target.value) || 0)} />
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <input type="number" step="0.1" style={inp({ textAlign: 'right', fontSize: 12 })} value={it.vat_rate} onChange={e => updateItem(idx, 'vat_rate', parseFloat(e.target.value) || 0)} />
-                    </td>
-                    <td style={{ padding: 8, textAlign: 'right', fontWeight: 600 }}>{chf(calcItemTotal(it))}</td>
-                    <td style={{ padding: 4, textAlign: 'center' }}>
-                      <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}
-                        onClick={() => removeItem(idx)}>×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ padding: 24, borderRadius: 14, background: panelBg, border: `1px solid ${th.border}` }}>
 
-            <button style={{ ...btn(), marginTop: 12 }} onClick={addItem}>{t.addItem}</button>
-
-            {/* Totals */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-              <div style={{ width: 260 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13 }}>
-                  <span style={{ color: th.textMuted }}>{t.subtotal}</span>
-                  <span>{chf(Math.round(subtotal * 100) / 100)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13 }}>
-                  <span style={{ color: th.textMuted }}>{t.vatTotal}</span>
-                  <span>{chf(Math.round(vatTotal * 100) / 100)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 16, fontWeight: 700, borderTop: `2px solid ${th.gold}`, marginTop: 4 }}>
-                  <span>{t.grandTotal}</span>
-                  <span style={{ color: th.gold }}>{chf(Math.round(grandTotal * 100) / 100)}</span>
-                </div>
+            {/* Panel header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+              <h2 style={{ margin: 0, color: th.text }}>
+                {editing
+                  ? (formTitle || (selected ? selected.title : t.add))
+                  : (selected?.title || '')}
+                {selected && !editing && selected.number && (
+                  <span style={{ fontSize: 14, color: dimText, fontWeight: 400, marginLeft: 12 }}>
+                    {selected.number}
+                  </span>
+                )}
+              </h2>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {selected && !editing && isManager && (
+                  <>
+                    <button onClick={() => { populateForm(selected); setEditing(true); }} style={btnPrimary}>{t.edit}</button>
+                    {confirmDelete ? (
+                      <>
+                        <span style={{ color: th.text, alignSelf: 'center', fontSize: 13 }}>{t.confirmDelete}</span>
+                        <button onClick={deleteQuotation} style={btnDanger}>{t.yes}</button>
+                        <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>{t.no}</button>
+                      </>
+                    ) : (
+                      <button onClick={() => setConfirmDelete(true)} style={btnDanger}>{t.delete}</button>
+                    )}
+                  </>
+                )}
+                {editing && (
+                  <>
+                    <button onClick={saveQuotation} style={btnPrimary}>{t.save}</button>
+                    <button onClick={() => { if (selected) { populateForm(selected); setEditing(false); } else closeDetail(); }} style={btnSecondary}>{t.cancel}</button>
+                  </>
+                )}
               </div>
             </div>
-          </div>
 
-          {/* Notes */}
-          <div style={{ background: th.bgCard, padding: 20, borderRadius: 12, border: `1px solid ${th.border}` }}>
-            <label style={{ fontSize: 11, color: th.textDim, display: 'block', marginBottom: 4 }}>{t.notes}</label>
-            <textarea style={{ ...inp(), minHeight: 80, resize: 'vertical' }} value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} />
+            {/* ── View mode ── */}
+            {selected && !editing && (
+              <>
+                {/* Meta info */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  <div>
+                    <label style={labelStyle}>{t.customer}</label>
+                    <p style={{ margin: '4px 0 0', color: th.text, fontSize: 14 }}>{selected.customer?.name || customerName(selected.customer_id)}</p>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.date}</label>
+                    <p style={{ margin: '4px 0 0', color: th.text, fontSize: 14 }}>{selected.date}</p>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.validUntil}</label>
+                    <p style={{ margin: '4px 0 0', color: th.text, fontSize: 14 }}>{selected.valid_until}</p>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.status}</label>
+                    <span style={{
+                      display: 'inline-block', padding: '4px 12px', borderRadius: 20,
+                      fontSize: 12, fontWeight: 600, marginTop: 4,
+                      background: `${STATUS_COLORS[selected.status] || '#95a5a6'}22`,
+                      color: STATUS_COLORS[selected.status] || '#95a5a6',
+                    }}>{t[selected.status] || selected.status}</span>
+                  </div>
+                </div>
+
+                {/* Lines table (read-only) */}
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: th.text, marginBottom: 12 }}>{t.lines}</h3>
+                <div style={{ overflowX: 'auto', marginBottom: 20 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        {['#', t.description, t.quantity, t.unit, t.unitPrice, t.discount, t.lineTotal].map((h) => (
+                          <th key={h} style={{ ...thStyle, fontSize: 11 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selected.lines || []).map((l, i) => (
+                        <tr key={l.id || i}>
+                          <td style={{ ...tdStyleBase, color: dimText, width: 40 }}>{i + 1}</td>
+                          <td style={{ ...tdStyleBase, color: th.text }}>
+                            {l.description}
+                            {l.task_id && (
+                              <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)', color: '#4ecdc4', fontWeight: 600 }}>
+                                🔗 {l.task_name || ''}
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyleBase, color: th.text, textAlign: 'right' }}>{l.quantity}</td>
+                          <td style={{ ...tdStyleBase, color: dimText }}>{t[l.unit] || l.unit}</td>
+                          <td style={{ ...tdStyleBase, color: th.text, textAlign: 'right' }}>{formatChf(l.unit_price)}</td>
+                          <td style={{ ...tdStyleBase, color: dimText, textAlign: 'right' }}>{l.discount > 0 ? `${l.discount}%` : '–'}</td>
+                          <td style={{ ...tdStyleBase, color: th.text, fontWeight: 600, textAlign: 'right' }}>{formatChf(calcLineTotal(l))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ minWidth: 240 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 }}>
+                      <span style={{ color: dimText }}>{t.subtotal}</span>
+                      <span style={{ color: th.text }}>{t.chf} {formatChf(selected.subtotal || 0)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 }}>
+                      <span style={{ color: dimText }}>{t.vat} ({selected.vat_rate ?? 8.1}%)</span>
+                      <span style={{ color: th.text }}>{t.chf} {formatChf(selected.vat_amount || 0)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 18, fontWeight: 700, borderTop: `2px solid ${th.border}`, marginTop: 4 }}>
+                      <span style={{ color: th.text }}>{t.grandTotal}</span>
+                      <span style={{ color: th.accent || '#4ecdc4' }}>{t.chf} {formatChf(selected.total || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {selected.notes && (
+                  <div style={{ marginTop: 20 }}>
+                    <label style={labelStyle}>{t.notes}</label>
+                    <p style={{ color: th.text, fontSize: 14, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{selected.notes}</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── Edit / Create mode ── */}
+            {editing && (
+              <>
+                {/* Meta fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>{t.offerTitle}</label>
+                    <input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.customer}</label>
+                    <select value={formCustomerId} onChange={(e) => setFormCustomerId(e.target.value)} style={selectStyle}>
+                      <option value="">–</option>
+                      {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.status}</label>
+                    <select value={formStatus} onChange={(e) => setFormStatus(e.target.value as Quotation['status'])} style={selectStyle}>
+                      {(['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED'] as const).map((s) => (
+                        <option key={s} value={s}>{t[s]}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.date}</label>
+                    <input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{t.validUntil}</label>
+                    <input type="date" value={formValidUntil} onChange={(e) => setFormValidUntil(e.target.value)} style={inputStyle} />
+                  </div>
+                </div>
+
+                {/* Line items */}
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: th.text, marginBottom: 12 }}>{t.lines}</h3>
+
+                {formLines.map((line, idx) => (
+                  <div
+                    key={line.id}
+                    style={{
+                      padding: 16, borderRadius: 10, marginBottom: 12,
+                      background: isDark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.02)',
+                      border: `1px solid ${th.border}`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: th.text }}>
+                        #{idx + 1}
+                        {line.task_name && (
+                          <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)', color: '#4ecdc4', fontWeight: 600 }}>
+                            🔗 {line.task_name}
+                          </span>
+                        )}
+                      </span>
+                      {formLines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLine(line.id)}
+                          style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                        >
+                          {t.removeLine}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Description with task search */}
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>{t.description}</label>
+                      <TaskSearchDropdown
+                        tasks={tasks}
+                        value={line.description}
+                        taskId={line.task_id}
+                        onSelectTask={(task) => handleSelectTask(line.id, task)}
+                        onClearTask={() => handleClearTask(line.id)}
+                        onChange={(val) => updateLine(line.id, { description: val })}
+                        t={t}
+                        inputStyle={inputStyle}
+                        isDark={isDark}
+                        th={th}
+                      />
+                    </div>
+
+                    {/* Quantity, unit, price, discount */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 10, alignItems: 'end' }}>
+                      <div>
+                        <label style={labelStyle}>{t.quantity}</label>
+                        <input
+                          type="number" min="0" step="0.5"
+                          value={line.quantity}
+                          onChange={(e) => updateLine(line.id, { quantity: parseFloat(e.target.value) || 0 })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.unit}</label>
+                        <select
+                          value={line.unit}
+                          onChange={(e) => updateLine(line.id, { unit: e.target.value })}
+                          style={selectStyle}
+                        >
+                          {UNIT_OPTIONS.map((u) => <option key={u} value={u}>{t[u] || u}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.unitPrice}</label>
+                        <input
+                          type="number" min="0" step="0.05"
+                          value={line.unit_price}
+                          onChange={(e) => updateLine(line.id, { unit_price: parseFloat(e.target.value) || 0 })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.discount}</label>
+                        <input
+                          type="number" min="0" max="100" step="0.5"
+                          value={line.discount}
+                          onChange={(e) => updateLine(line.id, { discount: parseFloat(e.target.value) || 0 })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={{ textAlign: 'right', paddingBottom: 2 }}>
+                        <label style={labelStyle}>{t.lineTotal}</label>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: th.text, padding: '10px 0' }}>
+                          {formatChf(calcLineTotal(line))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button type="button" onClick={addLine} style={{ ...btnSecondary, fontSize: 13, padding: '6px 16px', marginBottom: 20 }}>
+                  {t.addLine}
+                </button>
+
+                {/* Totals */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+                  <div style={{ minWidth: 280 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 }}>
+                      <span style={{ color: dimText }}>{t.subtotal}</span>
+                      <span style={{ color: th.text }}>{t.chf} {formatChf(formSubtotal)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14, alignItems: 'center', gap: 10 }}>
+                      <span style={{ color: dimText }}>{t.vat}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="number" min="0" max="100" step="0.1"
+                          value={formVatRate}
+                          onChange={(e) => setFormVatRate(parseFloat(e.target.value) || 0)}
+                          style={{ ...inputStyle, width: 70, textAlign: 'right', padding: '4px 8px', fontSize: 13 }}
+                        />
+                        <span style={{ color: dimText, fontSize: 13 }}>%</span>
+                        <span style={{ color: th.text, minWidth: 80, textAlign: 'right' }}>{t.chf} {formatChf(formVatAmount)}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontSize: 18, fontWeight: 700, borderTop: `2px solid ${th.border}`, marginTop: 4 }}>
+                      <span style={{ color: th.text }}>{t.grandTotal}</span>
+                      <span style={{ color: th.accent || '#4ecdc4' }}>{t.chf} {formatChf(formTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={labelStyle}>{t.notes}</label>
+                  <textarea
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    rows={3}
+                    style={{ ...inputStyle, resize: 'vertical' }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
