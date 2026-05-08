@@ -56,7 +56,7 @@ const T: Record<string, Record<string, string>> = {
     next: 'Weiter →', page: 'Seite', of: 'von', total: 'Total', active: 'Aktiv',
     inactive: 'Inaktiv', PRIVATE: 'Privat', COMPANY: 'Firma', ACTIVE: 'Aktiv',
     INACTIVE: 'Inaktiv', BLOCKED: 'Gesperrt', close: 'Schliessen',
-    loading: 'Laden…',
+    loading: 'Laden…', back: '← Zurück zur Liste',
   },
   en: {
     title: 'Customers', search: 'Search…', allTypes: 'All Types', allStatuses: 'All Statuses',
@@ -73,7 +73,7 @@ const T: Record<string, Record<string, string>> = {
     next: 'Next →', page: 'Page', of: 'of', total: 'Total', active: 'Active',
     inactive: 'Inactive', PRIVATE: 'Private', COMPANY: 'Company', ACTIVE: 'Active',
     INACTIVE: 'Inactive', BLOCKED: 'Blocked', close: 'Close',
-    loading: 'Loading…',
+    loading: 'Loading…', back: '← Back to list',
   },
   fr: {
     title: 'Clients', search: 'Rechercher…', allTypes: 'Tous les types', allStatuses: 'Tous les statuts',
@@ -90,7 +90,7 @@ const T: Record<string, Record<string, string>> = {
     next: 'Suivant →', page: 'Page', of: 'de', total: 'Total', active: 'Actif',
     inactive: 'Inactif', PRIVATE: 'Privé', COMPANY: 'Entreprise', ACTIVE: 'Actif',
     INACTIVE: 'Inactif', BLOCKED: 'Bloqué', close: 'Fermer',
-    loading: 'Chargement…',
+    loading: 'Chargement…', back: '← Retour à la liste',
   },
   pt: {
     title: 'Clientes', search: 'Pesquisar…', allTypes: 'Todos os tipos', allStatuses: 'Todos os estados',
@@ -107,7 +107,7 @@ const T: Record<string, Record<string, string>> = {
     next: 'Seguinte →', page: 'Página', of: 'de', total: 'Total', active: 'Ativo',
     inactive: 'Inativo', PRIVATE: 'Privado', COMPANY: 'Empresa', ACTIVE: 'Ativo',
     INACTIVE: 'Inativo', BLOCKED: 'Bloqueado', close: 'Fechar',
-    loading: 'A carregar…',
+    loading: 'A carregar…', back: '← Voltar à lista',
   },
 };
 
@@ -191,12 +191,25 @@ export function CustomersPage() {
 
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const panelRef = useRef<HTMLDivElement>(null);
 
   function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, type });
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }
+
+  /* helper: close detail panel and return to list */
+  function closeDetail() {
+    setSelected(null);
+    setEditing(false);
+    setConfirmDelete(false);
+    setContactForm({});
+    setEditingContact(null);
+  }
+
+  /* ── whether the detail/edit panel is open ── */
+  const panelOpen = selected !== null || editing;
 
   /* ── theme-aware style helpers ── */
   const dimText = isDark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.4)';
@@ -210,8 +223,7 @@ export function CustomersPage() {
   };
 
   const selectStyle: React.CSSProperties = {
-    ...inputStyle,
-    appearance: 'auto' as const,
+    ...inputStyle, appearance: 'auto' as const,
   };
 
   const btnPrimary: React.CSSProperties = {
@@ -233,8 +245,11 @@ export function CustomersPage() {
     transition: 'opacity .15s',
   };
 
-  const btnClose: React.CSSProperties = {
-    ...btnSecondary, padding: '8px 12px',
+  const btnBack: React.CSSProperties = {
+    padding: '6px 14px', borderRadius: 8, border: 'none',
+    background: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)',
+    color: th.text, fontWeight: 600, cursor: 'pointer', fontSize: 13,
+    transition: 'opacity .15s', marginBottom: 16,
   };
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
@@ -325,10 +340,14 @@ export function CustomersPage() {
       const cust: Customer = await res.json();
       setSelected(cust);
       setContacts(cust.contacts ?? []);
-      setForm(cust);
+      setForm({ ...cust });
       setEditing(false);
       setTab('general');
       setConfirmDelete(false);
+      setContactForm({});
+      setEditingContact(null);
+      /* scroll to top of panel */
+      setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch {
       showToast(t.error, 'err');
     }
@@ -347,8 +366,13 @@ export function CustomersPage() {
       const res = await fetch(url, { method, headers, body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       showToast(t.saved);
-      setEditing(false);
-      if (selected) fetchDetail(selected.id);
+      if (selected) {
+        /* re-fetch the updated detail so view-mode shows fresh data */
+        await fetchDetail(selected.id);
+      } else {
+        /* new customer created — close form, go back to list */
+        closeDetail();
+      }
       fetchCustomers();
       fetchAllCustomers();
     } catch {
@@ -362,7 +386,7 @@ export function CustomersPage() {
       const res = await fetch(`${API}/api/v1/customers/${selected.id}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error();
       showToast(t.deleted);
-      setSelected(null);
+      closeDetail();
       fetchCustomers();
       fetchAllCustomers();
     } catch {
@@ -501,491 +525,531 @@ export function CustomersPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <CsvToolbar
-            columns={csvColumns(t)}
-            data={csvData}
-            filename={`customers_${new Date().toISOString().split('T')[0]}`}
-            exampleRows={CSV_EXAMPLE_ROWS}
-            validators={{
-              name: (v: string) => (v ? null : 'Name is required'),
-            }}
-            canImport={isManager}
-            onImport={handleCsvImport}
-          />
-          {isManager && (
-            <button
-              onClick={() => {
-                setSelected(null);
-                setForm({ status: 'ACTIVE', customer_type: 'PRIVATE', language: 'de', payment_terms: 30 });
-                setEditing(true);
-                setTab('general');
+        {!panelOpen && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <CsvToolbar
+              columns={csvColumns(t)}
+              data={csvData}
+              filename={`customers_${new Date().toISOString().split('T')[0]}`}
+              exampleRows={CSV_EXAMPLE_ROWS}
+              validators={{
+                name: (v: string) => (v ? null : 'Name is required'),
               }}
-              style={btnPrimary}
-            >
-              {t.add}
-            </button>
-          )}
-        </div>
+              canImport={isManager}
+              onImport={handleCsvImport}
+            />
+            {isManager && (
+              <button
+                onClick={() => {
+                  setSelected(null);
+                  setForm({ status: 'ACTIVE', customer_type: 'PRIVATE', language: 'de', payment_terms: 30 });
+                  setEditing(true);
+                  setTab('general');
+                }}
+                style={btnPrimary}
+              >
+                {t.add}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Filters ── */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <input
-          placeholder={t.search}
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          style={{ ...inputStyle, maxWidth: 260 }}
-        />
-        <select
-          value={filterType}
-          onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
-          style={{ ...selectStyle, maxWidth: 160 }}
-        >
-          <option value="">{t.allTypes}</option>
-          <option value="PRIVATE">{t.PRIVATE}</option>
-          <option value="COMPANY">{t.COMPANY}</option>
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-          style={{ ...selectStyle, maxWidth: 160 }}
-        >
-          <option value="">{t.allStatuses}</option>
-          <option value="ACTIVE">{t.ACTIVE}</option>
-          <option value="INACTIVE">{t.INACTIVE}</option>
-          <option value="BLOCKED">{t.BLOCKED}</option>
-        </select>
-      </div>
-
-      {/* ── Loading ── */}
-      {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: dimText }}>
-          ⏳ {t.loading}
-        </div>
-      )}
-
-      {/* ── Customer Table ── */}
-      {!loading && !editing && (
+      {/* ═══════════════ LIST VIEW (hidden when detail/edit panel is open) ═══════════════ */}
+      {!panelOpen && (
         <>
-          {customers.length === 0 ? (
-            <p style={{ color: dimText, textAlign: 'center', padding: 40 }}>
-              {t.noCustomers}
-            </p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                <thead>
-                  <tr>
-                    {[t.name, t.type, t.city, t.phone, t.email, t.status].map((h) => (
-                      <th key={h} style={thStyle}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.map((c) => (
-                    <tr
-                      key={c.id}
-                      onClick={() => fetchDetail(c.id)}
-                      style={{ cursor: 'pointer', transition: 'background .15s' }}
-                      onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background = isDark
-                          ? 'rgba(255,255,255,.04)'
-                          : 'rgba(0,0,0,.02)')
-                      }
-                      onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background = 'transparent')
-                      }
-                    >
-                      <td style={{ ...tdStyle, color: th.text, fontWeight: 600 }}>
-                        {c.name}
-                      </td>
-                      <td style={tdStyle}>
-                        {TYPE_ICONS[c.customer_type] || ''} {t[c.customer_type] || c.customer_type}
-                      </td>
-                      <td style={tdStyle}>{c.city || '–'}</td>
-                      <td style={tdStyle}>{c.phone || '–'}</td>
-                      <td style={tdStyle}>{c.email || '–'}</td>
-                      <td style={{ padding: '10px 12px', borderBottom: `1px solid ${th.border}` }}>
-                        <span
-                          style={{
-                            display: 'inline-block', padding: '3px 10px', borderRadius: 20,
-                            fontSize: 12, fontWeight: 600,
-                            background: `${STATUS_COLORS[c.status] || '#95a5a6'}22`,
-                            color: STATUS_COLORS[c.status] || '#95a5a6',
-                          }}
-                        >
-                          {t[c.status] || c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <input
+              placeholder={t.search}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              style={{ ...inputStyle, maxWidth: 260 }}
+            />
+            <select
+              value={filterType}
+              onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
+              style={{ ...selectStyle, maxWidth: 160 }}
+            >
+              <option value="">{t.allTypes}</option>
+              <option value="PRIVATE">{t.PRIVATE}</option>
+              <option value="COMPANY">{t.COMPANY}</option>
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+              style={{ ...selectStyle, maxWidth: 160 }}
+            >
+              <option value="">{t.allStatuses}</option>
+              <option value="ACTIVE">{t.ACTIVE}</option>
+              <option value="INACTIVE">{t.INACTIVE}</option>
+              <option value="BLOCKED">{t.BLOCKED}</option>
+            </select>
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div style={{ textAlign: 'center', padding: 40, color: dimText }}>
+              ⏳ {t.loading}
             </div>
           )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div
-              style={{
-                display: 'flex', justifyContent: 'center', alignItems: 'center',
-                gap: 12, marginTop: 16,
-              }}
-            >
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-                style={paginationBtn(page <= 1)}
-              >
-                {t.prev}
-              </button>
-              <span style={{ color: dimText, fontSize: 14 }}>
-                {t.page} {page} {t.of} {totalPages}
-              </span>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                style={paginationBtn(page >= totalPages)}
-              >
-                {t.next}
-              </button>
-            </div>
+          {/* Customer Table */}
+          {!loading && (
+            <>
+              {customers.length === 0 ? (
+                <p style={{ color: dimText, textAlign: 'center', padding: 40 }}>
+                  {t.noCustomers}
+                </p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                      <tr>
+                        {[t.name, t.type, t.city, t.phone, t.email, t.status].map((h) => (
+                          <th key={h} style={thStyle}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customers.map((c) => (
+                        <tr
+                          key={c.id}
+                          onClick={() => fetchDetail(c.id)}
+                          style={{ cursor: 'pointer', transition: 'background .15s' }}
+                          onMouseEnter={(e) =>
+                            ((e.currentTarget as HTMLElement).style.background = isDark
+                              ? 'rgba(255,255,255,.04)'
+                              : 'rgba(0,0,0,.02)')
+                          }
+                          onMouseLeave={(e) =>
+                            ((e.currentTarget as HTMLElement).style.background = 'transparent')
+                          }
+                        >
+                          <td style={{ ...tdStyle, color: th.text, fontWeight: 600 }}>
+                            {c.name}
+                          </td>
+                          <td style={tdStyle}>
+                            {TYPE_ICONS[c.customer_type] || ''} {t[c.customer_type] || c.customer_type}
+                          </td>
+                          <td style={tdStyle}>{c.city || '–'}</td>
+                          <td style={tdStyle}>{c.phone || '–'}</td>
+                          <td style={tdStyle}>{c.email || '–'}</td>
+                          <td style={{ padding: '10px 12px', borderBottom: `1px solid ${th.border}` }}>
+                            <span
+                              style={{
+                                display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+                                fontSize: 12, fontWeight: 600,
+                                background: `${STATUS_COLORS[c.status] || '#95a5a6'}22`,
+                                color: STATUS_COLORS[c.status] || '#95a5a6',
+                              }}
+                            >
+                              {t[c.status] || c.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div
+                  style={{
+                    display: 'flex', justifyContent: 'center', alignItems: 'center',
+                    gap: 12, marginTop: 16,
+                  }}
+                >
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                    style={paginationBtn(page <= 1)}
+                  >
+                    {t.prev}
+                  </button>
+                  <span style={{ color: dimText, fontSize: 14 }}>
+                    {t.page} {page} {t.of} {totalPages}
+                  </span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    style={paginationBtn(page >= totalPages)}
+                  >
+                    {t.next}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </>
       )}
 
-      {/* ── Detail / Edit Panel ── */}
-      {(selected || editing) && (
-        <div
-          style={{
-            marginTop: 20, padding: 24, borderRadius: 14,
-            background: panelBg,
-            border: `1px solid ${th.border}`,
-          }}
-        >
-          {/* Detail header */}
+      {/* ═══════════════ DETAIL / EDIT PANEL (replaces the list) ═══════════════ */}
+      {panelOpen && (
+        <div ref={panelRef}>
+          {/* Back to list button */}
+          <button onClick={closeDetail} style={btnBack}>
+            {t.back}
+          </button>
+
           <div
             style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: 16, flexWrap: 'wrap', gap: 8,
+              padding: 24, borderRadius: 14,
+              background: panelBg,
+              border: `1px solid ${th.border}`,
             }}
           >
-            <h2 style={{ margin: 0, color: th.text }}>
-              {editing && !selected ? t.add : selected?.name}
-            </h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {!editing && isManager && (
-                <>
-                  <button onClick={() => setEditing(true)} style={btnPrimary}>
-                    {t.edit}
-                  </button>
-                  {confirmDelete ? (
-                    <>
-                      <span style={{ color: th.text, alignSelf: 'center', fontSize: 13 }}>
-                        {t.confirmDelete}
-                      </span>
-                      <button onClick={deleteCustomer} style={btnDanger}>
-                        {t.yes}
-                      </button>
-                      <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>
-                        {t.no}
-                      </button>
-                    </>
-                  ) : (
-                    <button onClick={() => setConfirmDelete(true)} style={btnDanger}>
-                      {t.delete}
+            {/* Detail header */}
+            <div
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: 16, flexWrap: 'wrap', gap: 8,
+              }}
+            >
+              <h2 style={{ margin: 0, color: th.text }}>
+                {editing && !selected ? t.add : (form.name || selected?.name || '')}
+              </h2>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {selected && !editing && isManager && (
+                  <>
+                    <button onClick={() => { setForm({ ...selected }); setEditing(true); }} style={btnPrimary}>
+                      {t.edit}
                     </button>
-                  )}
-                </>
-              )}
-              <button
-                onClick={() => { setSelected(null); setEditing(false); }}
-                style={btnClose}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {/* Stats row (view mode) */}
-          {selected && !editing && (
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-              {[
-                { label: t.tasks, value: selected.tasks_count ?? 0 },
-                { label: t.activeTasks, value: selected.active_tasks_count ?? 0 },
-                { label: t.totalHours, value: formatCurrency(selected.total_hours) },
-                {
-                  label: t.memberSince,
-                  value: selected.created_at
-                    ? new Date(selected.created_at).toLocaleDateString(locale)
-                    : '–',
-                },
-              ].map((s) => (
-                <div key={s.label} style={statCard}>
-                  <div style={{ fontSize: 12, color: dimText }}>{s.label}</div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: th.text }}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${th.border}` }}>
-            {(['general', 'contacts', 'billing', 'notes'] as const).map((tb) => (
-              <button key={tb} onClick={() => setTab(tb)} style={tabBtnStyle(tab === tb)}>
-                {t[tb === 'notes' ? 'notesTab' : tb]}
-              </button>
-            ))}
-          </div>
-
-          {/* ── General Tab ── */}
-          {tab === 'general' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {([
-                ['name', t.name],
-                ['customer_type', t.type],
-                ['company_name', t.company],
-                ['street', t.street],
-                ['postal_code', t.postalCode],
-                ['city', t.city],
-                ['canton', t.canton],
-                ['phone', t.phone],
-                ['email', t.email],
-                ['website', t.website],
-                ['status', t.status],
-                ['language', t.language],
-              ] as [string, string][]).map(([key, label]) => (
-                <div key={key}>
-                  <label style={labelStyle}>{label}</label>
-                  {editing ? (
-                    key === 'customer_type' ? (
-                      <select
-                        value={(form as any)[key] || ''}
-                        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                        style={selectStyle}
-                      >
-                        <option value="PRIVATE">{t.PRIVATE}</option>
-                        <option value="COMPANY">{t.COMPANY}</option>
-                      </select>
-                    ) : key === 'status' ? (
-                      <select
-                        value={(form as any)[key] || ''}
-                        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                        style={selectStyle}
-                      >
-                        <option value="ACTIVE">{t.ACTIVE}</option>
-                        <option value="INACTIVE">{t.INACTIVE}</option>
-                        <option value="BLOCKED">{t.BLOCKED}</option>
-                      </select>
-                    ) : key === 'language' ? (
-                      <select
-                        value={(form as any)[key] || 'de'}
-                        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                        style={selectStyle}
-                      >
-                        <option value="de">Deutsch</option>
-                        <option value="en">English</option>
-                        <option value="fr">Français</option>
-                        <option value="pt">Português</option>
-                      </select>
+                    {confirmDelete ? (
+                      <>
+                        <span style={{ color: th.text, alignSelf: 'center', fontSize: 13 }}>
+                          {t.confirmDelete}
+                        </span>
+                        <button onClick={deleteCustomer} style={btnDanger}>
+                          {t.yes}
+                        </button>
+                        <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>
+                          {t.no}
+                        </button>
+                      </>
                     ) : (
-                      <input
-                        value={(form as any)[key] || ''}
-                        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                        style={inputStyle}
-                      />
-                    )
-                  ) : (
-                    <p style={{ margin: '4px 0 0', color: th.text }}>
-                      {key === 'customer_type'
-                        ? `${TYPE_ICONS[(selected as any)?.[key]] || ''} ${t[(selected as any)?.[key]] || (selected as any)?.[key] || '–'}`
-                        : key === 'status'
-                          ? t[(selected as any)?.[key]] || (selected as any)?.[key] || '–'
-                          : (selected as any)?.[key] || '–'}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Contacts Tab ── */}
-          {tab === 'contacts' && (
-            <div>
-              {contacts.map((c) => (
-                <div
-                  key={c.id}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    padding: '10px 0', borderBottom: `1px solid ${th.border}`,
-                  }}
-                >
-                  <div>
-                    <span style={{ fontWeight: 600, color: th.text }}>
-                      {c.first_name} {c.last_name}
-                    </span>
-                    {c.is_primary && (
-                      <span
-                        style={{
-                          marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 20,
-                          background: isDark ? 'rgba(78,205,196,.15)' : 'rgba(78,205,196,.12)',
-                          color: '#4ecdc4', fontWeight: 600,
-                        }}
-                      >
-                        {t.primary}
-                      </span>
-                    )}
-                    <div style={{ fontSize: 13, color: dimText }}>
-                      {c.role ? `${c.role} · ` : ''}{c.email || ''} {c.phone || ''}
-                    </div>
-                  </div>
-                  {isManager && (
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        onClick={() => {
-                          setContactForm(c);
-                          setEditingContact(c.id);
-                        }}
-                        style={contactBtnSmall(th.accent || '#4ecdc4')}
-                      >
-                        {t.edit}
-                      </button>
-                      <button
-                        onClick={() => deleteContact(c.id)}
-                        style={contactBtnSmall('#e74c3c')}
-                      >
+                      <button onClick={() => setConfirmDelete(true)} style={btnDanger}>
                         {t.delete}
                       </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Contact form */}
-              {isManager && (
-                <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={labelStyle}>{t.firstName}</label>
-                    <input
-                      value={contactForm.first_name || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, first_name: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>{t.lastName}</label>
-                    <input
-                      value={contactForm.last_name || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, last_name: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>{t.email}</label>
-                    <input
-                      value={contactForm.email || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>{t.phone}</label>
-                    <input
-                      value={contactForm.phone || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>{t.role}</label>
-                    <input
-                      value={contactForm.role || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, role: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'end', gap: 10 }}>
-                    <button onClick={saveContact} style={btnPrimary}>
-                      {editingContact ? t.save : t.addContact}
-                    </button>
-                    {editingContact && (
-                      <button
-                        onClick={() => { setContactForm({}); setEditingContact(null); }}
-                        style={btnSecondary}
-                      >
-                        {t.cancel}
-                      </button>
                     )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Billing Tab ── */}
-          {tab === 'billing' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label style={labelStyle}>
-                  {t.paymentTerms}
-                </label>
-                {editing ? (
-                  <input
-                    type="number"
-                    value={form.payment_terms ?? ''}
-                    onChange={(e) =>
-                      setForm({ ...form, payment_terms: parseInt(e.target.value, 10) || undefined })
-                    }
-                    style={inputStyle}
-                  />
-                ) : (
-                  <p style={{ margin: '4px 0 0', color: th.text }}>
-                    {selected?.payment_terms != null
-                      ? `${selected.payment_terms} ${t.paymentTerms.match(/\((.+)\)/)?.[1] || 'days'}`
-                      : '–'}
-                  </p>
+                  </>
+                )}
+                {editing && (
+                  <>
+                    <button onClick={saveCustomer} style={btnPrimary}>
+                      {t.save}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selected) {
+                          setForm({ ...selected });
+                          setEditing(false);
+                        } else {
+                          closeDetail();
+                        }
+                      }}
+                      style={btnSecondary}
+                    >
+                      {t.cancel}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
-          )}
 
-          {/* ── Notes Tab ── */}
-          {tab === 'notes' && (
-            <div>
-              {editing ? (
-                <textarea
-                  value={form.notes || ''}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  rows={6}
-                  style={{ ...inputStyle, resize: 'vertical' }}
-                />
-              ) : (
-                <p style={{ color: th.text, whiteSpace: 'pre-wrap' }}>
-                  {selected?.notes || '–'}
-                </p>
-              )}
-            </div>
-          )}
+            {/* Status badge (view mode) */}
+            {selected && !editing && (
+              <div style={{ marginBottom: 16 }}>
+                <span
+                  style={{
+                    display: 'inline-block', padding: '4px 12px', borderRadius: 20,
+                    fontSize: 12, fontWeight: 600,
+                    background: `${STATUS_COLORS[selected.status] || '#95a5a6'}22`,
+                    color: STATUS_COLORS[selected.status] || '#95a5a6',
+                  }}
+                >
+                  {t[selected.status] || selected.status}
+                </span>
+                <span style={{ marginLeft: 12, fontSize: 13, color: dimText }}>
+                  {TYPE_ICONS[selected.customer_type] || ''} {t[selected.customer_type] || selected.customer_type}
+                </span>
+              </div>
+            )}
 
-          {/* Save / Cancel (edit mode) */}
-          {editing && (
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button onClick={saveCustomer} style={btnPrimary}>
-                {t.save}
-              </button>
-              <button
-                onClick={() => {
-                  setEditing(false);
-                  if (!selected) setSelected(null);
-                  else setForm(selected);
-                }}
-                style={btnSecondary}
-              >
-                {t.cancel}
-              </button>
+            {/* Stats row (view mode) */}
+            {selected && !editing && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                {[
+                  { label: t.tasks, value: selected.tasks_count ?? 0 },
+                  { label: t.activeTasks, value: selected.active_tasks_count ?? 0 },
+                  { label: t.totalHours, value: formatCurrency(selected.total_hours) },
+                  {
+                    label: t.memberSince,
+                    value: selected.created_at
+                      ? new Date(selected.created_at).toLocaleDateString(locale)
+                      : '–',
+                  },
+                ].map((s) => (
+                  <div key={s.label} style={statCard}>
+                    <div style={{ fontSize: 12, color: dimText }}>{s.label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: th.text }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${th.border}` }}>
+              {(['general', 'contacts', 'billing', 'notes'] as const).map((tb) => (
+                <button key={tb} onClick={() => setTab(tb)} style={tabBtnStyle(tab === tb)}>
+                  {t[tb === 'notes' ? 'notesTab' : tb]}
+                </button>
+              ))}
             </div>
-          )}
+
+            {/* ── General Tab ── */}
+            {tab === 'general' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {([
+                  ['name', t.name],
+                  ['customer_type', t.type],
+                  ['company_name', t.company],
+                  ['street', t.street],
+                  ['postal_code', t.postalCode],
+                  ['city', t.city],
+                  ['canton', t.canton],
+                  ['phone', t.phone],
+                  ['email', t.email],
+                  ['website', t.website],
+                  ['status', t.status],
+                  ['language', t.language],
+                ] as [string, string][]).map(([key, label]) => (
+                  <div key={key}>
+                    <label style={labelStyle}>{label}</label>
+                    {editing ? (
+                      key === 'customer_type' ? (
+                        <select
+                          value={(form as any)[key] || ''}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          <option value="PRIVATE">{t.PRIVATE}</option>
+                          <option value="COMPANY">{t.COMPANY}</option>
+                        </select>
+                      ) : key === 'status' ? (
+                        <select
+                          value={(form as any)[key] || ''}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          <option value="ACTIVE">{t.ACTIVE}</option>
+                          <option value="INACTIVE">{t.INACTIVE}</option>
+                          <option value="BLOCKED">{t.BLOCKED}</option>
+                        </select>
+                      ) : key === 'language' ? (
+                        <select
+                          value={(form as any)[key] || 'de'}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          <option value="de">Deutsch</option>
+                          <option value="en">English</option>
+                          <option value="fr">Français</option>
+                          <option value="pt">Português</option>
+                        </select>
+                      ) : (
+                        <input
+                          value={(form as any)[key] || ''}
+                          onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                          style={inputStyle}
+                        />
+                      )
+                    ) : (
+                      <p style={{ margin: '4px 0 0', color: th.text, fontSize: 14 }}>
+                        {key === 'customer_type'
+                          ? `${TYPE_ICONS[(selected as any)?.[key]] || ''} ${t[(selected as any)?.[key]] || (selected as any)?.[key] || '–'}`
+                          : key === 'status'
+                            ? t[(selected as any)?.[key]] || (selected as any)?.[key] || '–'
+                            : key === 'language'
+                              ? ({ de: 'Deutsch', en: 'English', fr: 'Français', pt: 'Português' } as any)[(selected as any)?.[key]] || (selected as any)?.[key] || '–'
+                              : (selected as any)?.[key] || '–'}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Contacts Tab ── */}
+            {tab === 'contacts' && (
+              <div>
+                {contacts.length === 0 && !isManager && (
+                  <p style={{ color: dimText, textAlign: 'center', padding: 20 }}>—</p>
+                )}
+                {contacts.map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '12px 0', borderBottom: `1px solid ${th.border}`,
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 600, color: th.text }}>
+                        {c.first_name} {c.last_name}
+                      </span>
+                      {c.is_primary && (
+                        <span
+                          style={{
+                            marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 20,
+                            background: isDark ? 'rgba(78,205,196,.15)' : 'rgba(78,205,196,.12)',
+                            color: '#4ecdc4', fontWeight: 600,
+                          }}
+                        >
+                          {t.primary}
+                        </span>
+                      )}
+                      <div style={{ fontSize: 13, color: dimText, marginTop: 2 }}>
+                        {c.role ? `${c.role} · ` : ''}
+                        {c.email ? `${c.email} ` : ''}
+                        {c.phone || ''}
+                      </div>
+                    </div>
+                    {isManager && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          onClick={() => {
+                            setContactForm({ ...c });
+                            setEditingContact(c.id);
+                          }}
+                          style={contactBtnSmall(th.accent || '#4ecdc4')}
+                        >
+                          {t.edit}
+                        </button>
+                        <button
+                          onClick={() => deleteContact(c.id)}
+                          style={contactBtnSmall('#e74c3c')}
+                        >
+                          {t.delete}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Contact add/edit form */}
+                {isManager && (
+                  <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: isDark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.02)' }}>
+                    <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: th.text }}>
+                      {editingContact ? t.edit : t.addContact}
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <label style={labelStyle}>{t.firstName}</label>
+                        <input
+                          value={contactForm.first_name || ''}
+                          onChange={(e) => setContactForm({ ...contactForm, first_name: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.lastName}</label>
+                        <input
+                          value={contactForm.last_name || ''}
+                          onChange={(e) => setContactForm({ ...contactForm, last_name: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.email}</label>
+                        <input
+                          value={contactForm.email || ''}
+                          onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.phone}</label>
+                        <input
+                          value={contactForm.phone || ''}
+                          onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>{t.role}</label>
+                        <input
+                          value={contactForm.role || ''}
+                          onChange={(e) => setContactForm({ ...contactForm, role: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'end', gap: 10 }}>
+                        <button onClick={saveContact} style={btnPrimary}>
+                          {editingContact ? t.save : t.addContact}
+                        </button>
+                        {editingContact && (
+                          <button
+                            onClick={() => { setContactForm({}); setEditingContact(null); }}
+                            style={btnSecondary}
+                          >
+                            {t.cancel}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Billing Tab ── */}
+            {tab === 'billing' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>
+                    {t.paymentTerms}
+                  </label>
+                  {editing ? (
+                    <input
+                      type="number"
+                      value={form.payment_terms ?? ''}
+                      onChange={(e) =>
+                        setForm({ ...form, payment_terms: parseInt(e.target.value, 10) || undefined })
+                      }
+                      style={inputStyle}
+                    />
+                  ) : (
+                    <p style={{ margin: '4px 0 0', color: th.text, fontSize: 14 }}>
+                      {selected?.payment_terms != null
+                        ? `${selected.payment_terms} ${t.paymentTerms.match(/\((.+)\)/)?.[1] || 'days'}`
+                        : '–'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Notes Tab ── */}
+            {tab === 'notes' && (
+              <div>
+                {editing ? (
+                  <textarea
+                    value={form.notes || ''}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    rows={6}
+                    style={{ ...inputStyle, resize: 'vertical' }}
+                  />
+                ) : (
+                  <p style={{ color: th.text, whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.6 }}>
+                    {selected?.notes || '–'}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
