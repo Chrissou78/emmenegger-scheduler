@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 
 type Lang = 'de' | 'en' | 'fr' | 'pt';
 
+const SUPPORTED_LANGS: Lang[] = ['de', 'en', 'fr', 'pt'];
+
 interface ThemeContextType {
   isDark: boolean;
   toggleTheme: () => void;
@@ -70,7 +72,6 @@ const translations: Record<Lang, Record<string, any>> = {
     save: 'Speichern', cancel: 'Abbrechen', delete: 'Löschen', add: 'Hinzufügen',
     search: 'Suchen...', noResults: 'Keine Ergebnisse', loading: 'Laden...',
     darkMode: 'Dunkelmodus', lightMode: 'Hellmodus', language: 'Sprache',
-    // Sidebar nav labels
     navSchedule: 'Disposition', navMachines: 'Maschinen', navTasks: 'Aufträge',
     navCustomers: 'Kunden', navQuotations: 'Offerten', navInvoices: 'Rechnungen',
     navReports: 'Meine Woche', navStats: 'Statistiken', navAdmin: 'Benutzerverwaltung',
@@ -135,6 +136,29 @@ const translations: Record<Lang, Record<string, any>> = {
   },
 };
 
+/**
+ * Detects the best matching supported language from the browser.
+ * Checks navigator.languages (ordered preference list), then navigator.language.
+ * Matches both exact codes ("pt") and regional variants ("pt-BR" → "pt").
+ * Falls back to 'en' if nothing matches.
+ */
+function detectBrowserLang(): Lang {
+  const candidates = navigator.languages?.length
+    ? navigator.languages
+    : [navigator.language];
+
+  for (const raw of candidates) {
+    const code = raw.toLowerCase();
+    // exact match: "de", "en", "fr", "pt"
+    if (SUPPORTED_LANGS.includes(code as Lang)) return code as Lang;
+    // prefix match: "de-CH" → "de", "pt-BR" → "pt", "en-US" → "en", "fr-FR" → "fr"
+    const prefix = code.split('-')[0] as Lang;
+    if (SUPPORTED_LANGS.includes(prefix)) return prefix;
+  }
+
+  return 'en';
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState<boolean>(() => {
     const saved = localStorage.getItem('theme');
@@ -142,7 +166,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   const [lang, setLang] = useState<Lang>(() => {
-    return (localStorage.getItem('lang') as Lang) || 'de';
+    const saved = localStorage.getItem('lang') as Lang | null;
+    // If user previously chose a language, respect that choice
+    if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
+    // First visit: detect from browser / OS
+    return detectBrowserLang();
   });
 
   useEffect(() => {

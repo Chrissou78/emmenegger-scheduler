@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
+import { CsvToolbar } from '../components/CsvToolbar';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -64,7 +65,7 @@ const PAGE_LABELS: Record<string, Record<string, string>> = {
     estimatedHours: 'Geschätzte Stunden', color: 'Farbe', noTasks: 'Keine Aufträge gefunden',
     totalHours: 'Total Stunden', taskCount: 'Aufträge', editTask: 'Auftrag bearbeiten',
     confirmDelete: 'Auftrag wirklich stornieren?', noCustomer: 'Kein Kunde',
-    h: 'h', d: 'Tage',
+    h: 'h', d: 'Tage', imported: 'Aufträge importiert',
   },
   en: {
     title: 'Tasks', search: 'Search...', all: 'All', addTask: 'New Task',
@@ -74,7 +75,7 @@ const PAGE_LABELS: Record<string, Record<string, string>> = {
     estimatedHours: 'Estimated Hours', color: 'Color', noTasks: 'No tasks found',
     totalHours: 'Total Hours', taskCount: 'Tasks', editTask: 'Edit Task',
     confirmDelete: 'Really cancel this task?', noCustomer: 'No customer',
-    h: 'h', d: 'days',
+    h: 'h', d: 'days', imported: 'tasks imported',
   },
   fr: {
     title: 'Tâches', search: 'Rechercher...', all: 'Toutes', addTask: 'Nouvelle tâche',
@@ -84,7 +85,7 @@ const PAGE_LABELS: Record<string, Record<string, string>> = {
     estimatedHours: 'Heures estimées', color: 'Couleur', noTasks: 'Aucune tâche trouvée',
     totalHours: 'Total heures', taskCount: 'Tâches', editTask: 'Modifier tâche',
     confirmDelete: 'Vraiment annuler cette tâche?', noCustomer: 'Aucun client',
-    h: 'h', d: 'jours',
+    h: 'h', d: 'jours', imported: 'tâches importées',
   },
   pt: {
     title: 'Tarefas', search: 'Pesquisar...', all: 'Todas', addTask: 'Nova Tarefa',
@@ -94,9 +95,34 @@ const PAGE_LABELS: Record<string, Record<string, string>> = {
     estimatedHours: 'Horas estimadas', color: 'Cor', noTasks: 'Nenhuma tarefa encontrada',
     totalHours: 'Total horas', taskCount: 'Tarefas', editTask: 'Editar Tarefa',
     confirmDelete: 'Realmente cancelar esta tarefa?', noCustomer: 'Sem cliente',
-    h: 'h', d: 'dias',
+    h: 'h', d: 'dias', imported: 'tarefas importadas',
   },
 };
+
+/* ── CSV column definitions (language-aware) ── */
+const csvColumns = (lbl: Record<string, string>) => [
+  { key: 'code', label: lbl.code },
+  { key: 'name', label: lbl.name },
+  { key: 'description', label: lbl.description },
+  { key: 'schedule_type', label: lbl.type },
+  { key: 'customer_name', label: lbl.customer },
+  { key: 'estimated_hours', label: lbl.estimatedHours },
+  { key: 'status', label: lbl.status },
+  { key: 'color', label: lbl.color },
+];
+
+const CSV_EXAMPLE_ROWS = [
+  {
+    code: 'a', name: 'Gartenarbeit Müller', description: 'Rasenpflege und Hecken schneiden',
+    schedule_type: 'GARTEN_TIEFBAU', customer_name: '', estimated_hours: '40',
+    status: 'ACTIVE', color: '#8B7355',
+  },
+  {
+    code: 'b', name: 'Unterhalt Lindenpark', description: 'Wöchentliche Grünpflege',
+    schedule_type: 'UNTERHALT', customer_name: '', estimated_hours: '16',
+    status: 'ACTIVE', color: '#4A6741',
+  },
+];
 
 function formatHours(h: number | undefined | null, lbl: Record<string, string>): string {
   if (!h) return '–';
@@ -206,6 +232,38 @@ export function TasksPage() {
     } catch { setToast({ msg: 'Delete failed', err: true }); }
   }
 
+  /* ── CSV import handler ── */
+  async function handleCsvImport(rows: Record<string, any>[]) {
+    let ok = 0;
+    let fail = 0;
+    for (const row of rows) {
+      try {
+        const res = await fetch(`${API}/api/v1/tasks`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            code: row.code,
+            name: row.name,
+            description: row.description || undefined,
+            scheduleType: row.schedule_type || 'GARTEN_TIEFBAU',
+            estimatedHours: row.estimated_hours ? parseFloat(row.estimated_hours) : undefined,
+            color: row.color || '#8B7355',
+            status: row.status || 'ACTIVE',
+          }),
+        });
+        if (res.ok) ok++;
+        else fail++;
+      } catch {
+        fail++;
+      }
+    }
+    await fetchTasks();
+    setToast({
+      msg: `${ok} ${lbl.imported}${fail > 0 ? ` (${fail} failed)` : ''}`,
+      err: fail > 0,
+    });
+  }
+
   function toggleSort(col: typeof sortCol) {
     if (sortCol === col) setSortAsc(!sortAsc);
     else { setSortCol(col); setSortAsc(true); }
@@ -242,6 +300,21 @@ export function TasksPage() {
 
   const totalHours = useMemo(() => filtered.reduce((sum, t) => sum + (t.estimated_hours || 0), 0), [filtered]);
 
+  /* ── CSV export data: flatten customer name and apply status/type labels ── */
+  const csvData = useMemo(() =>
+    filtered.map(t => ({
+      code: t.code,
+      name: t.name,
+      description: t.description || '',
+      schedule_type: t.schedule_type,
+      customer_name: t.customer?.name || '',
+      estimated_hours: t.estimated_hours ?? '',
+      status: t.status || 'ACTIVE',
+      color: t.color,
+    })),
+    [filtered]
+  );
+
   const gold = th.gold;
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', borderRadius: 6, border: `1px solid ${th.border}`,
@@ -266,11 +339,30 @@ export function TasksPage() {
             {filtered.length} {lbl.taskCount} · {totalHours.toLocaleString()} {lbl.totalHours}
           </div>
         </div>
-        {isManager && (
-          <button onClick={openAdd} style={btnStyle(gold, '#fff')}>
-            + {lbl.addTask}
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* CSV Toolbar */}
+          <CsvToolbar
+            columns={csvColumns(lbl)}
+            data={csvData}
+            filename={`tasks_${new Date().toISOString().split('T')[0]}`}
+            formatters={{
+              estimated_hours: (v) => v != null && v !== '' ? String(v) : '',
+              schedule_type: (v) => v || 'GARTEN_TIEFBAU',
+            }}
+            exampleRows={CSV_EXAMPLE_ROWS}
+            validators={{
+              code: (v) => v ? null : 'Code is required',
+              name: (v) => v ? null : 'Name is required',
+            }}
+            canImport={isManager}
+            onImport={handleCsvImport}
+          />
+          {isManager && (
+            <button onClick={openAdd} style={btnStyle(gold, '#fff')}>
+              + {lbl.addTask}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── STATS BAR ── */}

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
+import { CsvToolbar } from '../components/CsvToolbar';
 
 /* ─── types ─── */
 interface Machine {
@@ -58,6 +59,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     startTime: 'Startzeit', endTime: 'Endzeit', saved: 'Gespeichert', deleted: 'Gelöscht',
     error: 'Fehler', available: 'Verfügbar', inUse: 'In Gebrauch', maintenance: 'Wartung',
     outOfService: 'Ausser Betrieb', total: 'Total', today: 'Heute',
+    imported: 'importiert',
   },
   en: {
     title: 'Machine Park', machines: 'Machines', allocations: 'Allocations',
@@ -70,6 +72,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     startTime: 'Start Time', endTime: 'End Time', saved: 'Saved', deleted: 'Deleted',
     error: 'Error', available: 'Available', inUse: 'In Use', maintenance: 'Maintenance',
     outOfService: 'Out of Service', total: 'Total', today: 'Today',
+    imported: 'imported',
   },
   fr: {
     title: 'Parc machines', machines: 'Machines', allocations: 'Affectations',
@@ -82,6 +85,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     startTime: 'Heure début', endTime: 'Heure fin', saved: 'Enregistré', deleted: 'Supprimé',
     error: 'Erreur', available: 'Disponible', inUse: 'En service', maintenance: 'Maintenance',
     outOfService: 'Hors service', total: 'Total', today: "Aujourd'hui",
+    imported: 'importé(s)',
   },
   pt: {
     title: 'Parque de Máquinas', machines: 'Máquinas', allocations: 'Alocações',
@@ -94,6 +98,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     startTime: 'Hora início', endTime: 'Hora fim', saved: 'Salvo', deleted: 'Excluído',
     error: 'Erro', available: 'Disponível', inUse: 'Em uso', maintenance: 'Manutenção',
     outOfService: 'Fora de serviço', total: 'Total', today: 'Hoje',
+    imported: 'importado(s)',
   },
 };
 
@@ -104,6 +109,35 @@ const statusColor = (s: string) => {
 
 const CATEGORIES = ['Bagger', 'Dumper', 'Rasenmäher', 'Kettensäge', 'Heckenschere', 'Laubbläser', 'Transporter', 'Sonstiges'];
 
+/* ─── CSV column definitions ─── */
+const csvMachineColumns = (L: Record<string, string>) => [
+  { key: 'name', label: L.name },
+  { key: 'category', label: L.category },
+  { key: 'status', label: L.status },
+  { key: 'notes', label: L.notes },
+];
+
+const csvAllocColumns = (L: Record<string, string>) => [
+  { key: 'machine_name', label: L.machine },
+  { key: 'employee_name', label: L.employee },
+  { key: 'task_name', label: L.task },
+  { key: 'date', label: L.date },
+  { key: 'start_time', label: L.startTime },
+  { key: 'end_time', label: L.endTime },
+  { key: 'notes', label: L.notes },
+];
+
+const CSV_MACHINE_EXAMPLES = [
+  { name: 'CAT 308', category: 'Bagger', status: 'AVAILABLE', notes: '8t Minibagger, GPS' },
+  { name: 'Husqvarna 550XP', category: 'Kettensäge', status: 'IN_USE', notes: 'Neuanschaffung 2025' },
+  { name: 'STIHL BR 800', category: 'Laubbläser', status: 'MAINTENANCE', notes: 'Filter wechseln' },
+];
+
+const CSV_ALLOC_EXAMPLES = [
+  { machine_name: 'CAT 308', employee_name: 'Max Müller', task_name: 'Gartenarbeit Müller', date: '2026-05-08', start_time: '07:00', end_time: '12:00', notes: 'Aushub Nordseite' },
+  { machine_name: 'Husqvarna 550XP', employee_name: 'Lena Weber', task_name: 'Unterhalt Lindenpark', date: '2026-05-08', start_time: '08:00', end_time: '16:00', notes: '' },
+];
+
 export function MachinesPage() {
   const { isDark, th, lang } = useTheme();
   const L = L_ALL[lang] || L_ALL.de;
@@ -111,7 +145,6 @@ export function MachinesPage() {
   const API = import.meta.env.VITE_API_URL || '';
   const isManager = user?.role === 'GLOBAL_MANAGER' || user?.role === 'LOCAL_MANAGER';
 
-  // ← statusLabel moved INSIDE the component so it can read the current L
   const statusLabel = (s: string) => {
     const map: Record<string, string> = {
       AVAILABLE: L.available,
@@ -137,7 +170,7 @@ export function MachinesPage() {
   const [mForm, setMForm] = useState<MachineForm>({ ...emptyMachine });
   const [aForm, setAForm] = useState<AllocForm>({ ...emptyAlloc });
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [allocDate, setAllocDate] = useState(() => new Date().toISOString().split('T')[0]);
 
@@ -145,7 +178,11 @@ export function MachinesPage() {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   }), [token]);
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   /* fetch */
   const fetchMachines = useCallback(async () => {
@@ -201,7 +238,7 @@ export function MachinesPage() {
       showToast(L.saved);
       setMachineModal(false);
       fetchMachines();
-    } catch { showToast(L.error); }
+    } catch { showToast(L.error, 'err'); }
     setSaving(false);
   };
 
@@ -212,7 +249,7 @@ export function MachinesPage() {
       showToast(L.deleted);
       setConfirmDel(null);
       fetchMachines();
-    } catch { showToast(L.error); }
+    } catch { showToast(L.error, 'err'); }
   };
 
   /* alloc CRUD */
@@ -231,7 +268,7 @@ export function MachinesPage() {
       showToast(L.saved);
       setAllocModal(false);
       fetchAllocs();
-    } catch { showToast(L.error); }
+    } catch { showToast(L.error, 'err'); }
     setSaving(false);
   };
 
@@ -241,8 +278,34 @@ export function MachinesPage() {
       if (!res.ok) throw new Error();
       showToast(L.deleted);
       fetchAllocs();
-    } catch { showToast(L.error); }
+    } catch { showToast(L.error, 'err'); }
   };
+
+  /* ─── CSV import handler (machines) ─── */
+  async function handleMachineCsvImport(rows: Record<string, string>[]) {
+    let ok = 0, fail = 0;
+    for (const row of rows) {
+      try {
+        const payload: Record<string, string> = {
+          name: row.name,
+          category: row.category || 'Sonstiges',
+          status: STATUS_OPTIONS.includes(row.status as Machine['status'])
+            ? row.status
+            : 'AVAILABLE',
+          notes: row.notes || '',
+        };
+        const res = await fetch(`${API}/api/v1/machines`, {
+          method: 'POST', headers: hdrs(), body: JSON.stringify(payload),
+        });
+        res.ok ? ok++ : fail++;
+      } catch { fail++; }
+    }
+    await fetchMachines();
+    showToast(
+      `${ok} ${L.imported}${fail > 0 ? ` (${fail} failed)` : ''}`,
+      fail > 0 ? 'err' : 'ok',
+    );
+  }
 
   /* filters */
   const filteredMachines = machines.filter(m => {
@@ -259,6 +322,29 @@ export function MachinesPage() {
   const userName = (id: string) => { const u = users.find(u => u.id === id); return u ? `${u.first_name} ${u.last_name}` : id.slice(0, 8); };
   const machineName = (id: string) => machines.find(m => m.id === id)?.name || id.slice(0, 8);
   const taskName = (id: string) => { const tk = tasks.find(tk => tk.id === id); return tk ? (tk.short_code || tk.name) : ''; };
+
+  /* ─── CSV export data (machines) ─── */
+  const csvMachineData = useMemo(() =>
+    filteredMachines.map(m => ({
+      name: m.name,
+      category: m.category || '',
+      status: m.status,
+      notes: m.notes || '',
+    })),
+  [filteredMachines]);
+
+  /* ─── CSV export data (allocations) ─── */
+  const csvAllocData = useMemo(() =>
+    allocs.map(a => ({
+      machine_name: machineName(a.machine_id),
+      employee_name: userName(a.user_id),
+      task_name: a.task_id ? taskName(a.task_id) : '',
+      date: a.date,
+      start_time: a.start_time || '',
+      end_time: a.end_time || '',
+      notes: a.notes || '',
+    })),
+  [allocs, machines, users, tasks]);
 
   /* ─── derived colours ─── */
   const gold = th.gold;
@@ -291,22 +377,49 @@ export function MachinesPage() {
       {toast && (
         <div style={{
           position: 'fixed', top: 20, right: 20, zIndex: 2000,
-          background: toast === L.error ? '#6B3A3A' : (isDark ? '#2a4a2a' : '#e8f5e9'),
-          color: toast === L.error ? '#fff' : th.text,
+          background: toast.type === 'err' ? '#6B3A3A' : (isDark ? '#2a4a2a' : '#e8f5e9'),
+          color: toast.type === 'err' ? '#fff' : th.text,
           padding: '12px 24px', borderRadius: 10, fontWeight: 600,
           boxShadow: '0 4px 20px rgba(0,0,0,.3)',
-        }}>{toast}</div>
+        }}>{toast.msg}</div>
       )}
 
       {/* header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{L.title}</h1>
           <p style={{ margin: '4px 0 0', color: th.textDim, fontSize: 14 }}>
             {L.total}: {machines.length} · {L.available}: {statAvail} · {L.inUse}: {statInUse} · {L.maintenance}: {statMaint}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* CSV Toolbar – switches columns/data/handler based on active tab */}
+          {tab === 'machines' && (
+            <CsvToolbar
+              columns={csvMachineColumns(L)}
+              data={csvMachineData}
+              filename={`machines_${new Date().toISOString().split('T')[0]}`}
+              exampleRows={CSV_MACHINE_EXAMPLES}
+              formatters={{
+                status: (v: string) => STATUS_OPTIONS.includes(v as Machine['status']) ? v : 'AVAILABLE',
+              }}
+              validators={{
+                name: (v: string) => (v ? null : 'Name is required'),
+              }}
+              canImport={isManager}
+              onImport={handleMachineCsvImport}
+            />
+          )}
+          {tab === 'allocations' && (
+            <CsvToolbar
+              columns={csvAllocColumns(L)}
+              data={csvAllocData}
+              filename={`allocations_${allocDate}`}
+              exampleRows={CSV_ALLOC_EXAMPLES}
+              canImport={false}
+              onImport={async () => {}}
+            />
+          )}
           {isManager && tab === 'machines' && (
             <button onClick={openNewMachine} style={{
               background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
