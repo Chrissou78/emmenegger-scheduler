@@ -160,6 +160,52 @@ function formatCurrency(val?: number): string {
   return val.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/* ── Normalize API response into our Customer shape ── */
+function normalizeCustomer(raw: any): Customer {
+  return {
+    id: raw.id,
+    name: raw.name || raw.company_name || raw.display_name || '',
+    customer_type: raw.customer_type || raw.type || 'PRIVATE',
+    company_name: raw.company_name || '',
+    street: raw.street || raw.address || '',
+    postal_code: raw.postal_code || raw.zip || raw.plz || '',
+    city: raw.city || raw.ort || '',
+    canton: raw.canton || raw.kanton || '',
+    phone: raw.phone || raw.telefon || '',
+    email: raw.email || '',
+    website: raw.website || '',
+    status: raw.status || 'ACTIVE',
+    language: raw.language || raw.sprache || 'de',
+    payment_terms: raw.payment_terms ?? raw.paymentTerms ?? undefined,
+    notes: raw.notes || raw.notizen || '',
+    contacts: raw.contacts || [],
+    tasks_count: raw.tasks_count ?? raw.tasksCount ?? 0,
+    active_tasks_count: raw.active_tasks_count ?? raw.activeTasksCount ?? 0,
+    total_hours: raw.total_hours ?? raw.totalHours ?? 0,
+    created_at: raw.created_at || raw.createdAt || '',
+  };
+}
+
+/* ── Build a form object from a Customer ── */
+function customerToForm(c: Customer): Partial<Customer> {
+  return {
+    name: c.name || '',
+    customer_type: c.customer_type || 'PRIVATE',
+    company_name: c.company_name || '',
+    street: c.street || '',
+    postal_code: c.postal_code || '',
+    city: c.city || '',
+    canton: c.canton || '',
+    phone: c.phone || '',
+    email: c.email || '',
+    website: c.website || '',
+    status: c.status || 'ACTIVE',
+    language: c.language || 'de',
+    payment_terms: c.payment_terms ?? 30,
+    notes: c.notes || '',
+  };
+}
+
 /* ────────────────── component ────────────────── */
 export function CustomersPage() {
   const { th, isDark, lang } = useTheme();
@@ -199,7 +245,6 @@ export function CustomersPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }
 
-  /* helper: close detail panel and return to list */
   function closeDetail() {
     setSelected(null);
     setEditing(false);
@@ -208,7 +253,6 @@ export function CustomersPage() {
     setEditingContact(null);
   }
 
-  /* ── whether the detail/edit panel is open ── */
   const panelOpen = selected !== null || editing;
 
   /* ── theme-aware style helpers ── */
@@ -315,8 +359,10 @@ export function CustomersPage() {
       const res = await fetch(`${API}/api/v1/customers?${params}`, { headers });
       if (!res.ok) throw new Error();
       const json = await res.json();
-      setCustomers(json.data ?? json);
-      setTotal(json.total ?? (json.data ?? json).length);
+      const raw = json.data ?? json;
+      const list = (Array.isArray(raw) ? raw : []).map(normalizeCustomer);
+      setCustomers(list);
+      setTotal(json.total ?? list.length);
     } catch {
       showToast(t.error, 'err');
     } finally {
@@ -329,7 +375,8 @@ export function CustomersPage() {
       const res = await fetch(`${API}/api/v1/customers?pageSize=9999`, { headers });
       if (!res.ok) throw new Error();
       const json = await res.json();
-      setAllCustomers(json.data ?? json);
+      const raw = json.data ?? json;
+      setAllCustomers((Array.isArray(raw) ? raw : []).map(normalizeCustomer));
     } catch { /* silent */ }
   }, [token]);
 
@@ -337,16 +384,23 @@ export function CustomersPage() {
     try {
       const res = await fetch(`${API}/api/v1/customers/${id}`, { headers });
       if (!res.ok) throw new Error();
-      const cust: Customer = await res.json();
+      const json = await res.json();
+
+      /* Unwrap { data: ... } if present */
+      const raw = json.data ?? json;
+      const cust = normalizeCustomer(raw);
+
+      console.log('[CustomersPage] fetchDetail raw:', raw);
+      console.log('[CustomersPage] fetchDetail normalized:', cust);
+
       setSelected(cust);
       setContacts(cust.contacts ?? []);
-      setForm({ ...cust });
+      setForm(customerToForm(cust));
       setEditing(false);
       setTab('general');
       setConfirmDelete(false);
       setContactForm({});
       setEditingContact(null);
-      /* scroll to top of panel */
       setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch {
       showToast(t.error, 'err');
@@ -367,10 +421,8 @@ export function CustomersPage() {
       if (!res.ok) throw new Error();
       showToast(t.saved);
       if (selected) {
-        /* re-fetch the updated detail so view-mode shows fresh data */
         await fetchDetail(selected.id);
       } else {
-        /* new customer created — close form, go back to list */
         closeDetail();
       }
       fetchCustomers();
@@ -542,7 +594,10 @@ export function CustomersPage() {
               <button
                 onClick={() => {
                   setSelected(null);
-                  setForm({ status: 'ACTIVE', customer_type: 'PRIVATE', language: 'de', payment_terms: 30 });
+                  setForm(customerToForm({
+                    id: '', name: '', customer_type: 'PRIVATE', status: 'ACTIVE',
+                    language: 'de', payment_terms: 30, created_at: '',
+                  }));
                   setEditing(true);
                   setTab('general');
                 }}
@@ -555,7 +610,7 @@ export function CustomersPage() {
         )}
       </div>
 
-      {/* ═══════════════ LIST VIEW (hidden when detail/edit panel is open) ═══════════════ */}
+      {/* ═══════════════ LIST VIEW ═══════════════ */}
       {!panelOpen && (
         <>
           {/* Filters */}
@@ -686,10 +741,9 @@ export function CustomersPage() {
         </>
       )}
 
-      {/* ═══════════════ DETAIL / EDIT PANEL (replaces the list) ═══════════════ */}
+      {/* ═══════════════ DETAIL / EDIT PANEL ═══════════════ */}
       {panelOpen && (
         <div ref={panelRef}>
-          {/* Back to list button */}
           <button onClick={closeDetail} style={btnBack}>
             {t.back}
           </button>
@@ -709,12 +763,20 @@ export function CustomersPage() {
               }}
             >
               <h2 style={{ margin: 0, color: th.text }}>
-                {editing && !selected ? t.add : (form.name || selected?.name || '')}
+                {editing
+                  ? (form.name || (selected ? selected.name : t.add))
+                  : (selected?.name || '')}
               </h2>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {selected && !editing && isManager && (
                   <>
-                    <button onClick={() => { setForm({ ...selected }); setEditing(true); }} style={btnPrimary}>
+                    <button
+                      onClick={() => {
+                        setForm(customerToForm(selected));
+                        setEditing(true);
+                      }}
+                      style={btnPrimary}
+                    >
                       {t.edit}
                     </button>
                     {confirmDelete ? (
@@ -744,7 +806,7 @@ export function CustomersPage() {
                     <button
                       onClick={() => {
                         if (selected) {
-                          setForm({ ...selected });
+                          setForm(customerToForm(selected));
                           setEditing(false);
                         } else {
                           closeDetail();
@@ -941,7 +1003,10 @@ export function CustomersPage() {
 
                 {/* Contact add/edit form */}
                 {isManager && (
-                  <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: isDark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.02)' }}>
+                  <div style={{
+                    marginTop: 20, padding: 16, borderRadius: 10,
+                    background: isDark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.02)',
+                  }}>
                     <h4 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: th.text }}>
                       {editingContact ? t.edit : t.addContact}
                     </h4>
@@ -1009,9 +1074,7 @@ export function CustomersPage() {
             {tab === 'billing' && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
-                  <label style={labelStyle}>
-                    {t.paymentTerms}
-                  </label>
+                  <label style={labelStyle}>{t.paymentTerms}</label>
                   {editing ? (
                     <input
                       type="number"
