@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
+import { resolvePermissions, type Role } from '../../../shared/constants/roles';
 
 /* ─── types ─── */
 interface Machine {
@@ -143,7 +144,16 @@ export function MachinesPage() {
   const L = L_ALL[lang] || L_ALL.de;
   const { user, token } = useAuthStore();
   const API = import.meta.env.VITE_API_URL || '';
-  const isManager = user?.role === 'GLOBAL_MANAGER' || user?.role === 'LOCAL_MANAGER';
+
+  /* ── permissions from roles system ── */
+  const perms = useMemo(() => {
+    const role: Role = user?.role || 'EMPLOYEE';
+    return resolvePermissions(role, user?.custom_permissions);
+  }, [user]);
+
+  const canView = perms.has('machines.view');
+  const canEdit = perms.has('machines.edit');
+  const canDelete = perms.has('machines.delete');
 
   const statusLabel = (s: string) => {
     const map: Record<string, string> = {
@@ -371,6 +381,9 @@ export function MachinesPage() {
   const statInUse = machines.filter(m => m.status === 'IN_USE').length;
   const statMaint = machines.filter(m => m.status === 'MAINTENANCE').length;
 
+  /* ── if user has no view permission, render nothing ── */
+  if (!canView) return null;
+
   return (
     <div style={{ background: th.bg, minHeight: '100vh', padding: '24px 32px', color: th.text, fontFamily: "'Inter','Segoe UI',sans-serif" }}>
       {/* toast */}
@@ -393,7 +406,6 @@ export function MachinesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* CSV Toolbar – switches columns/data/handler based on active tab */}
           {tab === 'machines' && (
             <CsvToolbar
               columns={csvMachineColumns(L)}
@@ -406,7 +418,7 @@ export function MachinesPage() {
               validators={{
                 name: (v: string) => (v ? null : 'Name is required'),
               }}
-              canImport={isManager}
+              canImport={canEdit}
               onImport={handleMachineCsvImport}
             />
           )}
@@ -420,14 +432,14 @@ export function MachinesPage() {
               onImport={async () => {}}
             />
           )}
-          {isManager && tab === 'machines' && (
+          {canEdit && tab === 'machines' && (
             <button onClick={openNewMachine} style={{
               background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
               border: 'none', borderRadius: 10, padding: '12px 24px', fontWeight: 700,
               cursor: 'pointer', fontSize: 15, boxShadow: '0 4px 15px rgba(200,169,110,.4)',
             }}>+ {L.addMachine}</button>
           )}
-          {isManager && tab === 'allocations' && (
+          {canEdit && tab === 'allocations' && (
             <button onClick={openNewAlloc} style={{
               background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
               border: 'none', borderRadius: 10, padding: '12px 24px', fontWeight: 700,
@@ -475,13 +487,13 @@ export function MachinesPage() {
             )}
             {filteredMachines.map(m => (
               <div key={m.id}
-                onClick={() => isManager && openEditMachine(m)}
+                onClick={() => canEdit && openEditMachine(m)}
                 style={{
                   background: th.bgCard, borderRadius: 14, padding: 20,
-                  border: `1px solid ${th.border}`, cursor: isManager ? 'pointer' : 'default',
+                  border: `1px solid ${th.border}`, cursor: canEdit ? 'pointer' : 'default',
                   transition: 'all .15s', position: 'relative', overflow: 'hidden',
                 }}
-                onMouseEnter={e => { if (isManager) e.currentTarget.style.borderColor = gold; }}
+                onMouseEnter={e => { if (canEdit) e.currentTarget.style.borderColor = gold; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = th.border; }}
               >
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: statusColor(m.status) }} />
@@ -515,7 +527,7 @@ export function MachinesPage() {
                   );
                 })()}
 
-                {isManager && (
+                {canDelete && (
                   <div style={{ marginTop: 12, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                     {confirmDel === m.id ? (
                       <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
@@ -574,7 +586,7 @@ export function MachinesPage() {
                     <td style={{ padding: '10px 16px' }}>{a.end_time || '–'}</td>
                     <td style={{ padding: '10px 16px', color: th.textDim, fontSize: 13 }}>{a.notes || '–'}</td>
                     <td style={{ padding: '10px 16px' }}>
-                      {isManager && (
+                      {canDelete && (
                         <button onClick={() => deleteAlloc(a.id)}
                           style={{ background: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑</button>
                       )}

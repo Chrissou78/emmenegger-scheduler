@@ -1,1027 +1,1501 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useTheme } from '../contexts/themeContext';
-import { useAuthStore } from '../contexts/authStore';
-import { CsvToolbar } from '../components/CsvToolbar';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useTheme } from "../contexts/themeContext";
+import { useAuthStore } from "../contexts/authStore";
+import { CsvToolbar } from "../components/CsvToolbar";
+import {
+  ROLES,
+  ROLE_LABELS,
+  PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  resolvePermissions,
+  type Role,
+  type Permission,
+} from "../../../shared/constants/roles";
+import { RolePermissionMatrix } from "../components/RolePermissionMatrix";
 
-/* ─── types ─── */
+/* ───────────────────── API ───────────────────── */
+const API = import.meta.env.VITE_API_URL ?? "";
+
+/* ───────────────────── Types ───────────────────── */
 interface User {
   id: string;
   email: string;
   first_name: string;
-  last_name: string;
-  role: 'GLOBAL_MANAGER' | 'LOCAL_MANAGER' | 'ARBEITER';
+  last_name?: string;
+  role: Role;
   departments: string[];
-  phone?: string;
-  is_active: boolean;
-  manager_id?: string | null;
-  created_at: string;
+  is_active?: boolean;
+  custom_permissions?: { add?: Permission[]; remove?: Permission[] } | null;
+  // HR fields
+  entry_date?: string;
+  exit_date?: string;
+  contract_type?: string;
+  salary_type?: string;
+  salary_amount?: number;
+  work_pensum?: number;
+  hours_per_week?: number;
+  ahv_number?: string;
+  iban?: string;
+  nationality?: string;
+  permit_type?: string;
+  marital_status?: string;
+  children_count?: number;
+  canton?: string;
+  bvg_code?: string;
 }
-
 interface Customer {
   id: string;
   name: string;
-  address?: string;
-  city?: string;
-  zip?: string;
-  phone?: string;
+  company?: string;
   email?: string;
-  contact_person?: string;
+  phone?: string;
+  street?: string;
+  city?: string;
+  postal_code?: string;
+  country?: string;
+  type?: string;
+  status?: string;
   notes?: string;
-  created_at: string;
 }
-
 interface Machine {
   id: string;
   name: string;
-  category: string;
-  status: 'AVAILABLE' | 'IN_USE' | 'MAINTENANCE' | 'OUT_OF_SERVICE';
+  type?: string;
+  category?: string;
+  license_plate?: string;
+  status?: string;
+  department?: string;
   notes?: string;
-  created_at: string;
 }
-
 interface Task {
   id: string;
-  name: string;
-  short_code: string;
+  title: string;
   description?: string;
+  status?: string;
+  priority?: string;
+  department?: string;
+  assigned_to?: string;
   customer_id?: string;
-  status: string;
-  color_bg?: string;
-  color_text?: string;
-  recurrence_type?: string;
-  schedule_type?: string;
-  created_at: string;
+  start_date?: string;
+  end_date?: string;
+  notes?: string;
 }
 
+/* ───────────────────── Form types ───────────────────── */
 interface UserForm {
   email: string;
   first_name: string;
   last_name: string;
-  role: User['role'];
+  role: Role;
   departments: string[];
-  phone: string;
   password: string;
   is_active: boolean;
-  manager_id: string;
+  // HR fields
+  entry_date: string;
+  exit_date: string;
+  contract_type: string;
+  salary_type: string;
+  salary_amount: string;
+  work_pensum: string;
+  hours_per_week: string;
+  ahv_number: string;
+  iban: string;
+  nationality: string;
+  permit_type: string;
+  marital_status: string;
+  children_count: string;
+  canton: string;
+  bvg_code: string;
 }
-
 interface CustomerForm {
   name: string;
-  address: string;
-  city: string;
-  zip: string;
-  phone: string;
+  company: string;
   email: string;
-  contact_person: string;
+  phone: string;
+  street: string;
+  city: string;
+  postal_code: string;
+  country: string;
+  type: string;
+  status: string;
   notes: string;
 }
-
 interface MachineForm {
   name: string;
+  type: string;
   category: string;
-  status: Machine['status'];
+  license_plate: string;
+  status: string;
+  department: string;
+  notes: string;
+}
+interface TaskForm {
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  department: string;
+  assigned_to: string;
+  customer_id: string;
+  start_date: string;
+  end_date: string;
   notes: string;
 }
 
-interface TaskForm {
-  name: string;
-  short_code: string;
-  description: string;
-  customer_id: string;
-  status: string;
-  color_bg: string;
-  color_text: string;
-}
+/* ───────────────────── Empty form defaults ───────────────────── */
+const EMPTY_USER: UserForm = {
+  email: "", first_name: "", last_name: "", role: "EMPLOYEE",
+  departments: [], password: "", is_active: true,
+  entry_date: "", exit_date: "", contract_type: "PERMANENT",
+  salary_type: "MONTHLY", salary_amount: "", work_pensum: "100",
+  hours_per_week: "42.0", ahv_number: "", iban: "", nationality: "",
+  permit_type: "", marital_status: "", children_count: "0",
+  canton: "", bvg_code: "",
+};
+const EMPTY_CUSTOMER: CustomerForm = {
+  name: "", company: "", email: "", phone: "", street: "",
+  city: "", postal_code: "", country: "CH", type: "PRIVATE", status: "ACTIVE", notes: "",
+};
+const EMPTY_MACHINE: MachineForm = {
+  name: "", type: "", category: "", license_plate: "",
+  status: "AVAILABLE", department: "", notes: "",
+};
+const EMPTY_TASK: TaskForm = {
+  title: "", description: "", status: "OPEN", priority: "MEDIUM",
+  department: "", assigned_to: "", customer_id: "", start_date: "", end_date: "", notes: "",
+};
 
-const emptyUser: UserForm = { email: '', first_name: '', last_name: '', role: 'ARBEITER', departments: [], phone: '', password: '', is_active: true, manager_id: '' };
-const emptyCustomer: CustomerForm = { name: '', address: '', city: '', zip: '', phone: '', email: '', contact_person: '', notes: '' };
-const emptyMachine: MachineForm = { name: '', category: '', status: 'AVAILABLE', notes: '' };
-const emptyTask: TaskForm = { name: '', short_code: '', description: '', customer_id: '', status: 'ACTIVE', color_bg: '#C8A96E', color_text: '#ffffff' };
+/* ───────────────────── Option arrays ───────────────────── */
+const DEPARTMENTS = ["GARTEN_TIEFBAU", "UNTERHALT", "PIKETT", "ADMIN"];
+const MACHINE_STATUSES = ["AVAILABLE", "IN_USE", "MAINTENANCE", "DECOMMISSIONED"];
+const TASK_STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
+const MACHINE_CATEGORIES = [
+  "BAGGER", "DUMPER", "RADLADER", "WALZE", "KOMPRESSOR",
+  "GENERATOR", "FAHRZEUG", "WERKZEUG", "SONSTIGES",
+];
+const CONTRACT_TYPES = ["PERMANENT", "TEMPORARY", "APPRENTICE", "INTERN", "FREELANCE"];
+const SALARY_TYPES = ["MONTHLY", "HOURLY"];
+const MARITAL_STATUSES = ["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "REGISTERED_PARTNERSHIP"];
+const PERMIT_TYPES = ["", "B", "C", "G", "L", "F", "N", "S"];
+const SWISS_CANTONS = [
+  "AG","AI","AR","BE","BL","BS","FR","GE","GL","GR","JU","LU",
+  "NE","NW","OW","SG","SH","SO","SZ","TG","TI","UR","VD","VS","ZG","ZH",
+];
 
-const DEPT_OPTIONS = ['garten', 'unterhalt'];
-const ROLE_OPTIONS: User['role'][] = ['GLOBAL_MANAGER', 'LOCAL_MANAGER', 'ARBEITER'];
-const STATUS_OPTIONS: Machine['status'][] = ['AVAILABLE', 'IN_USE', 'MAINTENANCE', 'OUT_OF_SERVICE'];
-const TASK_STATUS = ['ACTIVE', 'INACTIVE', 'COMPLETED'];
-const MACHINE_CATEGORIES = ['Bagger', 'Dumper', 'Rasenmäher', 'Kettensäge', 'Heckenschere', 'Laubbläser', 'Transporter', 'Anhänger', 'Sonstiges'];
-
-const statusColor = (s: string): string => ({ AVAILABLE: '#4caf50', IN_USE: '#C8A96E', MAINTENANCE: '#ff9800', OUT_OF_SERVICE: '#f44336' }[s] || '#888');
-
-type Tab = 'users' | 'customers' | 'machines' | 'tasks';
-
-/* ─── multilingual labels ─── */
+/* ───────────────────── Translations ───────────────────── */
 const L_ALL: Record<string, Record<string, string>> = {
   de: {
-    admin: 'Administration', new: '+ Neu', search: 'Suchen…', save: 'Speichern', cancel: 'Abbrechen',
-    delete: 'Löschen', no: 'Nein', saved: 'Gespeichert', deleted: 'Gelöscht', error: 'Fehler', imported: 'importiert',
-    // tabs
-    users: 'Benutzer', customers: 'Kunden', machines: 'Maschinen', tasks: 'Aufträge',
-    noUsers: 'Keine Benutzer', noCustomers: 'Keine Kunden', noMachines: 'Keine Maschinen', noTasks: 'Keine Aufträge',
-    // user fields
-    firstName: 'Vorname', lastName: 'Nachname', email: 'E-Mail', phone: 'Telefon',
-    password: 'Passwort', passwordHint: '(leer = unverändert)', role: 'Rolle', departments: 'Abteilungen',
-    supervisor: 'Vorgesetzter', noSupervisor: 'Kein Vorgesetzter', status: 'Status',
-    active: 'Aktiv', inactive: 'Inaktiv', editUser: 'Benutzer bearbeiten', newUser: 'Neuer Benutzer',
-    allRoles: 'Alle Rollen', allDepartments: 'Alle Abteilungen', allTeams: 'Alle Teams', unassigned: 'Nicht zugewiesen',
-    // roles
-    globalManager: 'Global Manager', localManager: 'Lokal Manager', worker: 'Arbeiter',
-    // customer fields
-    companyName: 'Firmenname', contactPerson: 'Kontaktperson', address: 'Adresse', zip: 'PLZ', city: 'Ort',
-    notes: 'Notizen', editCustomer: 'Kunde bearbeiten', newCustomer: 'Neuer Kunde', tasksCount: 'Aufträge',
-    // machine fields
-    name: 'Name', category: 'Kategorie', allCategories: 'Alle Kategorien', allStatuses: 'Alle Status',
-    editMachine: 'Maschine bearbeiten', newMachine: 'Neue Maschine',
-    available: 'Verfügbar', inUse: 'In Gebrauch', maintenance: 'Wartung', outOfService: 'Ausser Betrieb',
-    // task fields
-    code: 'Code', customer: 'Kunde', noCustomer: '— Kein Kunde —', description: 'Beschreibung',
-    colors: 'Farben', bgColor: 'Hintergrund', textColor: 'Text', preview: 'Vorschau',
-    editTask: 'Auftrag bearbeiten', newTask: 'Neuer Auftrag',
-    // CSV
-    isActive: 'Aktiv', website: 'Website',
+    admin: "Administration", users: "Benutzer", customers: "Kunden",
+    machines: "Maschinen", tasks: "Aufgaben", search: "Suchen…",
+    newUser: "Neuer Benutzer", newCustomer: "Neuer Kunde",
+    newMachine: "Neue Maschine", newTask: "Neue Aufgabe",
+    save: "Speichern", cancel: "Abbrechen", delete: "Löschen",
+    confirmDelete: "Wirklich löschen?", yes: "Ja", no: "Nein",
+    email: "E-Mail", firstName: "Vorname", lastName: "Nachname",
+    role: "Rolle", departments: "Abteilungen", password: "Passwort",
+    active: "Aktiv", name: "Name", company: "Firma", phone: "Telefon",
+    street: "Strasse", city: "Ort", postalCode: "PLZ", country: "Land",
+    type: "Typ", status: "Status", notes: "Notizen", title: "Titel",
+    description: "Beschreibung", priority: "Priorität", assignedTo: "Zugewiesen an",
+    customer: "Kunde", startDate: "Startdatum", endDate: "Enddatum",
+    category: "Kategorie", licensePlate: "Kennzeichen", department: "Abteilung",
+    saved: "Gespeichert", deleted: "Gelöscht", error: "Fehler",
+    noResults: "Keine Ergebnisse", filter: "Filter",
+    // HR
+    hrInfo: "HR-Informationen", entryDate: "Eintrittsdatum", exitDate: "Austrittsdatum",
+    contractType: "Vertragsart", salaryType: "Lohnart", salaryAmount: "Lohn (CHF)",
+    workPensum: "Pensum (%)", hoursPerWeek: "Std/Woche", ahvNumber: "AHV-Nummer",
+    iban: "IBAN", nationality: "Nationalität", permitType: "Ausweis",
+    maritalStatus: "Zivilstand", childrenCount: "Kinder", canton: "Kanton",
+    bvgCode: "BVG-Code", permissions: "Berechtigungen",
+    permanent: "Festanstellung", temporary: "Temporär", apprentice: "Lernende/r",
+    intern: "Praktikant/in", freelance: "Freelance",
+    monthly: "Monatlich", hourly: "Stundenlohn",
   },
   en: {
-    admin: 'Administration', new: '+ New', search: 'Search…', save: 'Save', cancel: 'Cancel',
-    delete: 'Delete', no: 'No', saved: 'Saved', deleted: 'Deleted', error: 'Error', imported: 'imported',
-    users: 'Users', customers: 'Customers', machines: 'Machines', tasks: 'Tasks',
-    noUsers: 'No users', noCustomers: 'No customers', noMachines: 'No machines', noTasks: 'No tasks',
-    firstName: 'First Name', lastName: 'Last Name', email: 'Email', phone: 'Phone',
-    password: 'Password', passwordHint: '(empty = unchanged)', role: 'Role', departments: 'Departments',
-    supervisor: 'Supervisor', noSupervisor: 'No Supervisor', status: 'Status',
-    active: 'Active', inactive: 'Inactive', editUser: 'Edit User', newUser: 'New User',
-    allRoles: 'All Roles', allDepartments: 'All Departments', allTeams: 'All Teams', unassigned: 'Unassigned',
-    globalManager: 'Global Manager', localManager: 'Local Manager', worker: 'Worker',
-    companyName: 'Company Name', contactPerson: 'Contact Person', address: 'Address', zip: 'Postal Code', city: 'City',
-    notes: 'Notes', editCustomer: 'Edit Customer', newCustomer: 'New Customer', tasksCount: 'Tasks',
-    name: 'Name', category: 'Category', allCategories: 'All Categories', allStatuses: 'All Statuses',
-    editMachine: 'Edit Machine', newMachine: 'New Machine',
-    available: 'Available', inUse: 'In Use', maintenance: 'Maintenance', outOfService: 'Out of Service',
-    code: 'Code', customer: 'Customer', noCustomer: '— No Customer —', description: 'Description',
-    colors: 'Colors', bgColor: 'Background', textColor: 'Text', preview: 'Preview',
-    editTask: 'Edit Task', newTask: 'New Task',
-    isActive: 'Active', website: 'Website',
+    admin: "Administration", users: "Users", customers: "Customers",
+    machines: "Machines", tasks: "Tasks", search: "Search…",
+    newUser: "New User", newCustomer: "New Customer",
+    newMachine: "New Machine", newTask: "New Task",
+    save: "Save", cancel: "Cancel", delete: "Delete",
+    confirmDelete: "Really delete?", yes: "Yes", no: "No",
+    email: "Email", firstName: "First Name", lastName: "Last Name",
+    role: "Role", departments: "Departments", password: "Password",
+    active: "Active", name: "Name", company: "Company", phone: "Phone",
+    street: "Street", city: "City", postalCode: "Postal Code", country: "Country",
+    type: "Type", status: "Status", notes: "Notes", title: "Title",
+    description: "Description", priority: "Priority", assignedTo: "Assigned To",
+    customer: "Customer", startDate: "Start Date", endDate: "End Date",
+    category: "Category", licensePlate: "License Plate", department: "Department",
+    saved: "Saved", deleted: "Deleted", error: "Error",
+    noResults: "No results", filter: "Filter",
+    hrInfo: "HR Information", entryDate: "Entry Date", exitDate: "Exit Date",
+    contractType: "Contract Type", salaryType: "Salary Type", salaryAmount: "Salary (CHF)",
+    workPensum: "Pensum (%)", hoursPerWeek: "Hours/Week", ahvNumber: "AHV Number",
+    iban: "IBAN", nationality: "Nationality", permitType: "Permit",
+    maritalStatus: "Marital Status", childrenCount: "Children", canton: "Canton",
+    bvgCode: "BVG Code", permissions: "Permissions",
+    permanent: "Permanent", temporary: "Temporary", apprentice: "Apprentice",
+    intern: "Intern", freelance: "Freelance",
+    monthly: "Monthly", hourly: "Hourly",
   },
   fr: {
-    admin: 'Administration', new: '+ Nouveau', search: 'Rechercher…', save: 'Enregistrer', cancel: 'Annuler',
-    delete: 'Supprimer', no: 'Non', saved: 'Enregistré', deleted: 'Supprimé', error: 'Erreur', imported: 'importé(s)',
-    users: 'Utilisateurs', customers: 'Clients', machines: 'Machines', tasks: 'Tâches',
-    noUsers: 'Aucun utilisateur', noCustomers: 'Aucun client', noMachines: 'Aucune machine', noTasks: 'Aucune tâche',
-    firstName: 'Prénom', lastName: 'Nom', email: 'E-mail', phone: 'Téléphone',
-    password: 'Mot de passe', passwordHint: '(vide = inchangé)', role: 'Rôle', departments: 'Départements',
-    supervisor: 'Responsable', noSupervisor: 'Pas de responsable', status: 'Statut',
-    active: 'Actif', inactive: 'Inactif', editUser: 'Modifier utilisateur', newUser: 'Nouvel utilisateur',
-    allRoles: 'Tous les rôles', allDepartments: 'Tous les départements', allTeams: 'Toutes les équipes', unassigned: 'Non assigné',
-    globalManager: 'Manager Global', localManager: 'Manager Local', worker: 'Ouvrier',
-    companyName: 'Nom de l\'entreprise', contactPerson: 'Personne de contact', address: 'Adresse', zip: 'Code postal', city: 'Ville',
-    notes: 'Notes', editCustomer: 'Modifier client', newCustomer: 'Nouveau client', tasksCount: 'Tâches',
-    name: 'Nom', category: 'Catégorie', allCategories: 'Toutes catégories', allStatuses: 'Tous les statuts',
-    editMachine: 'Modifier machine', newMachine: 'Nouvelle machine',
-    available: 'Disponible', inUse: 'En service', maintenance: 'Maintenance', outOfService: 'Hors service',
-    code: 'Code', customer: 'Client', noCustomer: '— Pas de client —', description: 'Description',
-    colors: 'Couleurs', bgColor: 'Fond', textColor: 'Texte', preview: 'Aperçu',
-    editTask: 'Modifier tâche', newTask: 'Nouvelle tâche',
-    isActive: 'Actif', website: 'Site web',
+    admin: "Administration", users: "Utilisateurs", customers: "Clients",
+    machines: "Machines", tasks: "Tâches", search: "Rechercher…",
+    newUser: "Nouvel utilisateur", newCustomer: "Nouveau client",
+    newMachine: "Nouvelle machine", newTask: "Nouvelle tâche",
+    save: "Enregistrer", cancel: "Annuler", delete: "Supprimer",
+    confirmDelete: "Vraiment supprimer ?", yes: "Oui", no: "Non",
+    email: "E-mail", firstName: "Prénom", lastName: "Nom",
+    role: "Rôle", departments: "Départements", password: "Mot de passe",
+    active: "Actif", name: "Nom", company: "Entreprise", phone: "Téléphone",
+    street: "Rue", city: "Ville", postalCode: "Code postal", country: "Pays",
+    type: "Type", status: "Statut", notes: "Notes", title: "Titre",
+    description: "Description", priority: "Priorité", assignedTo: "Assigné à",
+    customer: "Client", startDate: "Date de début", endDate: "Date de fin",
+    category: "Catégorie", licensePlate: "Plaque", department: "Département",
+    saved: "Enregistré", deleted: "Supprimé", error: "Erreur",
+    noResults: "Aucun résultat", filter: "Filtre",
+    hrInfo: "Informations RH", entryDate: "Date d'entrée", exitDate: "Date de sortie",
+    contractType: "Type de contrat", salaryType: "Type de salaire", salaryAmount: "Salaire (CHF)",
+    workPensum: "Taux (%)", hoursPerWeek: "H/Semaine", ahvNumber: "Numéro AVS",
+    iban: "IBAN", nationality: "Nationalité", permitType: "Permis",
+    maritalStatus: "État civil", childrenCount: "Enfants", canton: "Canton",
+    bvgCode: "Code LPP", permissions: "Permissions",
+    permanent: "CDI", temporary: "CDD", apprentice: "Apprenti(e)",
+    intern: "Stagiaire", freelance: "Freelance",
+    monthly: "Mensuel", hourly: "Horaire",
   },
   pt: {
-    admin: 'Administração', new: '+ Novo', search: 'Pesquisar…', save: 'Salvar', cancel: 'Cancelar',
-    delete: 'Excluir', no: 'Não', saved: 'Salvo', deleted: 'Excluído', error: 'Erro', imported: 'importado(s)',
-    users: 'Utilizadores', customers: 'Clientes', machines: 'Máquinas', tasks: 'Tarefas',
-    noUsers: 'Sem utilizadores', noCustomers: 'Sem clientes', noMachines: 'Sem máquinas', noTasks: 'Sem tarefas',
-    firstName: 'Nome', lastName: 'Apelido', email: 'E-mail', phone: 'Telefone',
-    password: 'Senha', passwordHint: '(vazio = inalterado)', role: 'Função', departments: 'Departamentos',
-    supervisor: 'Supervisor', noSupervisor: 'Sem supervisor', status: 'Estado',
-    active: 'Ativo', inactive: 'Inativo', editUser: 'Editar utilizador', newUser: 'Novo utilizador',
-    allRoles: 'Todas as funções', allDepartments: 'Todos os departamentos', allTeams: 'Todas as equipas', unassigned: 'Não atribuído',
-    globalManager: 'Gestor Global', localManager: 'Gestor Local', worker: 'Trabalhador',
-    companyName: 'Nome da empresa', contactPerson: 'Pessoa de contacto', address: 'Morada', zip: 'Código postal', city: 'Cidade',
-    notes: 'Notas', editCustomer: 'Editar cliente', newCustomer: 'Novo cliente', tasksCount: 'Tarefas',
-    name: 'Nome', category: 'Categoria', allCategories: 'Todas categorias', allStatuses: 'Todos os estados',
-    editMachine: 'Editar máquina', newMachine: 'Nova máquina',
-    available: 'Disponível', inUse: 'Em uso', maintenance: 'Manutenção', outOfService: 'Fora de serviço',
-    code: 'Código', customer: 'Cliente', noCustomer: '— Sem cliente —', description: 'Descrição',
-    colors: 'Cores', bgColor: 'Fundo', textColor: 'Texto', preview: 'Pré-visualização',
-    editTask: 'Editar tarefa', newTask: 'Nova tarefa',
-    isActive: 'Ativo', website: 'Website',
+    admin: "Administração", users: "Utilizadores", customers: "Clientes",
+    machines: "Máquinas", tasks: "Tarefas", search: "Pesquisar…",
+    newUser: "Novo Utilizador", newCustomer: "Novo Cliente",
+    newMachine: "Nova Máquina", newTask: "Nova Tarefa",
+    save: "Guardar", cancel: "Cancelar", delete: "Eliminar",
+    confirmDelete: "Eliminar mesmo?", yes: "Sim", no: "Não",
+    email: "E-mail", firstName: "Nome", lastName: "Apelido",
+    role: "Função", departments: "Departamentos", password: "Palavra-passe",
+    active: "Ativo", name: "Nome", company: "Empresa", phone: "Telefone",
+    street: "Rua", city: "Cidade", postalCode: "Código Postal", country: "País",
+    type: "Tipo", status: "Estado", notes: "Notas", title: "Título",
+    description: "Descrição", priority: "Prioridade", assignedTo: "Atribuído a",
+    customer: "Cliente", startDate: "Data de Início", endDate: "Data de Fim",
+    category: "Categoria", licensePlate: "Matrícula", department: "Departamento",
+    saved: "Guardado", deleted: "Eliminado", error: "Erro",
+    noResults: "Sem resultados", filter: "Filtro",
+    hrInfo: "Informações RH", entryDate: "Data de Entrada", exitDate: "Data de Saída",
+    contractType: "Tipo de Contrato", salaryType: "Tipo de Salário", salaryAmount: "Salário (CHF)",
+    workPensum: "Taxa (%)", hoursPerWeek: "H/Semana", ahvNumber: "Número AHV",
+    iban: "IBAN", nationality: "Nacionalidade", permitType: "Autorização",
+    maritalStatus: "Estado Civil", childrenCount: "Filhos", canton: "Cantão",
+    bvgCode: "Código BVG", permissions: "Permissões",
+    permanent: "Permanente", temporary: "Temporário", apprentice: "Aprendiz",
+    intern: "Estagiário", freelance: "Freelance",
+    monthly: "Mensal", hourly: "Por hora",
   },
 };
 
-/* ─── CSV column definitions ─── */
-const csvUserColumns = (L: Record<string, string>) => [
-  { key: 'first_name', label: L.firstName },
-  { key: 'last_name', label: L.lastName },
-  { key: 'email', label: L.email },
-  { key: 'role', label: L.role },
-  { key: 'departments', label: L.departments },
-  { key: 'phone', label: L.phone },
-  { key: 'is_active', label: L.isActive },
+/* ───────────────────── CSV Definitions ───────────────────── */
+const csvColumnsUsers = (t: Record<string, string>) => [
+  { key: "email", label: t.email },
+  { key: "first_name", label: t.firstName },
+  { key: "last_name", label: t.lastName },
+  { key: "role", label: t.role },
+  { key: "departments", label: t.departments },
+];
+const csvColumnsCustomers = (t: Record<string, string>) => [
+  { key: "name", label: t.name },
+  { key: "company", label: t.company },
+  { key: "email", label: t.email },
+  { key: "phone", label: t.phone },
+  { key: "city", label: t.city },
+];
+const csvColumnsMachines = (t: Record<string, string>) => [
+  { key: "name", label: t.name },
+  { key: "category", label: t.category },
+  { key: "license_plate", label: t.licensePlate },
+  { key: "status", label: t.status },
+];
+const csvColumnsTasks = (t: Record<string, string>) => [
+  { key: "title", label: t.title },
+  { key: "status", label: t.status },
+  { key: "priority", label: t.priority },
+  { key: "department", label: t.department },
 ];
 
-const csvCustomerColumns = (L: Record<string, string>) => [
-  { key: 'name', label: L.name },
-  { key: 'contact_person', label: L.contactPerson },
-  { key: 'email', label: L.email },
-  { key: 'phone', label: L.phone },
-  { key: 'address', label: L.address },
-  { key: 'zip', label: L.zip },
-  { key: 'city', label: L.city },
-  { key: 'notes', label: L.notes },
+const CSV_EXAMPLE_USERS = [
+  { email: "max@example.ch", first_name: "Max", last_name: "Muster", role: "EMPLOYEE", departments: "GARTEN_TIEFBAU" },
+];
+const CSV_EXAMPLE_CUSTOMERS = [
+  { name: "Muster AG", company: "Muster AG", email: "info@muster.ch", phone: "+41 31 000 0000", city: "Bern" },
+];
+const CSV_EXAMPLE_MACHINES = [
+  { name: "CAT 320", category: "BAGGER", license_plate: "BE 12345", status: "AVAILABLE" },
+];
+const CSV_EXAMPLE_TASKS = [
+  { title: "Gartenanlage", status: "OPEN", priority: "HIGH", department: "GARTEN_TIEFBAU" },
 ];
 
-const csvMachineColumns = (L: Record<string, string>) => [
-  { key: 'name', label: L.name },
-  { key: 'category', label: L.category },
-  { key: 'status', label: L.status },
-  { key: 'notes', label: L.notes },
-];
+/* ───────────────────── Helpers ───────────────────── */
+const statusColor = (s: string): string => {
+  const m: Record<string, string> = {
+    ACTIVE: "#22c55e", AVAILABLE: "#22c55e", OPEN: "#3b82f6",
+    IN_USE: "#f59e0b", IN_PROGRESS: "#f59e0b", MAINTENANCE: "#ef4444",
+    COMPLETED: "#22c55e", CANCELLED: "#6b7280", DECOMMISSIONED: "#6b7280",
+    INACTIVE: "#6b7280", LEAD: "#8b5cf6", PROSPECT: "#06b6d4",
+  };
+  return m[s] || "#6b7280";
+};
 
-const csvTaskColumns = (L: Record<string, string>) => [
-  { key: 'short_code', label: L.code },
-  { key: 'name', label: L.name },
-  { key: 'description', label: L.description },
-  { key: 'customer_name', label: L.customer },
-  { key: 'status', label: L.status },
-  { key: 'color_bg', label: L.bgColor },
-  { key: 'color_text', label: L.textColor },
-];
+/* ═══════════════════════════════════════════════════
+   COMPONENT
+   ═══════════════════════════════════════════════════ */
+export default function AdminPage() {
+  const { th, isDark, lang } = useTheme();
+  const { token, user } = useAuthStore();
+  const t = L_ALL[lang] ?? L_ALL.de;
 
-/* ─── CSV example rows ─── */
-const CSV_USER_EXAMPLES = [
-  { first_name: 'Max', last_name: 'Müller', email: 'max.mueller@example.ch', role: 'ARBEITER', departments: 'garten', phone: '+41 79 123 45 67', is_active: 'true' },
-  { first_name: 'Lena', last_name: 'Weber', email: 'lena.weber@example.ch', role: 'LOCAL_MANAGER', departments: 'garten,unterhalt', phone: '+41 79 987 65 43', is_active: 'true' },
-];
+  /* ── Permissions ── */
+  const perms = useMemo(() => {
+    const role: Role = user?.role || "EMPLOYEE";
+    return resolvePermissions(role, user?.custom_permissions);
+  }, [user]);
 
-const CSV_CUSTOMER_EXAMPLES = [
-  { name: 'Müller Hans', contact_person: 'Hans Müller', email: 'hans@example.ch', phone: '+41 44 111 22 33', address: 'Bahnhofstrasse 12', zip: '8001', city: 'Zürich', notes: 'Stammkunde' },
-  { name: 'GreenScape AG', contact_person: 'Petra Meier', email: 'info@greenscape.ch', phone: '+41 31 444 55 66', address: 'Industriestrasse 5', zip: '3000', city: 'Bern', notes: '' },
-];
+  const canManageUsers = perms.has("admin.users" as Permission);
+  const canManageCustomers = perms.has("admin.customers" as Permission) || perms.has("customers.edit" as Permission);
+  const canManageMachines = perms.has("admin.machines" as Permission) || perms.has("machines.edit" as Permission);
+  const canManageTasks = perms.has("admin.tasks" as Permission) || perms.has("tasks.edit" as Permission);
+  const canManageRoles = perms.has("admin.roles" as Permission);
+  const canViewHR = perms.has("hr.view" as Permission);
+  const canEditHR = perms.has("hr.edit" as Permission);
 
-const CSV_MACHINE_EXAMPLES = [
-  { name: 'CAT 308', category: 'Bagger', status: 'AVAILABLE', notes: '8t Minibagger, GPS' },
-  { name: 'Husqvarna 550XP', category: 'Kettensäge', status: 'IN_USE', notes: 'Neuanschaffung 2025' },
-];
-
-const CSV_TASK_EXAMPLES = [
-  { short_code: 'gm', name: 'Gartenarbeit Müller', description: 'Rasenpflege und Hecken', customer_name: 'Müller Hans', status: 'ACTIVE', color_bg: '#8B7355', color_text: '#ffffff' },
-  { short_code: 'lp', name: 'Unterhalt Lindenpark', description: 'Wöchentliche Grünpflege', customer_name: '', status: 'ACTIVE', color_bg: '#4A6741', color_text: '#ffffff' },
-];
-
-export function AdminPage() {
-  const { isDark, th, lang } = useTheme();
-  const { user: authUser, token } = useAuthStore();
-  const L = L_ALL[lang] || L_ALL.de;
-  const API = import.meta.env.VITE_API_URL || '';
-  const isGlobal = (authUser?.role || '').toUpperCase() === 'GLOBAL_MANAGER';
-  const isManager = isGlobal || (authUser?.role || '').toUpperCase() === 'LOCAL_MANAGER';
-
-  /* language-aware helpers (inside component so they read current L) */
-  const roleLabel = (r: string) =>
-    r === 'GLOBAL_MANAGER' ? L.globalManager : r === 'LOCAL_MANAGER' ? L.localManager : L.worker;
-
-  const statusLabel = (s: string): string => ({
-    AVAILABLE: L.available, IN_USE: L.inUse, MAINTENANCE: L.maintenance, OUT_OF_SERVICE: L.outOfService,
-  }[s] || s);
-
-  /* ─── state ─── */
-  const [tab, setTab] = useState<Tab>('users');
-  const [search, setSearch] = useState('');
-  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+  /* ── State ── */
+  const [tab, setTab] = useState<"users" | "customers" | "machines" | "tasks">("users");
+  const [search, setSearch] = useState("");
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [modalType, setModalType] = useState<Tab | null>(null);
+  const [modal, setModal] = useState<null | "user" | "customer" | "machine" | "task">(null);
   const [editId, setEditId] = useState<string | null>(null);
-  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [confirmDel, setConfirmDel] = useState<{ type: string; id: string } | null>(null);
+  const [userFormTab, setUserFormTab] = useState<"general" | "hr" | "permissions">("general");
 
   const [users, setUsers] = useState<User[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
 
-  const [userForm, setUserForm] = useState<UserForm>({ ...emptyUser });
-  const [custForm, setCustForm] = useState<CustomerForm>({ ...emptyCustomer });
-  const [machForm, setMachForm] = useState<MachineForm>({ ...emptyMachine });
-  const [taskForm, setTaskForm] = useState<TaskForm>({ ...emptyTask });
+  const [userForm, setUserForm] = useState<UserForm>({ ...EMPTY_USER });
+  const [customerForm, setCustomerForm] = useState<CustomerForm>({ ...EMPTY_CUSTOMER });
+  const [machineForm, setMachineForm] = useState<MachineForm>({ ...EMPTY_MACHINE });
+  const [taskForm, setTaskForm] = useState<TaskForm>({ ...EMPTY_TASK });
 
-  const [filterDept, setFilterDept] = useState('');
-  const [filterRole, setFilterRole] = useState('');
-  const [filterManager, setFilterManager] = useState('');
-  const [filterMachCat, setFilterMachCat] = useState('');
-  const [filterMachStatus, setFilterMachStatus] = useState('');
-  const [filterTaskStatus, setFilterTaskStatus] = useState('');
+  const [filterRole, setFilterRole] = useState("");
+  const [filterDept, setFilterDept] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
 
-  /* ─── helpers ─── */
-  const hdrs = useCallback(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
-  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
-    setToast({ msg, type });
+  const [userCustomPerms, setUserCustomPerms] = useState<{ add: Permission[]; remove: Permission[] }>({ add: [], remove: [] });
+
+  const gold = th.gold;
+
+  /* ── Headers ── */
+  const headers = useCallback(
+    () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
+    [token],
+  );
+
+  /* ── Show toast ── */
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
     setTimeout(() => setToast(null), 3000);
   };
-  const gold = th.gold;
-  const inputBg = isDark ? '#1a1a3e' : '#faf7f2';
-  const hoverBg = isDark ? '#1e2a4a' : '#faf7f2';
-  const dangerBg = '#6B3A3A';
-  const successBg = isDark ? '#2a4a2a' : '#e8f5e9';
 
-  /* ─── fetch all ─── */
+  /* ── Fetchers ── */
   const fetchUsers = useCallback(async () => {
-    try { const r = await fetch(`${API}/api/v1/users`, { headers: hdrs() }); const { data } = await r.json(); setUsers(data || []); } catch { }
-  }, [API, hdrs]);
+    try {
+      const r = await fetch(`${API}/api/v1/users`, { headers: headers() });
+      const j = await r.json();
+      setUsers(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
+
   const fetchCustomers = useCallback(async () => {
-    try { const r = await fetch(`${API}/api/v1/customers`, { headers: hdrs() }); const { data } = await r.json(); setCustomers(data || []); } catch { }
-  }, [API, hdrs]);
+    try {
+      const r = await fetch(`${API}/api/v1/customers`, { headers: headers() });
+      const j = await r.json();
+      setCustomers(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
+
   const fetchMachines = useCallback(async () => {
-    try { const r = await fetch(`${API}/api/v1/machines`, { headers: hdrs() }); const { data } = await r.json(); setMachines(data || []); } catch { }
-  }, [API, hdrs]);
+    try {
+      const r = await fetch(`${API}/api/v1/machines`, { headers: headers() });
+      const j = await r.json();
+      setMachines(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
+
   const fetchTasks = useCallback(async () => {
-    try { const r = await fetch(`${API}/api/v1/tasks`, { headers: hdrs() }); const { data } = await r.json(); setTasks(data || []); } catch { }
-  }, [API, hdrs]);
+    try {
+      const r = await fetch(`${API}/api/v1/tasks`, { headers: headers() });
+      const j = await r.json();
+      setTasks(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
 
-  useEffect(() => { fetchUsers(); fetchCustomers(); fetchMachines(); fetchTasks(); }, [fetchUsers, fetchCustomers, fetchMachines, fetchTasks]);
+  useEffect(() => {
+    fetchUsers();
+    fetchCustomers();
+    fetchMachines();
+    fetchTasks();
+  }, [fetchUsers, fetchCustomers, fetchMachines, fetchTasks]);
 
-  /* ─── derived ─── */
-  const localManagers = users.filter(u => u.role === 'LOCAL_MANAGER');
-  const managerName = (id: string | null | undefined) => {
-    if (!id) return '—';
-    const m = users.find(u => u.id === id);
-    return m ? `${m.first_name} ${m.last_name}` : '—';
+  /* ── Label helpers ── */
+  const roleLabel = (r: string) => ROLE_LABELS[lang]?.[r as Role] ?? r;
+  const deptLabel = (d: string) => d.replace(/_/g, " ");
+  const managerName = (id: string) => {
+    const u = users.find((x) => x.id === id);
+    return u ? `${u.first_name} ${u.last_name ?? ""}`.trim() : id;
   };
-  const customerName = (id: string | undefined) => {
-    if (!id) return '—';
-    const c = customers.find(c => c.id === id);
-    return c ? c.name : '—';
+  const customerName = (id: string) => {
+    const c = customers.find((x) => x.id === id);
+    return c ? c.name : id;
   };
 
-  /* ─── filtered data ─── */
-  const q = search.toLowerCase();
-  const filteredUsers = users.filter(u => {
-    const ms = !q || `${u.first_name} ${u.last_name} ${u.email}`.toLowerCase().includes(q);
-    const md = !filterDept || (u.departments || []).includes(filterDept);
-    const mr = !filterRole || u.role === filterRole;
-    const mm = !filterManager || (filterManager === 'unassigned' ? !u.manager_id : u.manager_id === filterManager);
-    return ms && md && mr && mm;
-  });
-  const filteredCustomers = customers.filter(c => !q || `${c.name} ${c.city || ''} ${c.contact_person || ''}`.toLowerCase().includes(q));
-  const filteredMachines = machines.filter(m => {
-    const ms = !q || `${m.name} ${m.category || ''}`.toLowerCase().includes(q);
-    const mc = !filterMachCat || m.category === filterMachCat;
-    const mst = !filterMachStatus || m.status === filterMachStatus;
-    return ms && mc && mst;
-  });
-  const filteredTasks = tasks.filter(t => {
-    const ms = !q || `${t.name} ${t.short_code}`.toLowerCase().includes(q);
-    const mst = !filterTaskStatus || t.status === filterTaskStatus;
-    return ms && mst;
-  });
-
-  /* ─── CSV export memos ─── */
-  const csvUserData = useMemo(() => filteredUsers.map(u => ({
-    first_name: u.first_name,
-    last_name: u.last_name,
-    email: u.email,
-    role: u.role,
-    departments: (u.departments || []).join(','),
-    phone: u.phone || '',
-    is_active: String(u.is_active !== false),
-  })), [filteredUsers]);
-
-  const csvCustomerData = useMemo(() => filteredCustomers.map(c => ({
-    name: c.name,
-    contact_person: c.contact_person || '',
-    email: c.email || '',
-    phone: c.phone || '',
-    address: c.address || '',
-    zip: c.zip || '',
-    city: c.city || '',
-    notes: c.notes || '',
-  })), [filteredCustomers]);
-
-  const csvMachineData = useMemo(() => filteredMachines.map(m => ({
-    name: m.name,
-    category: m.category || '',
-    status: m.status,
-    notes: m.notes || '',
-  })), [filteredMachines]);
-
-  const csvTaskData = useMemo(() => filteredTasks.map(t => ({
-    short_code: t.short_code,
-    name: t.name,
-    description: t.description || '',
-    customer_name: customerName(t.customer_id),
-    status: t.status,
-    color_bg: t.color_bg || '#C8A96E',
-    color_text: t.color_text || '#ffffff',
-  })), [filteredTasks, customers]);
-
-  /* ─── CSV import handlers ─── */
-  async function handleUserImport(rows: Record<string, string>[]) {
-    let ok = 0, fail = 0;
-    for (const row of rows) {
-      try {
-        const body: any = {
-          first_name: row.first_name,
-          last_name: row.last_name,
-          email: row.email,
-          role: ROLE_OPTIONS.includes(row.role as User['role']) ? row.role : 'ARBEITER',
-          departments: row.departments ? row.departments.split(',').map(d => d.trim()).filter(Boolean) : [],
-          phone: row.phone || undefined,
-          is_active: row.is_active !== 'false',
-          password: 'Temp1234!',
-        };
-        const res = await fetch(`${API}/api/v1/users`, { method: 'POST', headers: hdrs(), body: JSON.stringify(body) });
-        res.ok ? ok++ : fail++;
-      } catch { fail++; }
+  /* ── Filtering ── */
+  const filteredUsers = useMemo(() => {
+    let list = users;
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (u) =>
+          u.first_name.toLowerCase().includes(s) ||
+          (u.last_name ?? "").toLowerCase().includes(s) ||
+          u.email.toLowerCase().includes(s),
+      );
     }
-    await fetchUsers();
-    showToast(`${ok} ${L.imported}${fail > 0 ? ` (${fail} failed)` : ''}`, fail > 0 ? 'err' : 'ok');
-  }
+    if (filterRole) list = list.filter((u) => u.role === filterRole);
+    if (filterDept) list = list.filter((u) => u.departments?.includes(filterDept));
+    return list;
+  }, [users, search, filterRole, filterDept]);
 
-  async function handleCustomerImport(rows: Record<string, string>[]) {
-    let ok = 0, fail = 0;
+  const filteredCustomers = useMemo(() => {
+    let list = customers;
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(s) ||
+          (c.company ?? "").toLowerCase().includes(s) ||
+          (c.email ?? "").toLowerCase().includes(s),
+      );
+    }
+    if (filterStatus) list = list.filter((c) => c.status === filterStatus);
+    return list;
+  }, [customers, search, filterStatus]);
+
+  const filteredMachines = useMemo(() => {
+    let list = machines;
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (m) =>
+          m.name.toLowerCase().includes(s) ||
+          (m.license_plate ?? "").toLowerCase().includes(s),
+      );
+    }
+    if (filterStatus) list = list.filter((m) => m.status === filterStatus);
+    if (filterCategory) list = list.filter((m) => m.category === filterCategory);
+    return list;
+  }, [machines, search, filterStatus, filterCategory]);
+
+  const filteredTasks = useMemo(() => {
+    let list = tasks;
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.title.toLowerCase().includes(s) ||
+          (t.description ?? "").toLowerCase().includes(s),
+      );
+    }
+    if (filterStatus) list = list.filter((t) => t.status === filterStatus);
+    if (filterDept) list = list.filter((t) => t.department === filterDept);
+    return list;
+  }, [tasks, search, filterStatus, filterDept]);
+
+  /* ── CSV data ── */
+  const csvData = useMemo(() => {
+    if (tab === "users") return filteredUsers.map((u) => ({
+      email: u.email, first_name: u.first_name, last_name: u.last_name ?? "",
+      role: u.role, departments: u.departments?.join(", ") ?? "",
+    }));
+    if (tab === "customers") return filteredCustomers.map((c) => ({
+      name: c.name, company: c.company ?? "", email: c.email ?? "",
+      phone: c.phone ?? "", city: c.city ?? "",
+    }));
+    if (tab === "machines") return filteredMachines.map((m) => ({
+      name: m.name, category: m.category ?? "", license_plate: m.license_plate ?? "",
+      status: m.status ?? "",
+    }));
+    return filteredTasks.map((t) => ({
+      title: t.title, status: t.status ?? "", priority: t.priority ?? "",
+      department: t.department ?? "",
+    }));
+  }, [tab, filteredUsers, filteredCustomers, filteredMachines, filteredTasks]);
+
+  /* ── CSV import handlers ── */
+  const handleCsvImport = async (rows: Record<string, string>[]) => {
+    const endpoint =
+      tab === "users" ? "users" :
+      tab === "customers" ? "customers" :
+      tab === "machines" ? "machines" : "tasks";
+    let ok = 0;
     for (const row of rows) {
       try {
-        const res = await fetch(`${API}/api/v1/customers`, {
-          method: 'POST', headers: hdrs(),
-          body: JSON.stringify({
-            name: row.name,
-            contact_person: row.contact_person || undefined,
-            email: row.email || undefined,
-            phone: row.phone || undefined,
-            address: row.address || undefined,
-            zip: row.zip || undefined,
-            city: row.city || undefined,
-            notes: row.notes || undefined,
-          }),
+        const body = tab === "users"
+          ? { ...row, departments: row.departments ? row.departments.split(",").map((d: string) => d.trim()) : [] }
+          : row;
+        const r = await fetch(`${API}/api/v1/${endpoint}`, {
+          method: "POST", headers: headers(), body: JSON.stringify(body),
         });
-        res.ok ? ok++ : fail++;
-      } catch { fail++; }
+        if (r.ok) ok++;
+      } catch { /* skip */ }
     }
-    await fetchCustomers();
-    showToast(`${ok} ${L.imported}${fail > 0 ? ` (${fail} failed)` : ''}`, fail > 0 ? 'err' : 'ok');
-  }
+    showToast(`${ok}/${rows.length} imported`);
+    if (tab === "users") fetchUsers();
+    if (tab === "customers") fetchCustomers();
+    if (tab === "machines") fetchMachines();
+    if (tab === "tasks") fetchTasks();
+  };
 
-  async function handleMachineImport(rows: Record<string, string>[]) {
-    let ok = 0, fail = 0;
-    for (const row of rows) {
-      try {
-        const res = await fetch(`${API}/api/v1/machines`, {
-          method: 'POST', headers: hdrs(),
-          body: JSON.stringify({
-            name: row.name,
-            category: row.category || 'Sonstiges',
-            status: STATUS_OPTIONS.includes(row.status as Machine['status']) ? row.status : 'AVAILABLE',
-            notes: row.notes || '',
-          }),
-        });
-        res.ok ? ok++ : fail++;
-      } catch { fail++; }
-    }
-    await fetchMachines();
-    showToast(`${ok} ${L.imported}${fail > 0 ? ` (${fail} failed)` : ''}`, fail > 0 ? 'err' : 'ok');
-  }
+  /* ── Open modal for create/edit ── */
+  const openCreateUser = () => {
+    setUserForm({ ...EMPTY_USER });
+    setUserCustomPerms({ add: [], remove: [] });
+    setEditId(null);
+    setUserFormTab("general");
+    setModal("user");
+  };
+  const openEditUser = (u: User) => {
+    setUserForm({
+      email: u.email,
+      first_name: u.first_name,
+      last_name: u.last_name ?? "",
+      role: u.role,
+      departments: u.departments ?? [],
+      password: "",
+      is_active: u.is_active !== false,
+      entry_date: u.entry_date ?? "",
+      exit_date: u.exit_date ?? "",
+      contract_type: u.contract_type ?? "PERMANENT",
+      salary_type: u.salary_type ?? "MONTHLY",
+      salary_amount: u.salary_amount != null ? String(u.salary_amount) : "",
+      work_pensum: u.work_pensum != null ? String(u.work_pensum) : "100",
+      hours_per_week: u.hours_per_week != null ? String(u.hours_per_week) : "42.0",
+      ahv_number: u.ahv_number ?? "",
+      iban: u.iban ?? "",
+      nationality: u.nationality ?? "",
+      permit_type: u.permit_type ?? "",
+      marital_status: u.marital_status ?? "",
+      children_count: u.children_count != null ? String(u.children_count) : "0",
+      canton: u.canton ?? "",
+      bvg_code: u.bvg_code ?? "",
+    });
+    setUserCustomPerms({
+      add: u.custom_permissions?.add ?? [],
+      remove: u.custom_permissions?.remove ?? [],
+    });
+    setEditId(u.id);
+    setUserFormTab("general");
+    setModal("user");
+  };
+  const openCreateCustomer = () => { setCustomerForm({ ...EMPTY_CUSTOMER }); setEditId(null); setModal("customer"); };
+  const openEditCustomer = (c: Customer) => {
+    setCustomerForm({
+      name: c.name, company: c.company ?? "", email: c.email ?? "",
+      phone: c.phone ?? "", street: c.street ?? "", city: c.city ?? "",
+      postal_code: c.postal_code ?? "", country: c.country ?? "CH",
+      type: c.type ?? "PRIVATE", status: c.status ?? "ACTIVE", notes: c.notes ?? "",
+    });
+    setEditId(c.id); setModal("customer");
+  };
+  const openCreateMachine = () => { setMachineForm({ ...EMPTY_MACHINE }); setEditId(null); setModal("machine"); };
+  const openEditMachine = (m: Machine) => {
+    setMachineForm({
+      name: m.name, type: m.type ?? "", category: m.category ?? "",
+      license_plate: m.license_plate ?? "", status: m.status ?? "AVAILABLE",
+      department: m.department ?? "", notes: m.notes ?? "",
+    });
+    setEditId(m.id); setModal("machine");
+  };
+  const openCreateTask = () => { setTaskForm({ ...EMPTY_TASK }); setEditId(null); setModal("task"); };
+  const openEditTask = (tk: Task) => {
+    setTaskForm({
+      title: tk.title, description: tk.description ?? "", status: tk.status ?? "OPEN",
+      priority: tk.priority ?? "MEDIUM", department: tk.department ?? "",
+      assigned_to: tk.assigned_to ?? "", customer_id: tk.customer_id ?? "",
+      start_date: tk.start_date ?? "", end_date: tk.end_date ?? "", notes: tk.notes ?? "",
+    });
+    setEditId(tk.id); setModal("task");
+  };
 
-  async function handleTaskImport(rows: Record<string, string>[]) {
-    let ok = 0, fail = 0;
-    for (const row of rows) {
-      try {
-        const res = await fetch(`${API}/api/v1/tasks`, {
-          method: 'POST', headers: hdrs(),
-          body: JSON.stringify({
-            name: row.name,
-            short_code: row.short_code,
-            description: row.description || undefined,
-            status: TASK_STATUS.includes(row.status) ? row.status : 'ACTIVE',
-            color_bg: row.color_bg || '#C8A96E',
-            color_text: row.color_text || '#ffffff',
-          }),
-        });
-        res.ok ? ok++ : fail++;
-      } catch { fail++; }
-    }
-    await fetchTasks();
-    showToast(`${ok} ${L.imported}${fail > 0 ? ` (${fail} failed)` : ''}`, fail > 0 ? 'err' : 'ok');
-  }
-
-  /* ─── open modals ─── */
-  const openNewUser = () => { setEditId(null); setUserForm({ ...emptyUser, manager_id: !isGlobal && authUser?.id ? authUser.id : '' }); setModalType('users'); };
-  const openEditUser = (u: User) => { setEditId(u.id); setUserForm({ email: u.email, first_name: u.first_name, last_name: u.last_name, role: u.role, departments: u.departments || [], phone: u.phone || '', password: '', is_active: u.is_active !== false, manager_id: u.manager_id || '' }); setModalType('users'); };
-
-  const openNewCustomer = () => { setEditId(null); setCustForm({ ...emptyCustomer }); setModalType('customers'); };
-  const openEditCustomer = (c: Customer) => { setEditId(c.id); setCustForm({ name: c.name, address: c.address || '', city: c.city || '', zip: c.zip || '', phone: c.phone || '', email: c.email || '', contact_person: c.contact_person || '', notes: c.notes || '' }); setModalType('customers'); };
-
-  const openNewMachine = () => { setEditId(null); setMachForm({ ...emptyMachine }); setModalType('machines'); };
-  const openEditMachine = (m: Machine) => { setEditId(m.id); setMachForm({ name: m.name, category: m.category || '', status: m.status, notes: m.notes || '' }); setModalType('machines'); };
-
-  const openNewTask = () => { setEditId(null); setTaskForm({ ...emptyTask }); setModalType('tasks'); };
-  const openEditTask = (t: Task) => { setEditId(t.id); setTaskForm({ name: t.name, short_code: t.short_code || '', description: t.description || '', customer_id: t.customer_id || '', status: t.status || 'ACTIVE', color_bg: t.color_bg || '#C8A96E', color_text: t.color_text || '#ffffff' }); setModalType('tasks'); };
-
-  /* ─── save / delete generics ─── */
-  const saveEntity = async (endpoint: string, body: any, refresh: () => void) => {
+  /* ── Save ── */
+  const saveEntity = async (type: string, body: Record<string, unknown>, id: string | null) => {
+    const endpoint =
+      type === "user" ? "users" :
+      type === "customer" ? "customers" :
+      type === "machine" ? "machines" : "tasks";
     setSaving(true);
     try {
-      const url = editId ? `${API}/api/v1/${endpoint}/${editId}` : `${API}/api/v1/${endpoint}`;
-      const method = editId ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: hdrs(), body: JSON.stringify(body) });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Error'); }
-      showToast(L.saved);
-      setModalType(null);
-      refresh();
-    } catch (e: any) { showToast(`${L.error}: ${e.message}`, 'err'); }
-    setSaving(false);
-  };
-
-  const deleteEntity = async (endpoint: string, id: string, refresh: () => void) => {
-    try {
-      const res = await fetch(`${API}/api/v1/${endpoint}/${id}`, { method: 'DELETE', headers: hdrs() });
-      if (!res.ok) throw new Error();
-      showToast(L.deleted);
-      setConfirmDel(null);
-      refresh();
-    } catch { showToast(L.error, 'err'); }
+      const url = id ? `${API}/api/v1/${endpoint}/${id}` : `${API}/api/v1/${endpoint}`;
+      const r = await fetch(url, {
+        method: id ? "PUT" : "POST",
+        headers: headers(),
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.saved);
+      setModal(null);
+      if (type === "user") fetchUsers();
+      if (type === "customer") fetchCustomers();
+      if (type === "machine") fetchMachines();
+      if (type === "task") fetchTasks();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveUser = () => {
-    const body: any = { ...userForm };
-    if (editId && !body.password) delete body.password;
-    if (!body.manager_id) delete body.manager_id;
-    saveEntity('users', body, fetchUsers);
-  };
-  const saveCustomer = () => saveEntity('customers', custForm, fetchCustomers);
-  const saveMachine = () => saveEntity('machines', machForm, fetchMachines);
-  const saveTask = () => saveEntity('tasks', taskForm, fetchTasks);
-
-  /* ─── toggle helpers ─── */
-  const toggleDept = (d: string) => setUserForm(f => ({ ...f, departments: f.departments.includes(d) ? f.departments.filter(x => x !== d) : [...f.departments, d] }));
-
-  /* ─── styles ─── */
-  const modalOverlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' };
-  const modalBox: React.CSSProperties = { background: th.bgCard, borderRadius: 16, padding: 32, width: 560, maxHeight: '90vh', overflowY: 'auto', border: `1px solid ${th.border}`, boxShadow: '0 20px 60px rgba(0,0,0,.4)' };
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 8, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14, outline: 'none', boxSizing: 'border-box' };
-  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: th.textDim, marginBottom: 4, display: 'block' };
-  const btnGold: React.CSSProperties = { background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff', border: 'none', borderRadius: 10, padding: '12px 24px', fontWeight: 700, cursor: 'pointer', fontSize: 15, boxShadow: '0 4px 15px rgba(200,169,110,.4)' };
-  const btnSave: React.CSSProperties = { ...btnGold, borderRadius: 8, padding: '10px 24px', fontSize: 14, opacity: saving ? .7 : 1, cursor: saving ? 'wait' : 'pointer' };
-  const btnCancel: React.CSSProperties = { padding: '10px 24px', borderRadius: 8, border: `1px solid ${th.border}`, background: 'transparent', color: th.text, cursor: 'pointer', fontWeight: 600, fontSize: 14 };
-
-  /* ─── tab config ─── */
-  const tabs: { key: Tab; label: string; icon: string; visible: boolean }[] = [
-    { key: 'users', label: L.users, icon: '👥', visible: true },
-    { key: 'customers', label: L.customers, icon: '🏢', visible: isGlobal },
-    { key: 'machines', label: L.machines, icon: '🚜', visible: isManager },
-    { key: 'tasks', label: L.tasks, icon: '📋', visible: isManager },
-  ];
-
-  /* ─── delete confirm button ─── */
-  const DeleteBtn = ({ id, endpoint, refresh }: { id: string; endpoint: string; refresh: () => void }) => (
-    confirmDel === id ? (
-      <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-        <button onClick={() => deleteEntity(endpoint, id, refresh)} style={{ background: dangerBg, color: '#fff', border: 'none', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✓ {L.delete}</button>
-        <button onClick={() => setConfirmDel(null)} style={{ background: 'transparent', color: th.textDim, border: `1px solid ${th.border}`, borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: 11 }}>{L.no}</button>
-      </div>
-    ) : (
-      <button onClick={e => { e.stopPropagation(); setConfirmDel(id); }} style={{ background: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: 14, padding: 4 }} title={L.delete}>🗑</button>
-    )
-  );
-
-  /* ─── active CsvToolbar per tab ─── */
-  const csvToolbar = useMemo(() => {
-    switch (tab) {
-      case 'users':
-        return (
-          <CsvToolbar
-            columns={csvUserColumns(L)}
-            data={csvUserData}
-            filename={`users_${new Date().toISOString().split('T')[0]}`}
-            exampleRows={CSV_USER_EXAMPLES}
-            formatters={{
-              departments: (v: string) => v || '',
-              is_active: (v: string) => v || 'true',
-            }}
-            validators={{
-              first_name: (v: string) => v ? null : `${L.firstName} required`,
-              last_name: (v: string) => v ? null : `${L.lastName} required`,
-              email: (v: string) => v && v.includes('@') ? null : `${L.email} invalid`,
-            }}
-            canImport={isGlobal}
-            onImport={handleUserImport}
-          />
-        );
-      case 'customers':
-        return (
-          <CsvToolbar
-            columns={csvCustomerColumns(L)}
-            data={csvCustomerData}
-            filename={`customers_${new Date().toISOString().split('T')[0]}`}
-            exampleRows={CSV_CUSTOMER_EXAMPLES}
-            validators={{
-              name: (v: string) => v ? null : `${L.name} required`,
-            }}
-            canImport={isGlobal}
-            onImport={handleCustomerImport}
-          />
-        );
-      case 'machines':
-        return (
-          <CsvToolbar
-            columns={csvMachineColumns(L)}
-            data={csvMachineData}
-            filename={`machines_${new Date().toISOString().split('T')[0]}`}
-            exampleRows={CSV_MACHINE_EXAMPLES}
-            formatters={{
-              status: (v: string) => STATUS_OPTIONS.includes(v as Machine['status']) ? v : 'AVAILABLE',
-            }}
-            validators={{
-              name: (v: string) => v ? null : `${L.name} required`,
-            }}
-            canImport={isManager}
-            onImport={handleMachineImport}
-          />
-        );
-      case 'tasks':
-        return (
-          <CsvToolbar
-            columns={csvTaskColumns(L)}
-            data={csvTaskData}
-            filename={`tasks_${new Date().toISOString().split('T')[0]}`}
-            exampleRows={CSV_TASK_EXAMPLES}
-            validators={{
-              name: (v: string) => v ? null : `${L.name} required`,
-              short_code: (v: string) => v ? null : `${L.code} required`,
-            }}
-            canImport={isManager}
-            onImport={handleTaskImport}
-          />
-        );
-      default:
-        return null;
+    const body: Record<string, unknown> = {
+      email: userForm.email,
+      first_name: userForm.first_name,
+      last_name: userForm.last_name,
+      role: userForm.role,
+      departments: userForm.departments,
+      is_active: userForm.is_active,
+      // HR fields
+      entry_date: userForm.entry_date || null,
+      exit_date: userForm.exit_date || null,
+      contract_type: userForm.contract_type,
+      salary_type: userForm.salary_type,
+      salary_amount: userForm.salary_amount ? parseFloat(userForm.salary_amount) : 0,
+      work_pensum: userForm.work_pensum ? parseInt(userForm.work_pensum) : 100,
+      hours_per_week: userForm.hours_per_week ? parseFloat(userForm.hours_per_week) : 42.0,
+      ahv_number: userForm.ahv_number || null,
+      iban: userForm.iban || null,
+      nationality: userForm.nationality || null,
+      permit_type: userForm.permit_type || null,
+      marital_status: userForm.marital_status || null,
+      children_count: userForm.children_count ? parseInt(userForm.children_count) : 0,
+      canton: userForm.canton || null,
+      bvg_code: userForm.bvg_code || null,
+    };
+    if (userForm.password) body.password = userForm.password;
+    // Custom permissions – only include if there are overrides
+    if (userCustomPerms.add.length > 0 || userCustomPerms.remove.length > 0) {
+      body.custom_permissions = userCustomPerms;
+    } else {
+      body.custom_permissions = null;
     }
-  }, [tab, L, csvUserData, csvCustomerData, csvMachineData, csvTaskData, isGlobal, isManager]);
+    saveEntity("user", body, editId);
+  };
 
+  const saveCustomer = () => saveEntity("customer", { ...customerForm }, editId);
+  const saveMachine = () => saveEntity("machine", { ...machineForm }, editId);
+  const saveTask = () => saveEntity("task", { ...taskForm }, editId);
+
+  /* ── Delete ── */
+  const deleteEntity = async () => {
+    if (!confirmDel) return;
+    const endpoint =
+      confirmDel.type === "user" ? "users" :
+      confirmDel.type === "customer" ? "customers" :
+      confirmDel.type === "machine" ? "machines" : "tasks";
+    try {
+      const r = await fetch(`${API}/api/v1/${endpoint}/${confirmDel.id}`, {
+        method: "DELETE", headers: headers(),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.deleted);
+      if (confirmDel.type === "user") fetchUsers();
+      if (confirmDel.type === "customer") fetchCustomers();
+      if (confirmDel.type === "machine") fetchMachines();
+      if (confirmDel.type === "task") fetchTasks();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setConfirmDel(null);
+    }
+  };
+
+  /* ── CSV columns for current tab ── */
+  const currentCsvCols = tab === "users" ? csvColumnsUsers(t)
+    : tab === "customers" ? csvColumnsCustomers(t)
+    : tab === "machines" ? csvColumnsMachines(t)
+    : csvColumnsTasks(t);
+
+  const currentCsvExamples = tab === "users" ? CSV_EXAMPLE_USERS
+    : tab === "customers" ? CSV_EXAMPLE_CUSTOMERS
+    : tab === "machines" ? CSV_EXAMPLE_MACHINES
+    : CSV_EXAMPLE_TASKS;
+
+  const currentValidators: Record<string, (v: string) => string | null> =
+    tab === "users" ? { email: (v: string) => (v ? null : "email required"), first_name: (v: string) => (v ? null : "name required") }
+    : tab === "customers" ? { name: (v: string) => (v ? null : "name required") }
+    : tab === "machines" ? { name: (v: string) => (v ? null : "name required") }
+    : { title: (v: string) => (v ? null : "title required") };
+
+  const canCreateForTab = tab === "users" ? canManageUsers
+    : tab === "customers" ? canManageCustomers
+    : tab === "machines" ? canManageMachines
+    : canManageTasks;
+
+  /* ── Styles ── */
+  const sOverlay: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000,
+    display: "flex", alignItems: "center", justifyContent: "center",
+  };
+  const sModal: React.CSSProperties = {
+    background: th.bgCard, color: th.text, borderRadius: 12, padding: 24,
+    width: "90%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+  };
+  const sInput: React.CSSProperties = {
+    width: "100%", padding: "8px 12px", borderRadius: 8,
+    border: `1px solid ${th.border}`, background: isDark ? "#1e1e1e" : "#fff",
+    color: th.text, fontSize: 14, boxSizing: "border-box",
+  };
+  const sSelect: React.CSSProperties = { ...sInput };
+  const sLabel: React.CSSProperties = { display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 };
+  const sBtn = (bg: string): React.CSSProperties => ({
+    padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer",
+    fontWeight: 600, color: "#fff", background: bg, fontSize: 14,
+  });
+  const sTab = (active: boolean): React.CSSProperties => ({
+    padding: "8px 16px", borderRadius: "8px 8px 0 0", cursor: "pointer", fontWeight: 600,
+    background: active ? gold : "transparent", color: active ? "#fff" : th.text,
+    border: "none", fontSize: 14,
+  });
+  const sFormTab = (active: boolean): React.CSSProperties => ({
+    padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontWeight: 600,
+    background: active ? gold : "transparent", color: active ? "#fff" : th.text,
+    border: `1px solid ${active ? gold : th.border}`, fontSize: 13,
+  });
+  const sTable: React.CSSProperties = {
+    width: "100%", borderCollapse: "collapse", fontSize: 14,
+  };
+  const sTh: React.CSSProperties = {
+    textAlign: "left", padding: "10px 12px", borderBottom: `2px solid ${th.border}`,
+    fontWeight: 700, color: gold,
+  };
+  const sTd: React.CSSProperties = {
+    padding: "8px 12px", borderBottom: `1px solid ${th.border}`,
+  };
+
+  /* ── Permission guard ── */
+  if (!perms.has("admin.view" as Permission)) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: th.text }}>
+        <h2>Access Denied</h2>
+      </div>
+    );
+  }
+
+  /* ═══════════════════ RENDER ═══════════════════ */
   return (
-    <div style={{ background: th.bg, minHeight: '100vh', padding: '24px 32px', color: th.text, fontFamily: "'Inter','Segoe UI',sans-serif" }}>
-      {/* toast */}
+    <div style={{ padding: 24, color: th.text, minHeight: "100vh" }}>
+      {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', top: 20, right: 20, zIndex: 2000,
-          background: toast.type === 'err' ? dangerBg : successBg,
-          color: toast.type === 'err' ? '#fff' : th.text,
-          padding: '12px 24px', borderRadius: 10, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.3)',
-        }}>{toast.msg}</div>
+          position: "fixed", top: 20, right: 20, zIndex: 2000,
+          padding: "12px 24px", borderRadius: 8, color: "#fff",
+          background: toast.ok ? "#22c55e" : "#ef4444", fontWeight: 600,
+        }}>
+          {toast.msg}
+        </div>
       )}
 
-      {/* page header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{L.admin}</h1>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {csvToolbar}
-          <button
-            onClick={() => {
-              if (tab === 'users') openNewUser();
-              else if (tab === 'customers') openNewCustomer();
-              else if (tab === 'machines') openNewMachine();
-              else if (tab === 'tasks') openNewTask();
-            }}
-            style={btnGold}
-          >{L.new}</button>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <h1 style={{ margin: 0, color: gold }}>{t.admin}</h1>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <CsvToolbar
+            columns={currentCsvCols}
+            data={csvData as any[]}
+            filename={tab}
+            exampleRows={currentCsvExamples}
+            onImport={handleCsvImport}
+            validators={currentValidators}
+            canImport={canCreateForTab}
+          />
+          {canCreateForTab && (
+            <button
+              style={sBtn(gold)}
+              onClick={() => {
+                if (tab === "users") openCreateUser();
+                else if (tab === "customers") openCreateCustomer();
+                else if (tab === "machines") openCreateMachine();
+                else openCreateTask();
+              }}
+            >
+              + {tab === "users" ? t.newUser : tab === "customers" ? t.newCustomer : tab === "machines" ? t.newMachine : t.newTask}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-        {tabs.filter(t => t.visible).map(tb => (
-          <button key={tb.key} onClick={() => { setTab(tb.key); setSearch(''); setConfirmDel(null); }}
-            style={{
-              padding: '10px 20px', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer',
-              border: 'none', transition: 'all .15s',
-              background: tab === tb.key ? `linear-gradient(135deg, ${gold}, #b8956a)` : (isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)'),
-              color: tab === tb.key ? '#fff' : th.textDim,
-            }}
-          >{tb.icon} {tb.label}</button>
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 0 }}>
+        {(["users", "customers", "machines", "tasks"] as const).map((key) => (
+          <button key={key} style={sTab(tab === key)} onClick={() => { setTab(key); setSearch(""); setFilterRole(""); setFilterDept(""); setFilterStatus(""); setFilterCategory(""); }}>
+            {t[key]}
+          </button>
         ))}
       </div>
 
-      {/* search + filters */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <input placeholder={L.search} value={search} onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, minWidth: 200, padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14, outline: 'none' }} />
-
-        {tab === 'users' && (
+      {/* Search + Filters */}
+      <div style={{
+        display: "flex", gap: 8, alignItems: "center", padding: "12px 0",
+        borderTop: `2px solid ${gold}`, flexWrap: "wrap",
+      }}>
+        <input
+          style={{ ...sInput, maxWidth: 260 }}
+          placeholder={t.search}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {tab === "users" && (
           <>
-            <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">{L.allRoles}</option>
-              {ROLE_OPTIONS.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
+            <select style={{ ...sSelect, maxWidth: 160 }} value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
+              <option value="">{t.role}</option>
+              {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
             </select>
-            <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">{L.allDepartments}</option>
-              {DEPT_OPTIONS.map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
-            </select>
-            {isGlobal && (
-              <select value={filterManager} onChange={e => setFilterManager(e.target.value)}
-                style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-                <option value="">{L.allTeams}</option>
-                <option value="unassigned">{L.unassigned}</option>
-                {localManagers.map(m => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
-              </select>
-            )}
-          </>
-        )}
-        {tab === 'machines' && (
-          <>
-            <select value={filterMachCat} onChange={e => setFilterMachCat(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">{L.allCategories}</option>
-              {MACHINE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select value={filterMachStatus} onChange={e => setFilterMachStatus(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">{L.allStatuses}</option>
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+            <select style={{ ...sSelect, maxWidth: 180 }} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
+              <option value="">{t.department}</option>
+              {DEPARTMENTS.map((d) => <option key={d} value={d}>{deptLabel(d)}</option>)}
             </select>
           </>
         )}
-        {tab === 'tasks' && (
-          <select value={filterTaskStatus} onChange={e => setFilterTaskStatus(e.target.value)}
-            style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-            <option value="">{L.allStatuses}</option>
-            {TASK_STATUS.map(s => <option key={s} value={s}>{s}</option>)}
+        {tab === "customers" && (
+          <select style={{ ...sSelect, maxWidth: 160 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            <option value="">{t.status}</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+            <option value="LEAD">Lead</option>
+            <option value="PROSPECT">Prospect</option>
           </select>
+        )}
+        {tab === "machines" && (
+          <>
+            <select style={{ ...sSelect, maxWidth: 160 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">{t.status}</option>
+              {MACHINE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select style={{ ...sSelect, maxWidth: 160 }} value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+              <option value="">{t.category}</option>
+              {MACHINE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </>
+        )}
+        {tab === "tasks" && (
+          <>
+            <select style={{ ...sSelect, maxWidth: 160 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">{t.status}</option>
+              {TASK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select style={{ ...sSelect, maxWidth: 180 }} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
+              <option value="">{t.department}</option>
+              {DEPARTMENTS.map((d) => <option key={d} value={d}>{deptLabel(d)}</option>)}
+            </select>
+          </>
         )}
       </div>
 
-      {/* ════════════════════════ USERS TAB ════════════════════════ */}
-      {tab === 'users' && (
-        <div style={{ background: th.bgCard, borderRadius: 14, border: `1px solid ${th.border}`, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: th.bgHeader, color: '#fff' }}>
-                {['', L.name, L.email, L.role, L.departments, ...(isGlobal ? [L.supervisor] : []), L.status, ''].map((h, i) => (
-                  <th key={i} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
+      {/* ─── USERS TABLE ─── */}
+      {tab === "users" && (
+        <table style={sTable}>
+          <thead>
+            <tr>
+              <th style={sTh}>{t.firstName}</th>
+              <th style={sTh}>{t.lastName}</th>
+              <th style={sTh}>{t.email}</th>
+              <th style={sTh}>{t.role}</th>
+              <th style={sTh}>{t.departments}</th>
+              <th style={sTh}>{t.contractType}</th>
+              <th style={sTh}>{t.active}</th>
+              <th style={sTh}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredUsers.length === 0 && (
+              <tr><td colSpan={8} style={{ ...sTd, textAlign: "center", opacity: 0.6 }}>{t.noResults}</td></tr>
+            )}
+            {filteredUsers.map((u) => (
+              <tr key={u.id} style={{ cursor: canManageUsers ? "pointer" : "default" }} onClick={() => canManageUsers && openEditUser(u)}>
+                <td style={sTd}>{u.first_name}</td>
+                <td style={sTd}>{u.last_name ?? ""}</td>
+                <td style={sTd}>{u.email}</td>
+                <td style={sTd}>
+                  <span style={{ padding: "2px 8px", borderRadius: 4, background: gold + "22", color: gold, fontWeight: 600, fontSize: 12 }}>
+                    {roleLabel(u.role)}
+                  </span>
+                </td>
+                <td style={sTd}>{u.departments?.map(deptLabel).join(", ")}</td>
+                <td style={sTd}>{u.contract_type ?? "-"}</td>
+                <td style={sTd}>
+                  <span style={{ color: u.is_active !== false ? "#22c55e" : "#ef4444" }}>●</span>
+                </td>
+                <td style={sTd}>
+                  {canManageUsers && (
+                    <button
+                      style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "user", id: u.id }); }}
+                    >
+                      {t.delete}
+                    </button>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.length === 0 && <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: th.textDim }}>{L.noUsers}</td></tr>}
-              {filteredUsers.map((u, i) => (
-                <tr key={u.id} style={{ background: i % 2 ? (isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)') : 'transparent', cursor: 'pointer', transition: 'background .15s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = hoverBg}
-                  onMouseLeave={e => e.currentTarget.style.background = i % 2 ? (isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)') : 'transparent'}
-                  onClick={() => openEditUser(u)}>
-                  <td style={{ padding: '10px 16px', width: 40 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13 }}>
-                      {u.first_name?.[0]}{u.last_name?.[0]}
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px 16px', fontWeight: 600 }}>{u.first_name} {u.last_name}</td>
-                  <td style={{ padding: '10px 16px', color: th.textDim, fontSize: 13 }}>{u.email}</td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: u.role === 'GLOBAL_MANAGER' ? 'rgba(200,169,110,.2)' : u.role === 'LOCAL_MANAGER' ? 'rgba(100,149,237,.2)' : 'rgba(255,255,255,.1)', color: u.role === 'GLOBAL_MANAGER' ? gold : u.role === 'LOCAL_MANAGER' ? '#6495ed' : th.textDim }}>{roleLabel(u.role)}</span>
-                  </td>
-                  <td style={{ padding: '10px 16px' }}>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {(u.departments || []).map(d => <span key={d} style={{ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: d === 'garten' ? 'rgba(76,175,80,.15)' : 'rgba(255,152,0,.15)', color: d === 'garten' ? '#4caf50' : '#ff9800' }}>{d}</span>)}
-                    </div>
-                  </td>
-                  {isGlobal && <td style={{ padding: '10px 16px', fontSize: 12, color: th.textDim }}>{managerName(u.manager_id)}</td>}
-                  <td style={{ padding: '10px 16px' }}>
-                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: u.is_active !== false ? '#4caf50' : '#f44336', marginRight: 6 }} />
-                    <span style={{ fontSize: 12 }}>{u.is_active !== false ? L.active : L.inactive}</span>
-                  </td>
-                  <td style={{ padding: '10px 16px' }}>{isGlobal && <DeleteBtn id={u.id} endpoint="users" refresh={fetchUsers} />}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
 
-      {/* ════════════════════════ CUSTOMERS TAB ════════════════════════ */}
-      {tab === 'customers' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {filteredCustomers.length === 0 && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, color: th.textDim }}>{L.noCustomers}</div>}
-          {filteredCustomers.map(c => (
-            <div key={c.id} onClick={() => openEditCustomer(c)}
-              style={{ background: th.bgCard, borderRadius: 14, padding: 20, border: `1px solid ${th.border}`, cursor: 'pointer', transition: 'all .15s', position: 'relative' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = gold}
-              onMouseLeave={e => e.currentTarget.style.borderColor = th.border}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      {/* ─── CUSTOMERS TABLE ─── */}
+      {tab === "customers" && (
+        <table style={sTable}>
+          <thead>
+            <tr>
+              <th style={sTh}>{t.name}</th>
+              <th style={sTh}>{t.company}</th>
+              <th style={sTh}>{t.email}</th>
+              <th style={sTh}>{t.phone}</th>
+              <th style={sTh}>{t.city}</th>
+              <th style={sTh}>{t.status}</th>
+              <th style={sTh}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCustomers.length === 0 && (
+              <tr><td colSpan={7} style={{ ...sTd, textAlign: "center", opacity: 0.6 }}>{t.noResults}</td></tr>
+            )}
+            {filteredCustomers.map((c) => (
+              <tr key={c.id} style={{ cursor: canManageCustomers ? "pointer" : "default" }} onClick={() => canManageCustomers && openEditCustomer(c)}>
+                <td style={sTd}>{c.name}</td>
+                <td style={sTd}>{c.company ?? ""}</td>
+                <td style={sTd}>{c.email ?? ""}</td>
+                <td style={sTd}>{c.phone ?? ""}</td>
+                <td style={sTd}>{c.city ?? ""}</td>
+                <td style={sTd}>
+                  <span style={{ padding: "2px 8px", borderRadius: 4, background: statusColor(c.status ?? "") + "22", color: statusColor(c.status ?? ""), fontWeight: 600, fontSize: 12 }}>
+                    {c.status}
+                  </span>
+                </td>
+                <td style={sTd}>
+                  {canManageCustomers && (
+                    <button
+                      style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "customer", id: c.id }); }}
+                    >
+                      {t.delete}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* ─── MACHINES TABLE ─── */}
+      {tab === "machines" && (
+        <table style={sTable}>
+          <thead>
+            <tr>
+              <th style={sTh}>{t.name}</th>
+              <th style={sTh}>{t.category}</th>
+              <th style={sTh}>{t.licensePlate}</th>
+              <th style={sTh}>{t.status}</th>
+              <th style={sTh}>{t.department}</th>
+              <th style={sTh}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMachines.length === 0 && (
+              <tr><td colSpan={6} style={{ ...sTd, textAlign: "center", opacity: 0.6 }}>{t.noResults}</td></tr>
+            )}
+            {filteredMachines.map((m) => (
+              <tr key={m.id} style={{ cursor: canManageMachines ? "pointer" : "default" }} onClick={() => canManageMachines && openEditMachine(m)}>
+                <td style={sTd}>{m.name}</td>
+                <td style={sTd}>{m.category ?? ""}</td>
+                <td style={sTd}>{m.license_plate ?? ""}</td>
+                <td style={sTd}>
+                  <span style={{ padding: "2px 8px", borderRadius: 4, background: statusColor(m.status ?? "") + "22", color: statusColor(m.status ?? ""), fontWeight: 600, fontSize: 12 }}>
+                    {m.status}
+                  </span>
+                </td>
+                <td style={sTd}>{deptLabel(m.department ?? "")}</td>
+                <td style={sTd}>
+                  {canManageMachines && (
+                    <button
+                      style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "machine", id: m.id }); }}
+                    >
+                      {t.delete}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* ─── TASKS TABLE ─── */}
+      {tab === "tasks" && (
+        <table style={sTable}>
+          <thead>
+            <tr>
+              <th style={sTh}>{t.title}</th>
+              <th style={sTh}>{t.status}</th>
+              <th style={sTh}>{t.priority}</th>
+              <th style={sTh}>{t.department}</th>
+              <th style={sTh}>{t.assignedTo}</th>
+              <th style={sTh}>{t.customer}</th>
+              <th style={sTh}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTasks.length === 0 && (
+              <tr><td colSpan={7} style={{ ...sTd, textAlign: "center", opacity: 0.6 }}>{t.noResults}</td></tr>
+            )}
+            {filteredTasks.map((tk) => (
+              <tr key={tk.id} style={{ cursor: canManageTasks ? "pointer" : "default" }} onClick={() => canManageTasks && openEditTask(tk)}>
+                <td style={sTd}>{tk.title}</td>
+                <td style={sTd}>
+                  <span style={{ padding: "2px 8px", borderRadius: 4, background: statusColor(tk.status ?? "") + "22", color: statusColor(tk.status ?? ""), fontWeight: 600, fontSize: 12 }}>
+                    {tk.status}
+                  </span>
+                </td>
+                <td style={sTd}>{tk.priority}</td>
+                <td style={sTd}>{deptLabel(tk.department ?? "")}</td>
+                <td style={sTd}>{tk.assigned_to ? managerName(tk.assigned_to) : ""}</td>
+                <td style={sTd}>{tk.customer_id ? customerName(tk.customer_id) : ""}</td>
+                <td style={sTd}>
+                  {canManageTasks && (
+                    <button
+                      style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "task", id: tk.id }); }}
+                    >
+                      {t.delete}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* ═══════ USER MODAL ═══════ */}
+      {modal === "user" && (
+        <div style={sOverlay} onClick={() => setModal(null)}>
+          <div style={sModal} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>{editId ? `${t.users}: ${userForm.first_name}` : t.newUser}</h2>
+
+            {/* Form tabs: General / HR / Permissions */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              <button style={sFormTab(userFormTab === "general")} onClick={() => setUserFormTab("general")}>
+                {t.users}
+              </button>
+              {(canViewHR || canEditHR) && (
+                <button style={sFormTab(userFormTab === "hr")} onClick={() => setUserFormTab("hr")}>
+                  {t.hrInfo}
+                </button>
+              )}
+              {canManageRoles && (
+                <button style={sFormTab(userFormTab === "permissions")} onClick={() => setUserFormTab("permissions")}>
+                  {t.permissions}
+                </button>
+              )}
+            </div>
+
+            {/* ── General tab ── */}
+            {userFormTab === "general" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{c.name}</h3>
-                  {c.contact_person && <p style={{ margin: '4px 0 0', fontSize: 12, color: th.textDim }}>👤 {c.contact_person}</p>}
+                  <label style={sLabel}>{t.firstName} *</label>
+                  <input style={sInput} value={userForm.first_name} onChange={(e) => setUserForm({ ...userForm, first_name: e.target.value })} />
                 </div>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg, ${gold}33, ${gold}11)`, color: gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏢</div>
-              </div>
-              {(c.address || c.city) && <p style={{ margin: '10px 0 0', fontSize: 13, color: th.textDim }}>📍 {[c.address, c.zip, c.city].filter(Boolean).join(', ')}</p>}
-              {c.phone && <p style={{ margin: '4px 0 0', fontSize: 13, color: th.textDim }}>📞 {c.phone}</p>}
-              {c.email && <p style={{ margin: '4px 0 0', fontSize: 13, color: th.textDim }}>✉️ {c.email}</p>}
-              <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: th.textDim }}>{tasks.filter(t => t.customer_id === c.id).length} {L.tasksCount}</span>
-                {isGlobal && <DeleteBtn id={c.id} endpoint="customers" refresh={fetchCustomers} />}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ════════════════════════ MACHINES TAB ════════════════════════ */}
-      {tab === 'machines' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {filteredMachines.length === 0 && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, color: th.textDim }}>{L.noMachines}</div>}
-          {filteredMachines.map(m => (
-            <div key={m.id} onClick={() => openEditMachine(m)}
-              style={{ background: th.bgCard, borderRadius: 14, padding: 20, border: `1px solid ${th.border}`, cursor: 'pointer', transition: 'all .15s', position: 'relative', overflow: 'hidden' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = gold}
-              onMouseLeave={e => e.currentTarget.style.borderColor = th.border}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: statusColor(m.status) }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 4 }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{m.name}</h3>
-                  {m.category && <p style={{ margin: '4px 0 0', fontSize: 12, color: th.textDim }}>{m.category}</p>}
+                  <label style={sLabel}>{t.lastName}</label>
+                  <input style={sInput} value={userForm.last_name} onChange={(e) => setUserForm({ ...userForm, last_name: e.target.value })} />
                 </div>
-                <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: `${statusColor(m.status)}22`, color: statusColor(m.status) }}>{statusLabel(m.status)}</span>
-              </div>
-              {m.notes && <p style={{ margin: '12px 0 0', fontSize: 13, color: th.textDim, lineHeight: 1.4 }}>{m.notes}</p>}
-              <div style={{ marginTop: 12, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                <DeleteBtn id={m.id} endpoint="machines" refresh={fetchMachines} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ════════════════════════ TASKS TAB ════════════════════════ */}
-      {tab === 'tasks' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {filteredTasks.length === 0 && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, color: th.textDim }}>{L.noTasks}</div>}
-          {filteredTasks.map(t => (
-            <div key={t.id} onClick={() => openEditTask(t)}
-              style={{ background: th.bgCard, borderRadius: 14, padding: 20, border: `1px solid ${th.border}`, cursor: 'pointer', transition: 'all .15s' }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = gold}
-              onMouseLeave={e => e.currentTarget.style.borderColor = th.border}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: t.color_bg || gold, color: t.color_text || '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
-                    {t.short_code || '?'}
-                  </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{t.name}</h3>
-                    {t.customer_id && <p style={{ margin: '2px 0 0', fontSize: 11, color: th.textDim }}>🏢 {customerName(t.customer_id)}</p>}
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={sLabel}>{t.email} *</label>
+                  <input style={sInput} type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.role}</label>
+                  <select style={sSelect} value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value as Role })}>
+                    {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={sLabel}>{t.password} {editId ? "" : "*"}</label>
+                  <input style={sInput} type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} placeholder={editId ? "leave empty to keep" : ""} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={sLabel}>{t.departments}</label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {DEPARTMENTS.map((d) => (
+                      <label key={d} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13 }}>
+                        <input
+                          type="checkbox"
+                          checked={userForm.departments.includes(d)}
+                          onChange={() => {
+                            const depts = userForm.departments.includes(d)
+                              ? userForm.departments.filter((x) => x !== d)
+                              : [...userForm.departments, d];
+                            setUserForm({ ...userForm, departments: depts });
+                          }}
+                        />
+                        {deptLabel(d)}
+                      </label>
+                    ))}
                   </div>
                 </div>
-                <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: t.status === 'ACTIVE' ? 'rgba(76,175,80,.15)' : t.status === 'COMPLETED' ? 'rgba(200,169,110,.15)' : 'rgba(244,67,54,.15)', color: t.status === 'ACTIVE' ? '#4caf50' : t.status === 'COMPLETED' ? gold : '#f44336' }}>{t.status}</span>
-              </div>
-              {t.description && <p style={{ margin: '10px 0 0', fontSize: 13, color: th.textDim, lineHeight: 1.4 }}>{t.description}</p>}
-              <div style={{ marginTop: 12, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                <DeleteBtn id={t.id} endpoint="tasks" refresh={fetchTasks} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ════════════════════════ USER MODAL ════════════════════════ */}
-      {modalType === 'users' && (
-        <div style={modalOverlay} onClick={() => setModalType(null)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: gold }}>{editId ? L.editUser : L.newUser}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div><label style={labelStyle}>{L.firstName}</label><input value={userForm.first_name} onChange={e => setUserForm(f => ({ ...f, first_name: e.target.value }))} style={inputStyle} /></div>
-              <div><label style={labelStyle}>{L.lastName}</label><input value={userForm.last_name} onChange={e => setUserForm(f => ({ ...f, last_name: e.target.value }))} style={inputStyle} /></div>
-            </div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.email}</label><input value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} type="email" style={inputStyle} /></div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.phone}</label><input value={userForm.phone} onChange={e => setUserForm(f => ({ ...f, phone: e.target.value }))} style={inputStyle} /></div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.password} {editId && <span style={{ fontWeight: 400 }}>{L.passwordHint}</span>}</label><input value={userForm.password} onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))} type="password" placeholder={editId ? '••••••••' : ''} style={inputStyle} /></div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.role}</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {(isGlobal ? ROLE_OPTIONS : ['ARBEITER'] as User['role'][]).map(r => (
-                  <button key={r} onClick={() => isGlobal && setUserForm(f => ({ ...f, role: r }))} style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: isGlobal ? 'pointer' : 'default', fontWeight: 600, fontSize: 13, border: userForm.role === r ? `2px solid ${gold}` : `1px solid ${th.border}`, background: userForm.role === r ? (isDark ? 'rgba(200,169,110,.15)' : 'rgba(200,169,110,.1)') : 'transparent', color: userForm.role === r ? gold : th.text, transition: 'all .15s', opacity: !isGlobal && userForm.role !== r ? .3 : 1 }}>{roleLabel(r)}</button>
-                ))}
-              </div>
-            </div>
-            {isGlobal && userForm.role === 'ARBEITER' && (
-              <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.supervisor}</label>
-                <select value={userForm.manager_id} onChange={e => setUserForm(f => ({ ...f, manager_id: e.target.value }))} style={inputStyle}>
-                  <option value="">{L.noSupervisor}</option>
-                  {localManagers.map(m => <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>)}
-                </select>
+                <div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                    <input type="checkbox" checked={userForm.is_active} onChange={(e) => setUserForm({ ...userForm, is_active: e.target.checked })} />
+                    {t.active}
+                  </label>
+                </div>
               </div>
             )}
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.departments}</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {DEPT_OPTIONS.map(d => (
-                  <button key={d} onClick={() => toggleDept(d)} style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, border: userForm.departments.includes(d) ? `2px solid ${d === 'garten' ? '#4caf50' : '#ff9800'}` : `1px solid ${th.border}`, background: userForm.departments.includes(d) ? (d === 'garten' ? 'rgba(76,175,80,.12)' : 'rgba(255,152,0,.12)') : 'transparent', color: userForm.departments.includes(d) ? (d === 'garten' ? '#4caf50' : '#ff9800') : th.text, transition: 'all .15s' }}>{d.charAt(0).toUpperCase() + d.slice(1)}</button>
-                ))}
+
+            {/* ── HR tab ── */}
+            {userFormTab === "hr" && (canViewHR || canEditHR) && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={sLabel}>{t.entryDate}</label>
+                  <input style={sInput} type="date" value={userForm.entry_date} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, entry_date: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.exitDate}</label>
+                  <input style={sInput} type="date" value={userForm.exit_date} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, exit_date: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.contractType}</label>
+                  <select style={sSelect} value={userForm.contract_type} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, contract_type: e.target.value })}>
+                    {CONTRACT_TYPES.map((c) => <option key={c} value={c}>{t[c.toLowerCase()] ?? c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={sLabel}>{t.salaryType}</label>
+                  <select style={sSelect} value={userForm.salary_type} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, salary_type: e.target.value })}>
+                    {SALARY_TYPES.map((s) => <option key={s} value={s}>{t[s.toLowerCase()] ?? s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={sLabel}>{t.salaryAmount}</label>
+                  <input style={sInput} type="number" step="0.01" value={userForm.salary_amount} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, salary_amount: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.workPensum}</label>
+                  <input style={sInput} type="number" min="0" max="100" value={userForm.work_pensum} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, work_pensum: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.hoursPerWeek}</label>
+                  <input style={sInput} type="number" step="0.5" value={userForm.hours_per_week} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, hours_per_week: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.ahvNumber}</label>
+                  <input style={sInput} value={userForm.ahv_number} disabled={!canEditHR} placeholder="756.XXXX.XXXX.XX"
+                    onChange={(e) => setUserForm({ ...userForm, ahv_number: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.iban}</label>
+                  <input style={sInput} value={userForm.iban} disabled={!canEditHR} placeholder="CH00 0000 0000 0000 0000 0"
+                    onChange={(e) => setUserForm({ ...userForm, iban: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.nationality}</label>
+                  <input style={sInput} value={userForm.nationality} disabled={!canEditHR} placeholder="CH" maxLength={2}
+                    onChange={(e) => setUserForm({ ...userForm, nationality: e.target.value.toUpperCase() })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.permitType}</label>
+                  <select style={sSelect} value={userForm.permit_type} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, permit_type: e.target.value })}>
+                    {PERMIT_TYPES.map((p) => <option key={p} value={p}>{p || "-"}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={sLabel}>{t.maritalStatus}</label>
+                  <select style={sSelect} value={userForm.marital_status} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, marital_status: e.target.value })}>
+                    <option value="">-</option>
+                    {MARITAL_STATUSES.map((m) => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={sLabel}>{t.childrenCount}</label>
+                  <input style={sInput} type="number" min="0" value={userForm.children_count} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, children_count: e.target.value })} />
+                </div>
+                <div>
+                  <label style={sLabel}>{t.canton}</label>
+                  <select style={sSelect} value={userForm.canton} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, canton: e.target.value })}>
+                    <option value="">-</option>
+                    {SWISS_CANTONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={sLabel}>{t.bvgCode}</label>
+                  <input style={sInput} value={userForm.bvg_code} disabled={!canEditHR}
+                    onChange={(e) => setUserForm({ ...userForm, bvg_code: e.target.value })} />
+                </div>
               </div>
-            </div>
-            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: th.textDim }}>{L.status}</label>
-              <button onClick={() => setUserForm(f => ({ ...f, is_active: !f.is_active }))} style={{ width: 48, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer', background: userForm.is_active ? '#4caf50' : '#666', position: 'relative', transition: 'background .2s' }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: userForm.is_active ? 24 : 4, transition: 'left .2s', boxShadow: '0 1px 4px rgba(0,0,0,.3)' }} />
+            )}
+
+            {/* ── Permissions tab ── */}
+            {userFormTab === "permissions" && canManageRoles && (
+              <div>
+                <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 12 }}>
+                  Default permissions for <strong>{roleLabel(userForm.role)}</strong>. Toggle to add or remove overrides for this user.
+                </p>
+                <RolePermissionMatrix
+                  {...{
+                    role: userForm.role,
+                    customPermissions: userCustomPerms,
+                    onChange: setUserCustomPerms,
+                    lang,
+                  } as any}
+                />
+              </div>
+            )}
+
+            {/* Modal footer */}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtn("#6b7280")} onClick={() => setModal(null)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveUser}>
+                {saving ? "…" : t.save}
               </button>
-              <span style={{ fontSize: 13, color: userForm.is_active ? '#4caf50' : '#f44336', fontWeight: 600 }}>{userForm.is_active ? L.active : L.inactive}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28 }}>
-              <button onClick={() => setModalType(null)} style={btnCancel}>{L.cancel}</button>
-              <button onClick={saveUser} disabled={saving} style={btnSave}>{saving ? '...' : L.save}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ════════════════════════ CUSTOMER MODAL ════════════════════════ */}
-      {modalType === 'customers' && (
-        <div style={modalOverlay} onClick={() => setModalType(null)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: gold }}>{editId ? L.editCustomer : L.newCustomer}</h2>
-            <div><label style={labelStyle}>{L.companyName} *</label><input value={custForm.name} onChange={e => setCustForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} /></div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.contactPerson}</label><input value={custForm.contact_person} onChange={e => setCustForm(f => ({ ...f, contact_person: e.target.value }))} style={inputStyle} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
-              <div><label style={labelStyle}>{L.email}</label><input value={custForm.email} onChange={e => setCustForm(f => ({ ...f, email: e.target.value }))} type="email" style={inputStyle} /></div>
-              <div><label style={labelStyle}>{L.phone}</label><input value={custForm.phone} onChange={e => setCustForm(f => ({ ...f, phone: e.target.value }))} style={inputStyle} /></div>
+      {/* ═══════ CUSTOMER MODAL ═══════ */}
+      {modal === "customer" && (
+        <div style={sOverlay} onClick={() => setModal(null)}>
+          <div style={sModal} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>{editId ? t.customers : t.newCustomer}</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.name} *</label>
+                <input style={sInput} value={customerForm.name} onChange={(e) => setCustomerForm({ ...customerForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.company}</label>
+                <input style={sInput} value={customerForm.company} onChange={(e) => setCustomerForm({ ...customerForm, company: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.email}</label>
+                <input style={sInput} type="email" value={customerForm.email} onChange={(e) => setCustomerForm({ ...customerForm, email: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.phone}</label>
+                <input style={sInput} value={customerForm.phone} onChange={(e) => setCustomerForm({ ...customerForm, phone: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.street}</label>
+                <input style={sInput} value={customerForm.street} onChange={(e) => setCustomerForm({ ...customerForm, street: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.city}</label>
+                <input style={sInput} value={customerForm.city} onChange={(e) => setCustomerForm({ ...customerForm, city: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.postalCode}</label>
+                <input style={sInput} value={customerForm.postal_code} onChange={(e) => setCustomerForm({ ...customerForm, postal_code: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.country}</label>
+                <input style={sInput} value={customerForm.country} onChange={(e) => setCustomerForm({ ...customerForm, country: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.type}</label>
+                <select style={sSelect} value={customerForm.type} onChange={(e) => setCustomerForm({ ...customerForm, type: e.target.value })}>
+                  <option value="PRIVATE">Private</option>
+                  <option value="COMPANY">Company</option>
+                  <option value="PUBLIC">Public</option>
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.status}</label>
+                <select style={sSelect} value={customerForm.status} onChange={(e) => setCustomerForm({ ...customerForm, status: e.target.value })}>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                  <option value="LEAD">Lead</option>
+                  <option value="PROSPECT">Prospect</option>
+                </select>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.notes}</label>
+                <textarea style={{ ...sInput, minHeight: 60, resize: "vertical" }} value={customerForm.notes} onChange={(e) => setCustomerForm({ ...customerForm, notes: e.target.value })} />
+              </div>
             </div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.address}</label><input value={custForm.address} onChange={e => setCustForm(f => ({ ...f, address: e.target.value }))} style={inputStyle} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 16, marginTop: 16 }}>
-              <div><label style={labelStyle}>{L.zip}</label><input value={custForm.zip} onChange={e => setCustForm(f => ({ ...f, zip: e.target.value }))} style={inputStyle} /></div>
-              <div><label style={labelStyle}>{L.city}</label><input value={custForm.city} onChange={e => setCustForm(f => ({ ...f, city: e.target.value }))} style={inputStyle} /></div>
-            </div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.notes}</label><textarea value={custForm.notes} onChange={e => setCustForm(f => ({ ...f, notes: e.target.value }))} rows={3} style={{ ...inputStyle, resize: 'vertical' }} /></div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28 }}>
-              <button onClick={() => setModalType(null)} style={btnCancel}>{L.cancel}</button>
-              <button onClick={saveCustomer} disabled={saving || !custForm.name} style={{ ...btnSave, opacity: (saving || !custForm.name) ? .5 : 1 }}>{saving ? '...' : L.save}</button>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtn("#6b7280")} onClick={() => setModal(null)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveCustomer}>{saving ? "…" : t.save}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ════════════════════════ MACHINE MODAL ════════════════════════ */}
-      {modalType === 'machines' && (
-        <div style={modalOverlay} onClick={() => setModalType(null)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: gold }}>{editId ? L.editMachine : L.newMachine}</h2>
-            <div><label style={labelStyle}>{L.name} *</label><input value={machForm.name} onChange={e => setMachForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} /></div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.category}</label>
-              <select value={machForm.category} onChange={e => setMachForm(f => ({ ...f, category: e.target.value }))} style={inputStyle}>
-                <option value="">—</option>
-                {MACHINE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.status}</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {STATUS_OPTIONS.map(s => (
-                  <button key={s} onClick={() => setMachForm(f => ({ ...f, status: s }))} style={{ flex: 1, padding: '10px 6px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 11, border: machForm.status === s ? `2px solid ${statusColor(s)}` : `1px solid ${th.border}`, background: machForm.status === s ? `${statusColor(s)}22` : 'transparent', color: machForm.status === s ? statusColor(s) : th.text, transition: 'all .15s', minWidth: 80 }}>{statusLabel(s)}</button>
-                ))}
+      {/* ═══════ MACHINE MODAL ═══════ */}
+      {modal === "machine" && (
+        <div style={sOverlay} onClick={() => setModal(null)}>
+          <div style={sModal} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>{editId ? t.machines : t.newMachine}</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.name} *</label>
+                <input style={sInput} value={machineForm.name} onChange={(e) => setMachineForm({ ...machineForm, name: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.type}</label>
+                <input style={sInput} value={machineForm.type} onChange={(e) => setMachineForm({ ...machineForm, type: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.category}</label>
+                <select style={sSelect} value={machineForm.category} onChange={(e) => setMachineForm({ ...machineForm, category: e.target.value })}>
+                  <option value="">-</option>
+                  {MACHINE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.licensePlate}</label>
+                <input style={sInput} value={machineForm.license_plate} onChange={(e) => setMachineForm({ ...machineForm, license_plate: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.status}</label>
+                <select style={sSelect} value={machineForm.status} onChange={(e) => setMachineForm({ ...machineForm, status: e.target.value })}>
+                  {MACHINE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.department}</label>
+                <select style={sSelect} value={machineForm.department} onChange={(e) => setMachineForm({ ...machineForm, department: e.target.value })}>
+                  <option value="">-</option>
+                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{deptLabel(d)}</option>)}
+                </select>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.notes}</label>
+                <textarea style={{ ...sInput, minHeight: 60, resize: "vertical" }} value={machineForm.notes} onChange={(e) => setMachineForm({ ...machineForm, notes: e.target.value })} />
               </div>
             </div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.notes}</label><textarea value={machForm.notes} onChange={e => setMachForm(f => ({ ...f, notes: e.target.value }))} rows={3} style={{ ...inputStyle, resize: 'vertical' }} /></div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28 }}>
-              <button onClick={() => setModalType(null)} style={btnCancel}>{L.cancel}</button>
-              <button onClick={saveMachine} disabled={saving || !machForm.name} style={{ ...btnSave, opacity: (saving || !machForm.name) ? .5 : 1 }}>{saving ? '...' : L.save}</button>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtn("#6b7280")} onClick={() => setModal(null)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveMachine}>{saving ? "…" : t.save}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ════════════════════════ TASK MODAL ════════════════════════ */}
-      {modalType === 'tasks' && (
-        <div style={modalOverlay} onClick={() => setModalType(null)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: gold }}>{editId ? L.editTask : L.newTask}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 16 }}>
-              <div><label style={labelStyle}>{L.name} *</label><input value={taskForm.name} onChange={e => setTaskForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} /></div>
-              <div><label style={labelStyle}>{L.code} *</label><input value={taskForm.short_code} onChange={e => setTaskForm(f => ({ ...f, short_code: e.target.value }))} maxLength={4} style={{ ...inputStyle, textAlign: 'center', fontWeight: 700, textTransform: 'lowercase' }} /></div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.customer}</label>
-              <select value={taskForm.customer_id} onChange={e => setTaskForm(f => ({ ...f, customer_id: e.target.value }))} style={inputStyle}>
-                <option value="">{L.noCustomer}</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div style={{ marginTop: 16 }}><label style={labelStyle}>{L.description}</label><textarea value={taskForm.description} onChange={e => setTaskForm(f => ({ ...f, description: e.target.value }))} rows={3} style={{ ...inputStyle, resize: 'vertical' }} /></div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.status}</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {TASK_STATUS.map(s => (
-                  <button key={s} onClick={() => setTaskForm(f => ({ ...f, status: s }))} style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, border: taskForm.status === s ? `2px solid ${s === 'ACTIVE' ? '#4caf50' : s === 'COMPLETED' ? gold : '#f44336'}` : `1px solid ${th.border}`, background: taskForm.status === s ? (s === 'ACTIVE' ? 'rgba(76,175,80,.12)' : s === 'COMPLETED' ? 'rgba(200,169,110,.12)' : 'rgba(244,67,54,.12)') : 'transparent', color: taskForm.status === s ? (s === 'ACTIVE' ? '#4caf50' : s === 'COMPLETED' ? gold : '#f44336') : th.text, transition: 'all .15s' }}>{s}</button>
-                ))}
+      {/* ═══════ TASK MODAL ═══════ */}
+      {modal === "task" && (
+        <div style={sOverlay} onClick={() => setModal(null)}>
+          <div style={sModal} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>{editId ? t.tasks : t.newTask}</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.title} *</label>
+                <input style={sInput} value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.description}</label>
+                <textarea style={{ ...sInput, minHeight: 60, resize: "vertical" }} value={taskForm.description} onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.status}</label>
+                <select style={sSelect} value={taskForm.status} onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}>
+                  {TASK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.priority}</label>
+                <select style={sSelect} value={taskForm.priority} onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}>
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="URGENT">Urgent</option>
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.department}</label>
+                <select style={sSelect} value={taskForm.department} onChange={(e) => setTaskForm({ ...taskForm, department: e.target.value })}>
+                  <option value="">-</option>
+                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{deptLabel(d)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.assignedTo}</label>
+                <select style={sSelect} value={taskForm.assigned_to} onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}>
+                  <option value="">-</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.first_name} {u.last_name ?? ""}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.customer}</label>
+                <select style={sSelect} value={taskForm.customer_id} onChange={(e) => setTaskForm({ ...taskForm, customer_id: e.target.value })}>
+                  <option value="">-</option>
+                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.startDate}</label>
+                <input style={sInput} type="date" value={taskForm.start_date} onChange={(e) => setTaskForm({ ...taskForm, start_date: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.endDate}</label>
+                <input style={sInput} type="date" value={taskForm.end_date} onChange={(e) => setTaskForm({ ...taskForm, end_date: e.target.value })} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.notes}</label>
+                <textarea style={{ ...sInput, minHeight: 60, resize: "vertical" }} value={taskForm.notes} onChange={(e) => setTaskForm({ ...taskForm, notes: e.target.value })} />
               </div>
             </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.colors}</label>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <label style={{ fontSize: 12, color: th.textDim }}>{L.bgColor}</label>
-                  <input type="color" value={taskForm.color_bg} onChange={e => setTaskForm(f => ({ ...f, color_bg: e.target.value }))} style={{ width: 40, height: 32, border: 'none', borderRadius: 4, cursor: 'pointer', background: 'transparent' }} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <label style={{ fontSize: 12, color: th.textDim }}>{L.textColor}</label>
-                  <input type="color" value={taskForm.color_text} onChange={e => setTaskForm(f => ({ ...f, color_text: e.target.value }))} style={{ width: 40, height: 32, border: 'none', borderRadius: 4, cursor: 'pointer', background: 'transparent' }} />
-                </div>
-                <div style={{ padding: '8px 16px', borderRadius: 8, background: taskForm.color_bg, color: taskForm.color_text, fontWeight: 700, fontSize: 13 }}>
-                  {taskForm.short_code || 'abc'} — {L.preview}
-                </div>
-              </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtn("#6b7280")} onClick={() => setModal(null)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveTask}>{saving ? "…" : t.save}</button>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28 }}>
-              <button onClick={() => setModalType(null)} style={btnCancel}>{L.cancel}</button>
-              <button onClick={saveTask} disabled={saving || !taskForm.name || !taskForm.short_code} style={{ ...btnSave, opacity: (saving || !taskForm.name || !taskForm.short_code) ? .5 : 1 }}>{saving ? '...' : L.save}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ DELETE CONFIRM MODAL ═══════ */}
+      {confirmDel && (
+        <div style={sOverlay} onClick={() => setConfirmDel(null)}>
+          <div style={{ ...sModal, maxWidth: 400, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ color: "#ef4444", marginBottom: 16 }}>{t.confirmDelete}</h3>
+            <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+              <button style={sBtn("#6b7280")} onClick={() => setConfirmDel(null)}>{t.no}</button>
+              <button style={sBtn("#ef4444")} onClick={deleteEntity}>{t.yes}</button>
             </div>
           </div>
         </div>

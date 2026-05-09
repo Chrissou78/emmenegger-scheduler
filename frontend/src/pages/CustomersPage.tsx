@@ -216,11 +216,8 @@ export function CustomersPage() {
 
   /* ── permissions from roles system ── */
   const perms = useMemo(() => {
-    const role = (user?.role || 'EMPLOYEE').toUpperCase() as Role;
-    const custom = user?.custom_permissions as
-      | { add?: Permission[]; remove?: Permission[] }
-      | undefined;
-    return resolvePermissions(role, custom);
+    const role: Role = user?.role || 'EMPLOYEE';
+    return resolvePermissions(role, user?.custom_permissions);
   }, [user]);
 
   const canView = perms.has('customers.view');
