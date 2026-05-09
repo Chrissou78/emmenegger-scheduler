@@ -1,3 +1,4 @@
+// src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/themeContext';
 import { useAuthStore } from './contexts/authStore';
@@ -15,11 +16,22 @@ import AdminPage from './pages/AdminPage';
 import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { TasksPage } from './pages/TasksPage';
-import {CustomersPage} from './pages/CustomersPage';
-import {QuotationsPage} from './pages/QuotationsPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { QuotationsPage } from './pages/QuotationsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import HRPage from './pages/HRPage';
 import SettingsPage from './pages/SettingsPage';
+
+/* ─── Map legacy DB roles to the 6-role system ─── */
+function normalizeRole(raw: string): Role {
+  const upper = (raw || '').toUpperCase();
+  switch (upper) {
+    case 'GLOBAL_MANAGER': return 'ADMIN';
+    case 'LOCAL_MANAGER':  return 'MANAGER';
+    case 'ARBEITER':       return 'EMPLOYEE';
+    default:               return (upper as Role) || 'EMPLOYEE';
+  }
+}
 
 /* ─── Auth guard ─── */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -43,7 +55,7 @@ function RequirePermission({
 
   const hasPermission = useMemo(() => {
     if (!user) return false;
-    const role: Role = user.role || 'EMPLOYEE';
+    const role = normalizeRole(user.role);
     const perms = resolvePermissions(role, user.custom_permissions, permissionMap);
     return perms.has(permission);
   }, [user, permissionMap, permission]);
@@ -54,7 +66,7 @@ function RequirePermission({
 
 function AppContent() {
   const { token, user, checkAuth } = useAuthStore();
-  const { fetchRoles, loaded: rolesLoaded } = useRolesStore();
+  const { fetchRoles } = useRolesStore();
 
   useEffect(() => {
     checkAuth();
@@ -68,7 +80,7 @@ function AppContent() {
 
   const getDefaultRoute = () => {
     if (!user) return '/login';
-    const role: Role = user.role || 'EMPLOYEE';
+    const role = normalizeRole(user.role);
     switch (role) {
       case 'ADMIN':
       case 'MANAGER':
