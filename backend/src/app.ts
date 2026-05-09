@@ -18,6 +18,7 @@ import { invoicesRouter } from './api/invoices.routes';
 import { statsRouter } from './api/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { authMiddleware } from './middleware/auth';
+import { settingsRouter } from './api/settings.routes';
 import { supabase } from './lib/supabase';
 
 const app = express();
@@ -70,6 +71,7 @@ app.use('/api/v1/contacts', authMiddleware, contactsRouter);
 app.use('/api/v1/quotations', authMiddleware, quotationsRouter);
 app.use('/api/v1/invoices', authMiddleware, invoicesRouter);
 app.use('/api/v1/stats', authMiddleware, statsRouter);
+app.use('/api/v1/settings', authMiddleware, settingsRouter);
 
 // ─── ERROR HANDLER ───
 app.use(errorHandler);
