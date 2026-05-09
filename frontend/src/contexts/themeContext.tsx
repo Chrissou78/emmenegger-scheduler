@@ -16,7 +16,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-const themes = {
+export const themes = {
   dark: {
     bg: '#0a0a0a', bgCard: '#1a1a1a', bgHeader: '#0f0f0f',
     gold: '#d4af37', goldDim: '#b8941f', goldFaint: '#8b7c1f', goldGhost: '#2a2415',
@@ -57,7 +57,7 @@ const themes = {
   },
 };
 
-const translations: Record<Lang, Record<string, any>> = {
+export const translations: Record<Lang, Record<string, any>> = {
   de: {
     brand: 'Emmenegger', sub: 'Disposition & Planung',
     employees: 'Mitarbeiter', assignments: 'Zuweisungen',
@@ -75,7 +75,7 @@ const translations: Record<Lang, Record<string, any>> = {
     navSchedule: 'Disposition', navMachines: 'Maschinen', navTasks: 'Aufträge',
     navCustomers: 'Kunden', navQuotations: 'Offerten', navInvoices: 'Rechnungen',
     navReports: 'Meine Woche', navStats: 'Statistiken', navAdmin: 'Benutzerverwaltung',
-    navProfile: 'Profil',
+    navHR: 'Personal', navProfile: 'Profil',
   },
   en: {
     brand: 'Emmenegger', sub: 'Scheduling & Planning',
@@ -94,7 +94,7 @@ const translations: Record<Lang, Record<string, any>> = {
     navSchedule: 'Schedule', navMachines: 'Machines', navTasks: 'Tasks',
     navCustomers: 'Customers', navQuotations: 'Quotations', navInvoices: 'Invoices',
     navReports: 'My Week', navStats: 'Statistics', navAdmin: 'User Management',
-    navProfile: 'Profile',
+    navHR: 'HR', navProfile: 'Profile',
   },
   fr: {
     brand: 'Emmenegger', sub: 'Disposition & Planification',
@@ -113,7 +113,7 @@ const translations: Record<Lang, Record<string, any>> = {
     navSchedule: 'Disposition', navMachines: 'Machines', navTasks: 'Tâches',
     navCustomers: 'Clients', navQuotations: 'Devis', navInvoices: 'Factures',
     navReports: 'Ma Semaine', navStats: 'Statistiques', navAdmin: 'Gestion des utilisateurs',
-    navProfile: 'Profil',
+    navHR: 'RH', navProfile: 'Profil',
   },
   pt: {
     brand: 'Emmenegger', sub: 'Disposição & Planejamento',
@@ -132,7 +132,7 @@ const translations: Record<Lang, Record<string, any>> = {
     navSchedule: 'Disposição', navMachines: 'Máquinas', navTasks: 'Tarefas',
     navCustomers: 'Clientes', navQuotations: 'Orçamentos', navInvoices: 'Faturas',
     navReports: 'Minha Semana', navStats: 'Estatísticas', navAdmin: 'Gestão de utilizadores',
-    navProfile: 'Perfil',
+    navHR: 'RH', navProfile: 'Perfil',
   },
 };
 
@@ -149,9 +149,7 @@ function detectBrowserLang(): Lang {
 
   for (const raw of candidates) {
     const code = raw.toLowerCase();
-    // exact match: "de", "en", "fr", "pt"
     if (SUPPORTED_LANGS.includes(code as Lang)) return code as Lang;
-    // prefix match: "de-CH" → "de", "pt-BR" → "pt", "en-US" → "en", "fr-FR" → "fr"
     const prefix = code.split('-')[0] as Lang;
     if (SUPPORTED_LANGS.includes(prefix)) return prefix;
   }
@@ -167,9 +165,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem('lang') as Lang | null;
-    // If user previously chose a language, respect that choice
     if (saved && SUPPORTED_LANGS.includes(saved)) return saved;
-    // First visit: detect from browser / OS
     return detectBrowserLang();
   });
 

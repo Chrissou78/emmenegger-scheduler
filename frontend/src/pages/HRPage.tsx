@@ -2,6 +2,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useTheme } from "../contexts/themeContext";
 import { useAuthStore } from "../contexts/authStore";
+import { useRolesStore } from "../store/rolesStore";
+import {
+  resolvePermissions,
+  type Role,
+  type Permission,
+} from "../../../shared/constants/roles";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
@@ -11,28 +17,26 @@ const API = import.meta.env.VITE_API_URL ?? "";
 interface HRProfile {
   id: string;
   user_id: string;
-  /* display */
   first_name: string;
   last_name: string;
   email: string;
   role: string;
   department: string;
-  /* HR fields */
   entry_date: string;
   exit_date: string;
-  contract_type: string; // PERMANENT | FIXED_TERM | HOURLY | APPRENTICE
-  work_pensum: number;   // percentage 0-100
-  salary_type: string;   // MONTHLY | HOURLY
-  salary_amount: number; // CHF
+  contract_type: string;
+  work_pensum: number;
+  salary_type: string;
+  salary_amount: number;
   hours_per_week: number;
   ahv_number: string;
   iban: string;
   nationality: string;
-  permit_type: string;   // CH | B | C | G | L | ""
+  permit_type: string;
   marital_status: string;
   children_count: number;
   canton: string;
-  bvg_code: string;      // pension fund plan code
+  bvg_code: string;
   notes: string;
 }
 
@@ -106,6 +110,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     HOURLY_PAY: "Stundenlohn",
     noResults: "Keine Ergebnisse",
     loading: "Laden…",
+    accessDenied: "Zugriff verweigert",
   },
   en: {
     title: "Human Resources",
@@ -167,6 +172,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     HOURLY_PAY: "Hourly Rate",
     noResults: "No results",
     loading: "Loading…",
+    accessDenied: "Access Denied",
   },
   fr: {
     title: "Ressources humaines",
@@ -228,6 +234,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     HOURLY_PAY: "Taux horaire",
     noResults: "Aucun résultat",
     loading: "Chargement…",
+    accessDenied: "Accès refusé",
   },
   pt: {
     title: "Recursos Humanos",
@@ -289,6 +296,7 @@ const L_ALL: Record<string, Record<string, string>> = {
     HOURLY_PAY: "Taxa horária",
     noResults: "Sem resultados",
     loading: "Carregando…",
+    accessDenied: "Acesso negado",
   },
 };
 
@@ -296,15 +304,15 @@ const L_ALL: Record<string, Record<string, string>> = {
 /*  Swiss social charges engine (2026 rates)                           */
 /* ------------------------------------------------------------------ */
 const CH_RATES = {
-  AHV_IV_EO_TOTAL: 0.106,       // 5.3% + 5.3%
-  ALV_TOTAL: 0.022,             // 1.1% + 1.1%, up to 148200
+  AHV_IV_EO_TOTAL: 0.106,
+  ALV_TOTAL: 0.022,
   ALV_CEILING: 148200,
-  ALV_SOLIDARITY: 0.01,         // 0.5% + 0.5%, above ceiling
-  UVG_BU: 0.008,                // ~0.8% employer
-  UVG_NBU: 0.015,               // ~1.5% employee
+  ALV_SOLIDARITY: 0.01,
+  UVG_BU: 0.008,
+  UVG_NBU: 0.015,
   UVG_CEILING: 148200,
-  KTG_TOTAL: 0.01,              // ~0.5% + 0.5%
-  FAK_DEFAULT: 0.022,           // ~2.2% employer (varies by canton)
+  KTG_TOTAL: 0.01,
+  FAK_DEFAULT: 0.022,
   BVG_ENTRY_THRESHOLD: 22680,
   BVG_COORDINATION_DEDUCTION: 25725,
   BVG_MIN_COORDINATED: 3675,
@@ -336,23 +344,19 @@ function computePayslip(
   const monthly = annualGross / 12;
   const lines: PayslipLine[] = [];
 
-  // AHV/IV/EO
   const ahvEach = annualGross * (CH_RATES.AHV_IV_EO_TOTAL / 2) / 12;
   lines.push({ label: "AHV/IV/EO", employer: ahvEach, employee: ahvEach });
 
-  // ALV
   const alvBase = Math.min(annualGross, CH_RATES.ALV_CEILING);
   const alvEach = alvBase * (CH_RATES.ALV_TOTAL / 2) / 12;
   lines.push({ label: "ALV", employer: alvEach, employee: alvEach });
 
-  // ALV solidarity (above ceiling)
   if (annualGross > CH_RATES.ALV_CEILING) {
     const excess = annualGross - CH_RATES.ALV_CEILING;
     const solEach = excess * (CH_RATES.ALV_SOLIDARITY / 2) / 12;
     lines.push({ label: "ALV Solidarität", employer: solEach, employee: solEach });
   }
 
-  // BVG
   if (annualGross >= CH_RATES.BVG_ENTRY_THRESHOLD) {
     const coordSalary = Math.max(
       CH_RATES.BVG_MIN_COORDINATED,
@@ -363,20 +367,16 @@ function computePayslip(
     lines.push({ label: "BVG", employer: bvgEach, employee: bvgEach });
   }
 
-  // UVG BU (employer)
   const uvgBuBase = Math.min(annualGross, CH_RATES.UVG_CEILING);
   const uvgBu = uvgBuBase * CH_RATES.UVG_BU / 12;
   lines.push({ label: "UVG BU", employer: uvgBu, employee: 0 });
 
-  // UVG NBU (employee)
   const uvgNbu = uvgBuBase * CH_RATES.UVG_NBU / 12;
   lines.push({ label: "UVG NBU", employer: 0, employee: uvgNbu });
 
-  // KTG
   const ktgEach = annualGross * (CH_RATES.KTG_TOTAL / 2) / 12;
   lines.push({ label: "KTG", employer: ktgEach, employee: ktgEach });
 
-  // FAK (employer only)
   const fakRate = FAK_BY_CANTON[canton] ?? CH_RATES.FAK_DEFAULT;
   const fak = annualGross * fakRate / 12;
   lines.push({ label: "FAK", employer: fak, employee: 0 });
@@ -393,11 +393,22 @@ function computePayslip(
 /* ------------------------------------------------------------------ */
 export default function HRPage() {
   const { th, isDark, lang } = useTheme();
-  const { token, role } = useAuthStore() as any;
+  const { token, user } = useAuthStore();
   const L = L_ALL[lang] ?? L_ALL.de;
   const gold = th.gold;
   const dimText = isDark ? "rgba(255,255,255,.45)" : "rgba(0,0,0,.4)";
   const inputBg = isDark ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.04)";
+
+  /* ---- permissions ---- */
+  const { permissionMap } = useRolesStore();
+  const perms = useMemo(() => {
+    const role: Role = user?.role || "EMPLOYEE";
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
+
+  const canView = perms.has("hr.view" as Permission);
+  const canEdit = perms.has("hr.edit" as Permission);
+  const canPayroll = perms.has("hr.payroll" as Permission);
 
   /* ---- styles ---- */
   const inputStyle: React.CSSProperties = {
@@ -451,13 +462,13 @@ export default function HRPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const headers = (): HeadersInit => ({
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  });
-
-  const canEdit =
-    role === "ADMIN" || role === "HR" || role === "admin" || role === "hr";
+  const headers = useCallback(
+    (): HeadersInit => ({
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token],
+  );
 
   /* ---- data fetching ---- */
   const fetchProfiles = useCallback(async () => {
@@ -477,7 +488,7 @@ export default function HRPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, filterDept, filterContract, token]);
+  }, [search, filterDept, filterContract, headers]);
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
@@ -515,8 +526,9 @@ export default function HRPage() {
       setForm(null);
       showToast(`${saved.first_name} ${saved.last_name} saved`);
       fetchProfiles();
-    } catch (e: any) {
-      showToast(e.message ?? "Save error", "err");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Save error";
+      showToast(msg, "err");
     } finally {
       setSaving(false);
     }
@@ -541,7 +553,7 @@ export default function HRPage() {
     setForm(null);
   };
 
-  const setField = (key: keyof HRProfile, value: any) =>
+  const setField = (key: keyof HRProfile, value: string | number) =>
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
 
   const fmtCHF = (v: number) =>
@@ -549,7 +561,6 @@ export default function HRPage() {
 
   const panelOpen = selected !== null;
 
-  /* ---- departments from data ---- */
   const departments = useMemo(
     () => [...new Set(profiles.map((p) => p.department).filter(Boolean))].sort(),
     [profiles]
@@ -569,7 +580,6 @@ export default function HRPage() {
     }
 
     const today = new Date();
-    const birthYear = today.getFullYear() - 35; // fallback
     const age = src.entry_date
       ? Math.max(18, today.getFullYear() - new Date(src.entry_date).getFullYear() + 25)
       : 35;
@@ -577,10 +587,27 @@ export default function HRPage() {
     return computePayslip(annualGross, age, src.canton || "ZH");
   }, [selected, form, editing]);
 
-  /* ---- formatters ---- */
   const contractLabel = (c: string) => L[c] ?? c;
   const salaryLabel = (s: string) =>
     s === "HOURLY" ? L.HOURLY_PAY : L.MONTHLY;
+
+  /* ---- available tabs based on permissions ---- */
+  const availableTabs: ("general" | "contract" | "social")[] = useMemo(() => {
+    const tabs: ("general" | "contract" | "social")[] = ["general", "contract"];
+    if (canPayroll) tabs.push("social");
+    return tabs;
+  }, [canPayroll]);
+
+  /* ================================================================ */
+  /*  ACCESS GUARD                                                     */
+  /* ================================================================ */
+  if (!canView) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: th.text }}>
+        <h2>{L.accessDenied}</h2>
+      </div>
+    );
+  }
 
   /* ================================================================ */
   /*  RENDER                                                           */
@@ -748,7 +775,7 @@ export default function HRPage() {
 
             {/* tabs */}
             <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-              {(["general", "contract", "social"] as const).map((k) => (
+              {availableTabs.map((k) => (
                 <button
                   key={k}
                   onClick={() => setTab(k)}
@@ -798,12 +825,12 @@ export default function HRPage() {
             {tab === "general" && editing && form && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <label style={labelStyle}>First Name</label>
+                  <label style={labelStyle}>{L.name}</label>
                   <input style={inputStyle} value={form.first_name}
                     onChange={(e) => setField("first_name", e.target.value)} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Last Name</label>
+                  <label style={labelStyle}>{L.name} (2)</label>
                   <input style={inputStyle} value={form.last_name}
                     onChange={(e) => setField("last_name", e.target.value)} />
                 </div>
@@ -946,7 +973,7 @@ export default function HRPage() {
             )}
 
             {/* ============ SOCIAL / PAYROLL TAB ============ */}
-            {tab === "social" && payslip && (
+            {tab === "social" && canPayroll && payslip && (
               <div>
                 <h3 style={{ margin: "0 0 16px", color: gold }}>{L.simulate}</h3>
 
@@ -1056,7 +1083,7 @@ export default function HRPage() {
               </div>
             )}
 
-            {tab === "social" && !payslip && (
+            {tab === "social" && canPayroll && !payslip && (
               <p style={{ color: dimText }}>
                 {L.salary}: —
               </p>

@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/themeContext';
 import { useAuthStore } from './contexts/authStore';
-import { useEffect } from 'react';
+import { useRolesStore } from './store/rolesStore';
+import { useEffect, useMemo } from 'react';
+import { resolvePermissions, type Role, type Permission } from '../../shared/constants/roles';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -9,13 +11,15 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import { SchedulePage } from './pages/SchedulePage';
 import { MachinesPage } from './pages/MachinesPage';
 import { ReportsPage } from './pages/ReportsPage';
-import { AdminPage } from './pages/AdminPage';
+import AdminPage from './pages/AdminPage';
 import { StatsPage } from './pages/StatsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { TasksPage } from './pages/TasksPage';
-import { CustomersPage } from './pages/CustomersPage';
-import { QuotationsPage } from './pages/QuotationsPage';
+import {CustomersPage} from './pages/CustomersPage';
+import {QuotationsPage} from './pages/QuotationsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
+import HRPage from './pages/HRPage';
+import SettingsPage from './pages/SettingsPage';
 
 /* ─── Auth guard ─── */
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -24,31 +28,60 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/* ─── Role guard ─── */
-function RequireRole({ children, roles }: { children: React.ReactNode; roles: string[] }) {
+/* ─── Permission guard ─── */
+function RequirePermission({
+  children,
+  permission,
+  fallback = "/reports",
+}: {
+  children: React.ReactNode;
+  permission: Permission;
+  fallback?: string;
+}) {
   const { user } = useAuthStore();
-  const userRole = (user?.role || '').toUpperCase();
-  if (!roles.some(r => r.toUpperCase() === userRole)) {
-    const fallback = userRole === 'ARBEITER' ? '/reports' : '/schedule';
-    return <Navigate to={fallback} replace />;
-  }
+  const { permissionMap } = useRolesStore();
+
+  const hasPermission = useMemo(() => {
+    if (!user) return false;
+    const role: Role = user.role || 'EMPLOYEE';
+    const perms = resolvePermissions(role, user.custom_permissions, permissionMap);
+    return perms.has(permission);
+  }, [user, permissionMap, permission]);
+
+  if (!hasPermission) return <Navigate to={fallback} replace />;
   return <>{children}</>;
 }
 
 function AppContent() {
   const { token, user, checkAuth } = useAuthStore();
+  const { fetchRoles, loaded: rolesLoaded } = useRolesStore();
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
+  useEffect(() => {
+    if (token) {
+      fetchRoles(token);
+    }
+  }, [token, fetchRoles]);
+
   const getDefaultRoute = () => {
     if (!user) return '/login';
-    switch ((user.role || '').toUpperCase()) {
-      case 'ARBEITER': return '/reports';
-      case 'LOCAL_MANAGER': return '/schedule';
-      case 'GLOBAL_MANAGER': return '/schedule';
-      default: return '/reports';
+    const role: Role = user.role || 'EMPLOYEE';
+    switch (role) {
+      case 'ADMIN':
+      case 'MANAGER':
+        return '/schedule';
+      case 'HR':
+        return '/hr';
+      case 'FINANCE':
+        return '/invoices';
+      case 'SALES':
+        return '/customers';
+      case 'EMPLOYEE':
+      default:
+        return '/reports';
     }
   };
 
@@ -64,51 +97,63 @@ function AppContent() {
         <Route element={<RequireAuth><AppShell /></RequireAuth>}>
 
           <Route path="/schedule" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="schedule.view">
               <SchedulePage />
-            </RequireRole>
+            </RequirePermission>
           } />
 
           <Route path="/machines" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="machines.view">
               <MachinesPage />
-            </RequireRole>
+            </RequirePermission>
           } />
 
           <Route path="/tasks" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="tasks.view">
               <TasksPage />
-            </RequireRole>
+            </RequirePermission>
           } />
 
           <Route path="/customers" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="customers.view">
               <CustomersPage />
-            </RequireRole>
+            </RequirePermission>
           } />
 
           <Route path="/quotations" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="quotations.view">
               <QuotationsPage />
-            </RequireRole>
+            </RequirePermission>
           } />
 
           <Route path="/invoices" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="invoices.view">
               <InvoicesPage />
-            </RequireRole>
+            </RequirePermission>
           } />
 
           <Route path="/stats" element={
-            <RequireRole roles={['LOCAL_MANAGER', 'GLOBAL_MANAGER']}>
+            <RequirePermission permission="reports.team">
               <StatsPage />
-            </RequireRole>
+            </RequirePermission>
+          } />
+
+          <Route path="/hr" element={
+            <RequirePermission permission="hr.view">
+              <HRPage />
+            </RequirePermission>
           } />
 
           <Route path="/admin" element={
-            <RequireRole roles={['GLOBAL_MANAGER']}>
+            <RequirePermission permission="admin.view">
               <AdminPage />
-            </RequireRole>
+            </RequirePermission>
+          } />
+
+          <Route path="/settings" element={
+            <RequirePermission permission="admin.roles">
+              <SettingsPage />
+            </RequirePermission>
           } />
 
           {/* Available to all authenticated users */}

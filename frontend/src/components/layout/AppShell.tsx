@@ -1,36 +1,75 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../contexts/themeContext';
 import { useAuthStore } from '../../contexts/authStore';
+import {
+  resolvePermissions,
+  ROLE_LABELS as SHARED_ROLE_LABELS,
+  type Role,
+  type Permission,
+} from '../../../../shared/constants/roles';
+
+/* ────────────────────── nav definition ────────────────────── */
 
 interface NavItem {
   path: string;
   labelKey: string;
   icon: string;
-  roles?: string[];
+  /** One or more permissions — user needs at least ONE to see the item */
+  permissions?: Permission[];
   section?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/schedule',    labelKey: 'navSchedule',    icon: '📅', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'planning' },
-  { path: '/machines',    labelKey: 'navMachines',    icon: '🚜', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'planning' },
-  { path: '/tasks',       labelKey: 'navTasks',       icon: '📋', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'planning' },
-  { path: '/customers',   labelKey: 'navCustomers',   icon: '🏢', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'crm' },
-  { path: '/quotations',  labelKey: 'navQuotations',  icon: '📄', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'crm' },
-  { path: '/invoices',    labelKey: 'navInvoices',    icon: '💰', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'], section: 'crm' },
-  { path: '/reports',     labelKey: 'navReports',     icon: '📝' },
-  { path: '/stats',       labelKey: 'navStats',       icon: '📊', roles: ['GLOBAL_MANAGER', 'LOCAL_MANAGER'] },
-  { path: '/admin',       labelKey: 'navAdmin',       icon: '👥', roles: ['GLOBAL_MANAGER'] },
-  { path: '/profile',     labelKey: 'navProfile',     icon: '👤' },
+  // ─ Planning
+  { path: '/schedule',   labelKey: 'navSchedule',   icon: '📅', permissions: ['schedule.view'],    section: 'planning' },
+  { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning' },
+  { path: '/tasks',      labelKey: 'navTasks',      icon: '📋', permissions: ['tasks.view'],       section: 'planning' },
+  // ─ CRM
+  { path: '/customers',  labelKey: 'navCustomers',  icon: '🏢', permissions: ['customers.view'],   section: 'crm' },
+  { path: '/quotations', labelKey: 'navQuotations', icon: '📄', permissions: ['quotations.view'],  section: 'crm' },
+  { path: '/invoices',   labelKey: 'navInvoices',   icon: '💰', permissions: ['invoices.view'],    section: 'crm' },
+  // ─ Operations
+  { path: '/reports',    labelKey: 'navReports',    icon: '📝', permissions: ['reports.own'],       section: 'ops' },
+  { path: '/stats',      labelKey: 'navStats',      icon: '📊', permissions: ['reports.team'],      section: 'ops' },
+  // ─ HR & Admin
+  { path: '/hr',         labelKey: 'navHR',         icon: '🏥', permissions: ['hr.view'],           section: 'admin' },
+  { path: '/admin',      labelKey: 'navAdmin',      icon: '👥', permissions: ['admin.users'],       section: 'admin' },
+  // ─ Always visible
+  { path: '/profile',    labelKey: 'navProfile',    icon: '👤' },
 ];
 
-const CRM_LABEL: Record<string, string> = { de: 'CRM', en: 'CRM', fr: 'CRM', pt: 'CRM' };
-const ROLE_LABELS: Record<string, Record<string, string>> = {
+/* ────────────────────── section labels ────────────────────── */
+
+const SECTION_LABELS: Record<string, Record<string, string>> = {
+  de: { planning: 'Planung', crm: 'CRM', ops: 'Betrieb', admin: 'Verwaltung' },
+  en: { planning: 'Planning', crm: 'CRM', ops: 'Operations', admin: 'Administration' },
+  fr: { planning: 'Planification', crm: 'CRM', ops: 'Opérations', admin: 'Administration' },
+  pt: { planning: 'Planejamento', crm: 'CRM', ops: 'Operações', admin: 'Administração' },
+};
+
+/* ────────────────────── role display labels (fallback) ────────────────────── */
+/* Uses the shared ROLE_LABELS from roles.ts, but adds a fallback
+   for legacy role names that may still exist in the DB */
+const LEGACY_ROLE_LABELS: Record<string, Record<string, string>> = {
   de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter' },
   en: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Local Manager', ARBEITER: 'Worker' },
   fr: { GLOBAL_MANAGER: 'Directeur général', LOCAL_MANAGER: 'Chef de chantier', ARBEITER: 'Ouvrier' },
   pt: { GLOBAL_MANAGER: 'Gerente Global', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabalhador' },
 };
+
+/** Map legacy role names to the new system so permissions resolve correctly */
+function normalizeRole(raw: string): Role {
+  const upper = (raw || '').toUpperCase();
+  switch (upper) {
+    case 'GLOBAL_MANAGER': return 'ADMIN';
+    case 'LOCAL_MANAGER':  return 'MANAGER';
+    case 'ARBEITER':       return 'EMPLOYEE';
+    default:               return (upper as Role) || 'EMPLOYEE';
+  }
+}
+
+/* ────────────────────── component ────────────────────── */
 
 export function AppShell() {
   const { isDark, th, t, lang, toggleTheme, setLanguage } = useTheme();
@@ -41,27 +80,52 @@ export function AppShell() {
 
   const gold = th.gold;
   const sideW = collapsed ? 64 : 220;
-  const userRole = (user?.role || '').toUpperCase();
-  const isWorker = userRole === 'ARBEITER';
 
+  /* ── resolve effective permissions ── */
+  const perms = useMemo(() => {
+    const role = normalizeRole(user?.role || '');
+    return resolvePermissions(role, user?.custom_permissions);
+  }, [user]);
+
+  const hasPerm = (p: Permission) => perms.has(p);
+
+  /* ── visible nav items based on permissions ── */
+  const visibleItems = useMemo(() =>
+    NAV_ITEMS.filter(item => {
+      if (!item.permissions || item.permissions.length === 0) return true;
+      return item.permissions.some(p => perms.has(p));
+    }),
+  [perms]);
+
+  /* ── redirect if current path not allowed ── */
   useEffect(() => {
-    const managerOnlyPaths = ['/schedule', '/machines', '/tasks', '/customers', '/quotations', '/invoices', '/stats', '/admin'];
-    if (isWorker && managerOnlyPaths.some(p => location.pathname.startsWith(p))) {
-      navigate('/reports', { replace: true });
+    const current = NAV_ITEMS.find(item => location.pathname.startsWith(item.path));
+    if (!current || !current.permissions) return;
+    const allowed = current.permissions.some(p => perms.has(p));
+    if (!allowed) {
+      // Find the first allowed path, or fallback to /profile
+      const fallback = visibleItems[0]?.path || '/profile';
+      navigate(fallback, { replace: true });
     }
-  }, [location.pathname, isWorker, navigate]);
+  }, [location.pathname, perms, visibleItems, navigate]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const visibleItems = NAV_ITEMS.filter(item => {
-    if (!item.roles) return true;
-    return item.roles.some(r => r.toUpperCase() === userRole);
-  });
-
   const getLabel = (key: string): string => (t as any)[key] || key;
+
+  /* ── role display name ── */
+  const roleDisplayName = useMemo(() => {
+    const rawRole = (user?.role || '').toUpperCase();
+    const normalized = normalizeRole(rawRole);
+    // Try shared labels first, then legacy
+    const shared = (SHARED_ROLE_LABELS[lang] || SHARED_ROLE_LABELS.en)?.[normalized];
+    if (shared) return shared;
+    const legacy = (LEGACY_ROLE_LABELS[lang] || LEGACY_ROLE_LABELS.de)[rawRole];
+    return legacy || rawRole;
+  }, [user, lang]);
 
   let lastSection = '';
 
@@ -107,6 +171,7 @@ export function AppShell() {
           {visibleItems.map((item, idx) => {
             const active = location.pathname === item.path;
             const showDivider = item.section && item.section !== lastSection && idx > 0;
+            const sectionLabels = SECTION_LABELS[lang] || SECTION_LABELS.en;
             lastSection = item.section || lastSection;
             const label = getLabel(item.labelKey);
 
@@ -115,11 +180,11 @@ export function AppShell() {
                 {showDivider && !collapsed && (
                   <div style={{ height: 1, background: th.borderFaint, margin: '8px 18px' }} />
                 )}
-                {showDivider && !collapsed && item.section === 'crm' && (
+                {showDivider && !collapsed && item.section && (
                   <div style={{
                     fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase',
                     color: th.textGhost, padding: '4px 18px 4px', marginTop: 2,
-                  }}>{CRM_LABEL[lang] || 'CRM'}</div>
+                  }}>{sectionLabels[item.section] || item.section.toUpperCase()}</div>
                 )}
                 <button
                   onClick={() => navigate(item.path)}
@@ -160,10 +225,10 @@ export function AppShell() {
         }}>
           {!collapsed && user && (
             <div style={{ padding: '8px 0', marginBottom: 4 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{user.email}</div>
-              <div style={{ fontSize: 11, color: th.textDim }}>
-                {(ROLE_LABELS[lang] || ROLE_LABELS.de)[userRole] || userRole}
+              <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>
+                {user.first_name ? `${user.first_name}${user.last_name ? ` ${user.last_name}` : ''}` : user.email}
               </div>
+              <div style={{ fontSize: 11, color: th.textDim }}>{roleDisplayName}</div>
             </div>
           )}
 

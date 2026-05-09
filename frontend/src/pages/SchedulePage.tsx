@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { themes, ABS } from '../i18n/translations';
 import { format } from 'date-fns';
+import { useAuthStore } from '../contexts/authStore';
+import { useRolesStore } from '../store/rolesStore';
+import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
 
 /* ─── Theme type ─── */
 type Theme = typeof themes.dark;
@@ -28,7 +31,7 @@ const T: Record<string, any> = {
     activeTasks: 'Aktive Aufträge', absenceLegend: 'Absenzen',
     kw: 'KW', bulkDay: 'Ganzer Tag', bulkEmployee: 'Ganze Woche',
     networkError: 'Netzwerkfehler', error: 'Fehler', weekNotFound: 'Woche nicht gefunden',
-    remove: 'Entfernen',
+    remove: 'Entfernen', accessDenied: 'Zugriff verweigert',
   },
   en: {
     employees: 'Employees', assignments: 'Assignments', absences: 'Absences',
@@ -43,7 +46,7 @@ const T: Record<string, any> = {
     activeTasks: 'Active Tasks', absenceLegend: 'Absences',
     kw: 'CW', bulkDay: 'Entire Day', bulkEmployee: 'Entire Week',
     networkError: 'Network error', error: 'Error', weekNotFound: 'Week not found',
-    remove: 'Remove',
+    remove: 'Remove', accessDenied: 'Access Denied',
   },
   fr: {
     employees: 'Employés', assignments: 'Affectations', absences: 'Absences',
@@ -58,7 +61,7 @@ const T: Record<string, any> = {
     activeTasks: 'Tâches actives', absenceLegend: 'Absences',
     kw: 'S', bulkDay: 'Journée entière', bulkEmployee: 'Semaine entière',
     networkError: 'Erreur réseau', error: 'Erreur', weekNotFound: 'Semaine introuvable',
-    remove: 'Supprimer',
+    remove: 'Supprimer', accessDenied: 'Accès refusé',
   },
   pt: {
     employees: 'Funcionários', assignments: 'Alocações', absences: 'Ausências',
@@ -73,7 +76,7 @@ const T: Record<string, any> = {
     activeTasks: 'Tarefas ativas', absenceLegend: 'Ausências',
     kw: 'S', bulkDay: 'Dia inteiro', bulkEmployee: 'Semana inteira',
     networkError: 'Erro de rede', error: 'Erro', weekNotFound: 'Semana não encontrada',
-    remove: 'Remover',
+    remove: 'Remover', accessDenied: 'Acesso negado',
   },
 };
 
@@ -108,6 +111,18 @@ export function SchedulePage() {
   const th: Theme = isDark ? themes.dark : themes.light;
   const t = T[lang] || T.de;
 
+  /* ─── Auth & Permissions ─── */
+  const { user, token } = useAuthStore();
+  const { permissionMap } = useRolesStore();
+
+  const perms = useMemo(() => {
+    const role: Role = user?.role || "EMPLOYEE";
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
+
+  const canView = perms.has("schedule.view");
+  const canEdit = perms.has("schedule.edit");
+
   /* ─── State ─── */
   const [weekOff, setWeekOff] = useState(0);
   const [dept, setDept] = useState('all');
@@ -136,7 +151,11 @@ export function SchedulePage() {
   const dates = getWeekDates(weekOff);
   const kw = getKW(dates[0]);
   const year = dates[0].getFullYear();
-  const headers = { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' };
+
+  const authHeaders = useMemo(() => ({
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }), [token]);
 
   const emps = useMemo(() => users.filter(u => dept === 'all' || u.department === dept), [users, dept]);
   const matchingWeeks = useMemo(() => weeks.filter(w => w.week_number === kw && w.year === year), [weeks, kw, year]);
@@ -181,20 +200,20 @@ export function SchedulePage() {
 
   /* ─── Fetchers ─── */
   const fetchWeeks = async () => {
-    try { const r = await fetch(`${API}/api/v1/weeks`, { headers }); const d = await r.json(); setWeeks(d.data || []); } catch {}
+    try { const r = await fetch(`${API}/api/v1/weeks`, { headers: authHeaders }); const d = await r.json(); setWeeks(d.data || []); } catch {}
   };
   const fetchTasks = async () => {
-    try { const r = await fetch(`${API}/api/v1/tasks`, { headers }); const d = await r.json(); setTasks(d.data || []); } catch {}
+    try { const r = await fetch(`${API}/api/v1/tasks`, { headers: authHeaders }); const d = await r.json(); setTasks(d.data || []); } catch {}
   };
   const fetchUsers = async () => {
-    try { const r = await fetch(`${API}/api/v1/users`, { headers }); const d = await r.json(); setUsers(d.data || []); } catch {}
+    try { const r = await fetch(`${API}/api/v1/users`, { headers: authHeaders }); const d = await r.json(); setUsers(d.data || []); } catch {}
   };
   const fetchAllocations = async () => {
     if (matchingWeeks.length === 0) { setRawAllocs([]); return; }
     const all: Allocation[] = [];
     for (const w of matchingWeeks) {
       try {
-        const r = await fetch(`${API}/api/v1/allocations?week_id=${w.id}`, { headers });
+        const r = await fetch(`${API}/api/v1/allocations?week_id=${w.id}`, { headers: authHeaders });
         const d = await r.json();
         if (Array.isArray(d.data)) all.push(...d.data);
       } catch {}
@@ -233,6 +252,7 @@ export function SchedulePage() {
 
   /* ─── Single cell actions ─── */
   const openPicker = (userId: string, day: number, e: React.MouseEvent) => {
+    if (!canEdit) return;
     e.stopPropagation();
     const cell = getCell(userId, day);
     if (cell.taskIds.length >= 2) { showToast(t.max2, true); return; }
@@ -255,7 +275,7 @@ export function SchedulePage() {
 
     try {
       const r = await fetch(`${API}/api/v1/allocations`, {
-        method: 'POST', headers,
+        method: 'POST', headers: authHeaders,
         body: JSON.stringify({ user_id: userId, task_id: taskId, day_of_week: day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
       });
       if (r.ok) {
@@ -268,16 +288,18 @@ export function SchedulePage() {
   };
 
   const removeAlloc = async (allocId: string) => {
+    if (!canEdit) return;
     try {
-      const r = await fetch(`${API}/api/v1/allocations/${allocId}`, { method: 'DELETE', headers });
+      const r = await fetch(`${API}/api/v1/allocations/${allocId}`, { method: 'DELETE', headers: authHeaders });
       if (r.ok) { showToast(t.removed); await fetchAllocations(); }
     } catch { showToast(t.networkError, true); }
   };
 
   const assignAbsence = async (userId: string, day: number, code: string) => {
+    if (!canEdit) return;
     try {
       const r = await fetch(`${API}/api/v1/absences`, {
-        method: 'POST', headers,
+        method: 'POST', headers: authHeaders,
         body: JSON.stringify({ userId, date: format(dates[day], 'yyyy-MM-dd'), absenceCode: parseInt(code), source: 'MANUAL' }),
       });
       if (r.ok) {
@@ -290,7 +312,7 @@ export function SchedulePage() {
 
   /* ─── Bulk actions ─── */
   const bulkAssignTask = async (taskId: string) => {
-    if (!bulkPicker) return;
+    if (!bulkPicker || !canEdit) return;
     setBulkLoading(true);
     const task = taskById[taskId];
     const week = matchingWeeks.find(w => task && w.schedule_type === task.schedule_type) || matchingWeeks[0];
@@ -304,7 +326,7 @@ export function SchedulePage() {
         if (cell.taskIds.length >= 2 || cell.taskIds.includes(taskId)) { skip++; continue; }
         try {
           const r = await fetch(`${API}/api/v1/allocations`, {
-            method: 'POST', headers,
+            method: 'POST', headers: authHeaders,
             body: JSON.stringify({ user_id: emp.id, task_id: taskId, day_of_week: bulkPicker.day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
           });
           if (r.ok) success++; else skip++;
@@ -316,7 +338,7 @@ export function SchedulePage() {
         if (cell.taskIds.length >= 2 || cell.taskIds.includes(taskId)) { skip++; continue; }
         try {
           const r = await fetch(`${API}/api/v1/allocations`, {
-            method: 'POST', headers,
+            method: 'POST', headers: authHeaders,
             body: JSON.stringify({ user_id: bulkPicker.userId, task_id: taskId, day_of_week: day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
           });
           if (r.ok) success++; else skip++;
@@ -331,7 +353,7 @@ export function SchedulePage() {
   };
 
   const bulkAssignAbsence = async (code: string) => {
-    if (!bulkPicker) return;
+    if (!bulkPicker || !canEdit) return;
     setBulkLoading(true);
     let success = 0, skip = 0;
 
@@ -339,7 +361,7 @@ export function SchedulePage() {
       for (const emp of emps) {
         try {
           const r = await fetch(`${API}/api/v1/absences`, {
-            method: 'POST', headers,
+            method: 'POST', headers: authHeaders,
             body: JSON.stringify({ userId: emp.id, date: format(dates[bulkPicker.day!], 'yyyy-MM-dd'), absenceCode: parseInt(code), source: 'MANUAL' }),
           });
           if (r.ok) success++; else skip++;
@@ -349,7 +371,7 @@ export function SchedulePage() {
       for (let day = 0; day < 6; day++) {
         try {
           const r = await fetch(`${API}/api/v1/absences`, {
-            method: 'POST', headers,
+            method: 'POST', headers: authHeaders,
             body: JSON.stringify({ userId: bulkPicker.userId, date: format(dates[day], 'yyyy-MM-dd'), absenceCode: parseInt(code), source: 'MANUAL' }),
           });
           if (r.ok) success++; else skip++;
@@ -407,6 +429,15 @@ export function SchedulePage() {
   }, [bulkPicker, bulkSearch, tasks, activeTaskIds]);
 
   const deptLabel = (d: string) => d === 'garten' ? t.gartenFull : d === 'unterhalt' ? t.unterhaltFull : t.bothDept;
+
+  /* ═══════════════════════════════════════ ACCESS GUARD ═══════════════════════════════════════ */
+  if (!canView) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: th.text }}>
+        <h2>{t.accessDenied}</h2>
+      </div>
+    );
+  }
 
   /* ═══════════════════════════════════════ RENDER ═══════════════════════════════════════ */
   return (
@@ -491,18 +522,22 @@ export function SchedulePage() {
                 </th>
                 {t.days.map((d: string, i: number) => (
                   <th key={d}
-                    style={{ ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '4px', cursor: 'pointer' }}
+                    style={{
+                      ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '4px',
+                      cursor: canEdit ? 'pointer' : 'default',
+                    }}
                     onClick={e => {
+                      if (!canEdit) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       setPicker(null);
                       setBulkPicker({ type: 'day', day: i, rect });
                       setBulkSearch('');
                     }}
-                    title={`${t.bulkDay}: ${t.days[i]}`}
+                    title={canEdit ? `${t.bulkDay}: ${t.days[i]}` : undefined}
                   >
                     <div style={{ fontSize: 11, fontWeight: 500, color: th.gold }}>{d}</div>
                     <div style={{ fontSize: 8, color: th.textGhost, fontWeight: 500 }}>{fmtDate(dates[i])}</div>
-                    <div style={{ fontSize: 7, color: th.goldDim, marginTop: 1 }}>▼</div>
+                    {canEdit && <div style={{ fontSize: 7, color: th.goldDim, marginTop: 1 }}>▼</div>}
                   </th>
                 ))}
               </tr>
@@ -521,14 +556,18 @@ export function SchedulePage() {
                     {emp.department === 'garten' ? 'GT' : 'UH'}
                   </td>
                   {/* Name — click for bulk row */}
-                  <td style={{ padding: '4px 12px', borderRight: `1px solid ${th.borderFaint}`, cursor: 'pointer' }}
+                  <td style={{
+                    padding: '4px 12px', borderRight: `1px solid ${th.borderFaint}`,
+                    cursor: canEdit ? 'pointer' : 'default',
+                  }}
                     onClick={e => {
+                      if (!canEdit) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       setPicker(null);
                       setBulkPicker({ type: 'employee', userId: emp.id, rect });
                       setBulkSearch('');
                     }}
-                    title={`${t.bulkEmployee}: ${emp.first_name}`}
+                    title={canEdit ? `${t.bulkEmployee}: ${emp.first_name}` : undefined}
                   >
                     <div style={{ fontSize: 12, fontWeight: 600, color: th.empName }}>
                       {emp.first_name} {emp.last_name}
@@ -537,7 +576,7 @@ export function SchedulePage() {
                       fontSize: 8, color: th.textGhost, fontWeight: 500,
                       letterSpacing: 1, textTransform: 'uppercase' as const,
                     }}>
-                      {deptLabel(emp.department)} · ▶
+                      {deptLabel(emp.department)}{canEdit ? ' · ▶' : ''}
                     </div>
                   </td>
                   {/* Day cells */}
@@ -547,7 +586,8 @@ export function SchedulePage() {
                     return (
                       <td key={di} style={{
                         borderRight: di < 5 ? `1px solid ${th.borderFaint}` : 'none',
-                        padding: '2px 3px', position: 'relative' as const, cursor: 'pointer',
+                        padding: '2px 3px', position: 'relative' as const,
+                        cursor: canEdit ? 'pointer' : 'default',
                         verticalAlign: 'middle' as const,
                       }}
                         onClick={e => openPicker(emp.id, di, e)}
@@ -572,13 +612,15 @@ export function SchedulePage() {
                                   }}>
                                     {task?.name || task?.code || '?'}
                                   </span>
-                                  <span style={{
-                                    fontSize: 10, color: th.textDim, cursor: 'pointer',
-                                    marginLeft: 4, lineHeight: 1, flexShrink: 0,
-                                  }}
-                                    onClick={e => { e.stopPropagation(); removeAlloc(cell.allocIds[tidx]); }}
-                                    title={t.remove}
-                                  >×</span>
+                                  {canEdit && (
+                                    <span style={{
+                                      fontSize: 10, color: th.textDim, cursor: 'pointer',
+                                      marginLeft: 4, lineHeight: 1, flexShrink: 0,
+                                    }}
+                                      onClick={e => { e.stopPropagation(); removeAlloc(cell.allocIds[tidx]); }}
+                                      title={t.remove}
+                                    >×</span>
+                                  )}
                                 </div>
                               );
                             })}
@@ -587,7 +629,7 @@ export function SchedulePage() {
                           <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             height: '100%', color: th.textGhost, fontSize: 16, fontWeight: 300,
-                          }}>+</div>
+                          }}>{canEdit ? '+' : ''}</div>
                         )}
                       </td>
                     );
@@ -662,7 +704,7 @@ export function SchedulePage() {
       </main>
 
       {/* ══════════ SINGLE CELL TASK PICKER ══════════ */}
-      {picker && (
+      {canEdit && picker && (
         <div ref={pickerRef} style={{
           position: 'fixed',
           top: Math.min(picker.rect.bottom + 4, window.innerHeight - 400),
@@ -749,7 +791,7 @@ export function SchedulePage() {
       )}
 
       {/* ══════════ BULK TASK PICKER (column / row) ══════════ */}
-      {bulkPicker && (
+      {canEdit && bulkPicker && (
         <div ref={bulkRef} style={{
           position: 'fixed',
           top: Math.min(bulkPicker.rect.bottom + 4, window.innerHeight - 420),
@@ -839,7 +881,7 @@ export function SchedulePage() {
       )}
 
       {/* ══════════ ABSENCE MODAL (fallback) ══════════ */}
-      {absModal && (
+      {canEdit && absModal && (
         <div style={{
           position: 'fixed', inset: 0, background: th.modalBg, display: 'flex',
           alignItems: 'center', justifyContent: 'center', zIndex: 500,

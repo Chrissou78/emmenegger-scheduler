@@ -1,20 +1,18 @@
 // shared/constants/roles.ts
 
 /* ------------------------------------------------------------------ */
-/*  Roles                                                              */
+/*  Built-in roles (used as DB seed + fallback)                        */
 /* ------------------------------------------------------------------ */
-export const ROLES = [
-  "ADMIN",          // Executive / Global Manager
-  "MANAGER",        // Team Leader / Local Admin
-  "HR",             // Human Resources
-  "FINANCE",        // Finance / Accounting
-  "SALES",          // Sales / Commercial
-  "EMPLOYEE",       // Worker
+export const BUILT_IN_ROLES = [
+  "ADMIN", "MANAGER", "HR", "FINANCE", "SALES", "EMPLOYEE",
 ] as const;
 
-export type Role = (typeof ROLES)[number];
+export type BuiltInRole = (typeof BUILT_IN_ROLES)[number];
 
-export const ROLE_LABELS: Record<string, Record<Role, string>> = {
+/** Runtime role = any string. Built-in ones are type-safe, custom ones are dynamic. */
+export type Role = BuiltInRole | (string & {});
+
+export const ROLE_LABELS: Record<string, Record<string, string>> = {
   de: {
     ADMIN:    "Geschäftsführer",
     MANAGER:  "Teamleiter",
@@ -53,53 +51,28 @@ export const ROLE_LABELS: Record<string, Record<Role, string>> = {
 /*  Permissions — every action in the system                           */
 /* ------------------------------------------------------------------ */
 export const PERMISSIONS = [
-  // Schedule
-  "schedule.view",
-  "schedule.edit",
-  // Customers
-  "customers.view",
-  "customers.edit",
-  "customers.delete",
-  // Machines
-  "machines.view",
-  "machines.edit",
-  "machines.delete",
-  // Tasks
-  "tasks.view",
-  "tasks.edit",
-  "tasks.delete",
-  // Quotations
-  "quotations.view",
-  "quotations.edit",
-  "quotations.delete",
-  // Invoices
-  "invoices.view",
-  "invoices.edit",
-  "invoices.delete",
-  // HR
-  "hr.view",
-  "hr.edit",
-  "hr.payroll",
-  // Finance
-  "finance.view",
-  "finance.reports",
-  // Admin
-  "admin.users",
-  "admin.roles",
-  // Reports
-  "reports.own",
-  "reports.team",
-  "reports.all",
+  "schedule.view", "schedule.edit",
+  "customers.view", "customers.edit", "customers.delete",
+  "machines.view", "machines.edit", "machines.delete",
+  "tasks.view", "tasks.edit", "tasks.delete",
+  "quotations.view", "quotations.edit", "quotations.delete",
+  "invoices.view", "invoices.edit", "invoices.delete",
+  "hr.view", "hr.edit", "hr.payroll",
+  "finance.view", "finance.reports",
+  "admin.view", "admin.users", "admin.roles",
+  "admin.customers", "admin.machines", "admin.tasks",
+  "reports.own", "reports.team", "reports.all",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 /* ------------------------------------------------------------------ */
-/*  Default permission matrix — each role gets these by default        */
-/*  Can be overridden per user                                         */
+/*  Default permission matrix — seed values for built-in roles         */
+/*  At runtime, the actual matrix comes from the DB via                */
+/*  GET /api/v1/settings/roles                                         */
 /* ------------------------------------------------------------------ */
-export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  ADMIN: [...PERMISSIONS], // everything
+export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  ADMIN: [...PERMISSIONS],
 
   MANAGER: [
     "schedule.view", "schedule.edit",
@@ -109,6 +82,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "quotations.view", "quotations.edit",
     "invoices.view",
     "hr.view",
+    "admin.view",
     "reports.own", "reports.team",
   ],
 
@@ -117,7 +91,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "customers.view",
     "hr.view", "hr.edit", "hr.payroll",
     "reports.own", "reports.team", "reports.all",
-    "admin.users",
+    "admin.view", "admin.users",
   ],
 
   FINANCE: [
@@ -147,14 +121,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  Helper: resolve effective permissions for a user                   */
-/*  user.role gives the defaults, user.custom_permissions overrides    */
+/*  Resolve effective permissions for a user                           */
+/*  rolePermissions = live map from DB (falls back to defaults)        */
 /* ------------------------------------------------------------------ */
 export function resolvePermissions(
   role: Role,
-  customPermissions?: { add?: Permission[]; remove?: Permission[] }
+  customPermissions?: { add?: Permission[]; remove?: Permission[] } | null,
+  /** Pass the live role→permissions map from the DB when available */
+  liveRolePermissions?: Record<string, Permission[]>,
 ): Set<Permission> {
-  const base = new Set(DEFAULT_ROLE_PERMISSIONS[role] ?? []);
+  const source = liveRolePermissions ?? DEFAULT_ROLE_PERMISSIONS;
+  const base = new Set<Permission>(source[role] ?? []);
   if (customPermissions?.add) {
     for (const p of customPermissions.add) base.add(p);
   }

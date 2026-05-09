@@ -3,7 +3,7 @@ import { useTheme } from "../contexts/themeContext";
 import { useAuthStore } from "../contexts/authStore";
 import { CsvToolbar } from "../components/CsvToolbar";
 import {
-  ROLES,
+  BUILT_IN_ROLES,
   ROLE_LABELS,
   PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
@@ -12,6 +12,7 @@ import {
   type Permission,
 } from "../../../shared/constants/roles";
 import { RolePermissionMatrix } from "../components/RolePermissionMatrix";
+import { useRolesStore } from "../store/rolesStore";
 
 /* ───────────────────── API ───────────────────── */
 const API = import.meta.env.VITE_API_URL ?? "";
@@ -354,12 +355,14 @@ export default function AdminPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
   const t = L_ALL[lang] ?? L_ALL.de;
+  const { getRoleNames, getRoleLabel, permissionMap } = useRolesStore();
+  const roleNames = getRoleNames();
 
   /* ── Permissions ── */
   const perms = useMemo(() => {
     const role: Role = user?.role || "EMPLOYEE";
-    return resolvePermissions(role, user?.custom_permissions);
-  }, [user]);
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
 
   const canManageUsers = perms.has("admin.users" as Permission);
   const canManageCustomers = perms.has("admin.customers" as Permission) || perms.has("customers.edit" as Permission);
@@ -871,7 +874,7 @@ export default function AdminPage() {
           <>
             <select style={{ ...sSelect, maxWidth: 160 }} value={filterRole} onChange={(e) => setFilterRole(e.target.value)}>
               <option value="">{t.role}</option>
-              {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+              {roleNames.map((r) => <option key={r} value={r}>{getRoleLabel(r, lang)}</option>)}
             </select>
             <select style={{ ...sSelect, maxWidth: 180 }} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
               <option value="">{t.department}</option>
@@ -940,7 +943,7 @@ export default function AdminPage() {
                 <td style={sTd}>{u.email}</td>
                 <td style={sTd}>
                   <span style={{ padding: "2px 8px", borderRadius: 4, background: gold + "22", color: gold, fontWeight: 600, fontSize: 12 }}>
-                    {roleLabel(u.role)}
+                    {getRoleLabel(u.role, lang)}
                   </span>
                 </td>
                 <td style={sTd}>{u.departments?.map(deptLabel).join(", ")}</td>
@@ -1141,7 +1144,7 @@ export default function AdminPage() {
                 <div>
                   <label style={sLabel}>{t.role}</label>
                   <select style={sSelect} value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value as Role })}>
-                    {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
+                    {roleNames.map((r) => <option key={r} value={r}>{getRoleLabel(r, lang)}</option>)}
                   </select>
                 </div>
                 <div>

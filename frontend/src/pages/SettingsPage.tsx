@@ -1,0 +1,1736 @@
+// src/pages/SettingsPage.tsx
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useTheme } from "../contexts/themeContext";
+import { useAuthStore } from "../contexts/authStore";
+import { useRolesStore } from "../store/rolesStore";
+import {
+  PERMISSIONS,
+  resolvePermissions,
+  type Role,
+  type Permission,
+} from "../../../shared/constants/roles";
+
+const API = import.meta.env.VITE_API_URL ?? "";
+
+/* ================================================================== */
+/*  Types                                                              */
+/* ================================================================== */
+
+interface ConfigItem {
+  id: string;
+  key: string;
+  label: string;
+  is_active: boolean;
+  sort_order: number;
+  meta?: Record<string, unknown>;
+}
+
+interface RoleConfig {
+  id: string;
+  name: string;
+  label_de: string;
+  label_en: string;
+  label_fr: string;
+  label_pt: string;
+  permissions: Permission[];
+  is_system: boolean;
+  is_active: boolean;
+}
+
+interface VatRate {
+  id: string;
+  country_code: string;
+  country_name: string;
+  rate_type: string;       // STANDARD | REDUCED | SPECIAL | ZERO
+  rate_percent: number;
+  description: string;
+  is_active: boolean;
+}
+
+interface CrossBorderCountry {
+  id: string;
+  country_code: string;
+  country_name: string;
+  currency: string;
+  vat_registered: boolean;
+  vat_number: string;
+  reverse_charge: boolean;
+  notes: string;
+  is_active: boolean;
+}
+
+interface CompanyInfo {
+  company_name: string;
+  legal_form: string;
+  uid_number: string;           // CHE-xxx.xxx.xxx
+  vat_number: string;           // CHE-xxx.xxx.xxx MWST
+  commercial_register: string;
+  street: string;
+  postal_code: string;
+  city: string;
+  canton: string;
+  country: string;
+  phone: string;
+  email: string;
+  website: string;
+  bank_name: string;
+  bank_iban: string;
+  bank_bic: string;
+  vat_method: string;           // EFFECTIVE | NET_RATE | FLAT_RATE
+  vat_period: string;           // QUARTERLY | SEMI_ANNUAL | ANNUAL
+  vat_standard_rate: number;    // 8.1
+  vat_reduced_rate: number;     // 2.6
+  vat_special_rate: number;     // 3.8
+  fiscal_year_start: string;    // MM-DD
+  logo_url: string;
+}
+
+type ConfigCategory =
+  | "contract_types"
+  | "salary_types"
+  | "schedule_types"
+  | "absence_types"
+  | "absence_codes"
+  | "machine_categories"
+  | "machine_operators";
+
+interface ConfigForm {
+  key: string;
+  label: string;
+  sort_order: number;
+  meta: string; // JSON string
+}
+
+/* ================================================================== */
+/*  Translations                                                       */
+/* ================================================================== */
+
+const L_ALL: Record<string, Record<string, string>> = {
+  de: {
+    settings: "Einstellungen",
+    roles: "Rollen & Berechtigungen",
+    configLists: "Konfigurationslisten",
+    company: "Unternehmen",
+    vatCrossBorder: "MwSt & Grenzüberschreitend",
+    // Roles
+    roleName: "Rollenname",
+    permissions: "Berechtigungen",
+    systemRole: "Systemrolle",
+    newRole: "Neue Rolle",
+    editRole: "Rolle bearbeiten",
+    // Config lists
+    contractTypes: "Vertragsarten",
+    salaryTypes: "Lohnarten",
+    scheduleTypes: "Einsatzarten",
+    absenceTypes: "Abwesenheitstypen",
+    absenceCodes: "Abwesenheitscodes",
+    machineCategories: "Maschinenkategorien",
+    machineOperators: "Maschinenführer-Typen",
+    key: "Schlüssel",
+    label: "Bezeichnung",
+    sortOrder: "Reihenfolge",
+    metadata: "Metadaten (JSON)",
+    newItem: "Neuer Eintrag",
+    // Company
+    companyName: "Firmenname",
+    legalForm: "Rechtsform",
+    uidNumber: "UID-Nummer",
+    vatNumber: "MwSt-Nummer",
+    commercialRegister: "Handelsregister-Nr.",
+    street: "Strasse",
+    postalCode: "PLZ",
+    city: "Ort",
+    canton: "Kanton",
+    country: "Land",
+    phone: "Telefon",
+    email: "E-Mail",
+    website: "Website",
+    bankName: "Bank",
+    bankIban: "IBAN",
+    bankBic: "BIC/SWIFT",
+    vatMethod: "MwSt-Methode",
+    vatPeriod: "MwSt-Periode",
+    vatStandard: "Normalsatz",
+    vatReduced: "Reduzierter Satz",
+    vatSpecial: "Sondersatz (Beherbergung)",
+    fiscalYearStart: "Geschäftsjahresbeginn",
+    logoUrl: "Logo-URL",
+    effective: "Effektive Methode",
+    netRate: "Saldosteuersatz",
+    flatRate: "Pauschalsteuersatz",
+    quarterly: "Vierteljährlich",
+    semiAnnual: "Halbjährlich",
+    annual: "Jährlich",
+    // VAT / Cross-border
+    vatRates: "MwSt-Sätze",
+    crossBorderCountries: "Länder (grenzüberschreitend)",
+    countryCode: "Ländercode",
+    countryName: "Land",
+    currency: "Währung",
+    rateType: "Satztyp",
+    ratePercent: "Satz %",
+    description: "Beschreibung",
+    vatRegistered: "MwSt registriert",
+    reverseCharge: "Reverse Charge",
+    notes: "Notizen",
+    newVatRate: "Neuer MwSt-Satz",
+    newCountry: "Neues Land",
+    // General
+    save: "Speichern",
+    cancel: "Abbrechen",
+    delete: "Löschen",
+    edit: "Bearbeiten",
+    active: "Aktiv",
+    inactive: "Inaktiv",
+    confirmDelete: "Wirklich löschen?",
+    yes: "Ja",
+    no: "Nein",
+    saved: "Gespeichert",
+    deleted: "Gelöscht",
+    error: "Fehler",
+    accessDenied: "Zugriff verweigert",
+    loading: "Laden…",
+    noResults: "Keine Einträge",
+  },
+  en: {
+    settings: "Settings",
+    roles: "Roles & Permissions",
+    configLists: "Configuration Lists",
+    company: "Company",
+    vatCrossBorder: "VAT & Cross-Border",
+    roleName: "Role Name",
+    permissions: "Permissions",
+    systemRole: "System Role",
+    newRole: "New Role",
+    editRole: "Edit Role",
+    contractTypes: "Contract Types",
+    salaryTypes: "Salary Types",
+    scheduleTypes: "Schedule Types",
+    absenceTypes: "Absence Types",
+    absenceCodes: "Absence Codes",
+    machineCategories: "Machine Categories",
+    machineOperators: "Machine Operator Types",
+    key: "Key",
+    label: "Label",
+    sortOrder: "Sort Order",
+    metadata: "Metadata (JSON)",
+    newItem: "New Item",
+    companyName: "Company Name",
+    legalForm: "Legal Form",
+    uidNumber: "UID Number",
+    vatNumber: "VAT Number",
+    commercialRegister: "Commercial Register No.",
+    street: "Street",
+    postalCode: "Postal Code",
+    city: "City",
+    canton: "Canton",
+    country: "Country",
+    phone: "Phone",
+    email: "Email",
+    website: "Website",
+    bankName: "Bank",
+    bankIban: "IBAN",
+    bankBic: "BIC/SWIFT",
+    vatMethod: "VAT Method",
+    vatPeriod: "VAT Period",
+    vatStandard: "Standard Rate",
+    vatReduced: "Reduced Rate",
+    vatSpecial: "Special Rate (Accommodation)",
+    fiscalYearStart: "Fiscal Year Start",
+    logoUrl: "Logo URL",
+    effective: "Effective Method",
+    netRate: "Net Rate Method",
+    flatRate: "Flat Rate Method",
+    quarterly: "Quarterly",
+    semiAnnual: "Semi-Annual",
+    annual: "Annual",
+    vatRates: "VAT Rates",
+    crossBorderCountries: "Cross-Border Countries",
+    countryCode: "Country Code",
+    countryName: "Country",
+    currency: "Currency",
+    rateType: "Rate Type",
+    ratePercent: "Rate %",
+    description: "Description",
+    vatRegistered: "VAT Registered",
+    reverseCharge: "Reverse Charge",
+    notes: "Notes",
+    newVatRate: "New VAT Rate",
+    newCountry: "New Country",
+    save: "Save",
+    cancel: "Cancel",
+    delete: "Delete",
+    edit: "Edit",
+    active: "Active",
+    inactive: "Inactive",
+    confirmDelete: "Really delete?",
+    yes: "Yes",
+    no: "No",
+    saved: "Saved",
+    deleted: "Deleted",
+    error: "Error",
+    accessDenied: "Access Denied",
+    loading: "Loading…",
+    noResults: "No entries",
+  },
+  fr: {
+    settings: "Paramètres",
+    roles: "Rôles & Permissions",
+    configLists: "Listes de configuration",
+    company: "Entreprise",
+    vatCrossBorder: "TVA & Transfrontalier",
+    roleName: "Nom du rôle",
+    permissions: "Permissions",
+    systemRole: "Rôle système",
+    newRole: "Nouveau rôle",
+    editRole: "Modifier le rôle",
+    contractTypes: "Types de contrat",
+    salaryTypes: "Types de salaire",
+    scheduleTypes: "Types de planning",
+    absenceTypes: "Types d'absence",
+    absenceCodes: "Codes d'absence",
+    machineCategories: "Catégories de machines",
+    machineOperators: "Types d'opérateurs",
+    key: "Clé",
+    label: "Libellé",
+    sortOrder: "Ordre",
+    metadata: "Métadonnées (JSON)",
+    newItem: "Nouvel élément",
+    companyName: "Raison sociale",
+    legalForm: "Forme juridique",
+    uidNumber: "Numéro IDE",
+    vatNumber: "Numéro TVA",
+    commercialRegister: "Registre du commerce",
+    street: "Rue",
+    postalCode: "Code postal",
+    city: "Ville",
+    canton: "Canton",
+    country: "Pays",
+    phone: "Téléphone",
+    email: "E-mail",
+    website: "Site web",
+    bankName: "Banque",
+    bankIban: "IBAN",
+    bankBic: "BIC/SWIFT",
+    vatMethod: "Méthode TVA",
+    vatPeriod: "Période TVA",
+    vatStandard: "Taux normal",
+    vatReduced: "Taux réduit",
+    vatSpecial: "Taux spécial (hébergement)",
+    fiscalYearStart: "Début exercice fiscal",
+    logoUrl: "URL du logo",
+    effective: "Méthode effective",
+    netRate: "Taux de la dette fiscale nette",
+    flatRate: "Méthode forfaitaire",
+    quarterly: "Trimestriel",
+    semiAnnual: "Semestriel",
+    annual: "Annuel",
+    vatRates: "Taux de TVA",
+    crossBorderCountries: "Pays transfrontaliers",
+    countryCode: "Code pays",
+    countryName: "Pays",
+    currency: "Devise",
+    rateType: "Type de taux",
+    ratePercent: "Taux %",
+    description: "Description",
+    vatRegistered: "Enregistré TVA",
+    reverseCharge: "Autoliquidation",
+    notes: "Notes",
+    newVatRate: "Nouveau taux TVA",
+    newCountry: "Nouveau pays",
+    save: "Enregistrer",
+    cancel: "Annuler",
+    delete: "Supprimer",
+    edit: "Modifier",
+    active: "Actif",
+    inactive: "Inactif",
+    confirmDelete: "Vraiment supprimer ?",
+    yes: "Oui",
+    no: "Non",
+    saved: "Enregistré",
+    deleted: "Supprimé",
+    error: "Erreur",
+    accessDenied: "Accès refusé",
+    loading: "Chargement…",
+    noResults: "Aucune entrée",
+  },
+  pt: {
+    settings: "Configurações",
+    roles: "Funções & Permissões",
+    configLists: "Listas de Configuração",
+    company: "Empresa",
+    vatCrossBorder: "IVA & Transfronteiriço",
+    roleName: "Nome da Função",
+    permissions: "Permissões",
+    systemRole: "Função do Sistema",
+    newRole: "Nova Função",
+    editRole: "Editar Função",
+    contractTypes: "Tipos de Contrato",
+    salaryTypes: "Tipos de Salário",
+    scheduleTypes: "Tipos de Horário",
+    absenceTypes: "Tipos de Ausência",
+    absenceCodes: "Códigos de Ausência",
+    machineCategories: "Categorias de Máquinas",
+    machineOperators: "Tipos de Operador",
+    key: "Chave",
+    label: "Rótulo",
+    sortOrder: "Ordem",
+    metadata: "Metadados (JSON)",
+    newItem: "Novo Item",
+    companyName: "Nome da Empresa",
+    legalForm: "Forma Jurídica",
+    uidNumber: "Número UID",
+    vatNumber: "Número IVA",
+    commercialRegister: "Registo Comercial",
+    street: "Rua",
+    postalCode: "Código Postal",
+    city: "Cidade",
+    canton: "Cantão",
+    country: "País",
+    phone: "Telefone",
+    email: "E-mail",
+    website: "Website",
+    bankName: "Banco",
+    bankIban: "IBAN",
+    bankBic: "BIC/SWIFT",
+    vatMethod: "Método IVA",
+    vatPeriod: "Período IVA",
+    vatStandard: "Taxa Normal",
+    vatReduced: "Taxa Reduzida",
+    vatSpecial: "Taxa Especial (Alojamento)",
+    fiscalYearStart: "Início Ano Fiscal",
+    logoUrl: "URL do Logo",
+    effective: "Método Efetivo",
+    netRate: "Taxa Líquida",
+    flatRate: "Taxa Fixa",
+    quarterly: "Trimestral",
+    semiAnnual: "Semestral",
+    annual: "Anual",
+    vatRates: "Taxas IVA",
+    crossBorderCountries: "Países Transfronteiriços",
+    countryCode: "Código País",
+    countryName: "País",
+    currency: "Moeda",
+    rateType: "Tipo de Taxa",
+    ratePercent: "Taxa %",
+    description: "Descrição",
+    vatRegistered: "Registado IVA",
+    reverseCharge: "Reverse Charge",
+    notes: "Notas",
+    newVatRate: "Nova Taxa IVA",
+    newCountry: "Novo País",
+    save: "Guardar",
+    cancel: "Cancelar",
+    delete: "Eliminar",
+    edit: "Editar",
+    active: "Ativo",
+    inactive: "Inativo",
+    confirmDelete: "Eliminar mesmo?",
+    yes: "Sim",
+    no: "Não",
+    saved: "Guardado",
+    deleted: "Eliminado",
+    error: "Erro",
+    accessDenied: "Acesso Negado",
+    loading: "A carregar…",
+    noResults: "Sem entradas",
+  },
+};
+
+/* ================================================================== */
+/*  Permission group labels for the role editor                        */
+/* ================================================================== */
+
+const PERM_GROUPS: Record<string, Permission[]> = {
+  Schedule: ["schedule.view", "schedule.edit"],
+  Customers: ["customers.view", "customers.edit", "customers.delete"],
+  Machines: ["machines.view", "machines.edit", "machines.delete"],
+  Tasks: ["tasks.view", "tasks.edit", "tasks.delete"],
+  Quotations: ["quotations.view", "quotations.edit", "quotations.delete"],
+  Invoices: ["invoices.view", "invoices.edit", "invoices.delete"],
+  HR: ["hr.view", "hr.edit", "hr.payroll"],
+  Finance: ["finance.view", "finance.reports"],
+  Admin: ["admin.view", "admin.users", "admin.roles", "admin.customers", "admin.machines", "admin.tasks"],
+  Reports: ["reports.own", "reports.team", "reports.all"],
+};
+
+/* ================================================================== */
+/*  Empty form defaults                                                */
+/* ================================================================== */
+
+const EMPTY_COMPANY: CompanyInfo = {
+  company_name: "", legal_form: "GmbH", uid_number: "", vat_number: "",
+  commercial_register: "", street: "", postal_code: "", city: "", canton: "",
+  country: "CH", phone: "", email: "", website: "",
+  bank_name: "", bank_iban: "", bank_bic: "",
+  vat_method: "EFFECTIVE", vat_period: "QUARTERLY",
+  vat_standard_rate: 8.1, vat_reduced_rate: 2.6, vat_special_rate: 3.8,
+  fiscal_year_start: "01-01", logo_url: "",
+};
+
+const EMPTY_ROLE: Omit<RoleConfig, "id"> = {
+  name: "", label_de: "", label_en: "", label_fr: "", label_pt: "",
+  permissions: [], is_system: false, is_active: true,
+};
+
+const EMPTY_CONFIG_FORM: ConfigForm = {
+  key: "", label: "", sort_order: 0, meta: "{}",
+};
+
+const EMPTY_VAT_RATE: Omit<VatRate, "id"> = {
+  country_code: "CH", country_name: "Schweiz", rate_type: "STANDARD",
+  rate_percent: 8.1, description: "", is_active: true,
+};
+
+const EMPTY_CROSS_BORDER: Omit<CrossBorderCountry, "id"> = {
+  country_code: "", country_name: "", currency: "EUR",
+  vat_registered: false, vat_number: "", reverse_charge: true,
+  notes: "", is_active: true,
+};
+
+const CONFIG_CATEGORIES: { key: ConfigCategory; labelKey: string }[] = [
+  { key: "contract_types", labelKey: "contractTypes" },
+  { key: "salary_types", labelKey: "salaryTypes" },
+  { key: "schedule_types", labelKey: "scheduleTypes" },
+  { key: "absence_types", labelKey: "absenceTypes" },
+  { key: "absence_codes", labelKey: "absenceCodes" },
+  { key: "machine_categories", labelKey: "machineCategories" },
+  { key: "machine_operators", labelKey: "machineOperators" },
+];
+
+const SWISS_CANTONS = [
+  "AG","AI","AR","BE","BL","BS","FR","GE","GL","GR","JU","LU",
+  "NE","NW","OW","SG","SH","SO","SZ","TG","TI","UR","VD","VS","ZG","ZH",
+];
+
+const LEGAL_FORMS = [
+  "Einzelunternehmen", "GmbH", "AG", "Kollektivgesellschaft",
+  "Kommanditgesellschaft", "Genossenschaft", "Verein", "Stiftung",
+];
+
+/* ================================================================== */
+/*  Component                                                          */
+/* ================================================================== */
+
+type MainTab = "roles" | "config" | "company" | "vat";
+
+export default function SettingsPage() {
+  const { th, isDark, lang } = useTheme();
+  const { token, user } = useAuthStore();
+  const t = L_ALL[lang] ?? L_ALL.de;
+  const gold = th.gold;
+  const dimText = isDark ? "rgba(255,255,255,.45)" : "rgba(0,0,0,.4)";
+  const inputBg = isDark ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.04)";
+
+  /* ── Permissions ── */
+  const { permissionMap } = useRolesStore();
+  const perms = useMemo(() => {
+    const role: Role = user?.role || "EMPLOYEE";
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
+
+  const isExecutive = perms.has("admin.roles" as Permission);
+
+  /* ── Styles ── */
+  const sInput: React.CSSProperties = {
+    width: "100%", padding: "8px 12px", borderRadius: 8,
+    border: `1px solid ${th.border}`, background: inputBg,
+    color: th.text, fontSize: 14, boxSizing: "border-box",
+  };
+  const sSelect: React.CSSProperties = { ...sInput };
+  const sLabel: React.CSSProperties = {
+    display: "block", marginBottom: 4, fontWeight: 600, fontSize: 12, color: dimText,
+  };
+  const sBtn = (bg: string): React.CSSProperties => ({
+    padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer",
+    fontWeight: 600, color: "#fff", background: bg, fontSize: 14,
+  });
+  const sBtnOutline: React.CSSProperties = {
+    padding: "8px 20px", borderRadius: 8, border: `1px solid ${th.border}`,
+    background: "transparent", color: th.text, fontWeight: 600,
+    cursor: "pointer", fontSize: 14,
+  };
+  const sTab = (active: boolean): React.CSSProperties => ({
+    padding: "10px 20px", borderRadius: "10px 10px 0 0", cursor: "pointer",
+    fontWeight: 600, fontSize: 14, border: "none",
+    background: active ? gold : "transparent",
+    color: active ? "#fff" : th.text,
+  });
+  const sCard: React.CSSProperties = {
+    background: isDark ? "#1e1e3a" : "#fff", borderRadius: 14,
+    border: `1px solid ${th.border}`, padding: 24, marginBottom: 20,
+  };
+  const sOverlay: React.CSSProperties = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000,
+    display: "flex", alignItems: "center", justifyContent: "center",
+  };
+  const sModal: React.CSSProperties = {
+    background: isDark ? "#1e1e3a" : "#fff", color: th.text, borderRadius: 12,
+    padding: 24, width: "90%", maxWidth: 700, maxHeight: "90vh", overflowY: "auto",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.3)", border: `1px solid ${th.border}`,
+  };
+  const sTh: React.CSSProperties = {
+    textAlign: "left", padding: "10px 12px", fontSize: 12,
+    color: dimText, borderBottom: `2px solid ${th.border}`, fontWeight: 700,
+  };
+  const sTd: React.CSSProperties = {
+    padding: "8px 12px", fontSize: 14, borderBottom: `1px solid ${th.border}`,
+  };
+
+  /* ── State ── */
+  const [mainTab, setMainTab] = useState<MainTab>("roles");
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [confirmDel, setConfirmDel] = useState<{ type: string; id: string } | null>(null);
+
+  // Roles
+  const [roles, setRoles] = useState<RoleConfig[]>([]);
+  const [roleModal, setRoleModal] = useState(false);
+  const [roleEditId, setRoleEditId] = useState<string | null>(null);
+  const [roleForm, setRoleForm] = useState<Omit<RoleConfig, "id">>(EMPTY_ROLE);
+
+  // Config lists
+  const [configCategory, setConfigCategory] = useState<ConfigCategory>("contract_types");
+  const [configItems, setConfigItems] = useState<ConfigItem[]>([]);
+  const [configModal, setConfigModal] = useState(false);
+  const [configEditId, setConfigEditId] = useState<string | null>(null);
+  const [configForm, setConfigForm] = useState<ConfigForm>(EMPTY_CONFIG_FORM);
+
+  // Company
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(EMPTY_COMPANY);
+  const [companyEditing, setCompanyEditing] = useState(false);
+  const [companyForm, setCompanyForm] = useState<CompanyInfo>(EMPTY_COMPANY);
+
+  // VAT / Cross-border
+  const [vatRates, setVatRates] = useState<VatRate[]>([]);
+  const [vatModal, setVatModal] = useState(false);
+  const [vatEditId, setVatEditId] = useState<string | null>(null);
+  const [vatForm, setVatForm] = useState<Omit<VatRate, "id">>(EMPTY_VAT_RATE);
+
+  const [crossBorderCountries, setCrossBorderCountries] = useState<CrossBorderCountry[]>([]);
+  const [cbModal, setCbModal] = useState(false);
+  const [cbEditId, setCbEditId] = useState<string | null>(null);
+  const [cbForm, setCbForm] = useState<Omit<CrossBorderCountry, "id">>(EMPTY_CROSS_BORDER);
+
+  const [vatSubTab, setVatSubTab] = useState<"rates" | "countries">("rates");
+
+  /* ── Helpers ── */
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const headers = useCallback(
+    (): HeadersInit => ({
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token],
+  );
+
+  /* ================================================================ */
+  /*  FETCH FUNCTIONS                                                  */
+  /* ================================================================ */
+
+  const fetchRoles = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/settings/roles`, { headers: headers() });
+      const j = await r.json();
+      setRoles(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
+
+  const fetchConfigItems = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/settings/config/${configCategory}`, { headers: headers() });
+      const j = await r.json();
+      setConfigItems(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers, configCategory]);
+
+  const fetchCompanyInfo = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/settings/company`, { headers: headers() });
+      const j = await r.json();
+      const data = j.data ?? j;
+      setCompanyInfo(data);
+      setCompanyForm(data);
+    } catch { /* ignore */ }
+  }, [headers]);
+
+  const fetchVatRates = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/settings/vat-rates`, { headers: headers() });
+      const j = await r.json();
+      setVatRates(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
+
+  const fetchCrossBorderCountries = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/settings/cross-border`, { headers: headers() });
+      const j = await r.json();
+      setCrossBorderCountries(j.data ?? j ?? []);
+    } catch { /* ignore */ }
+  }, [headers]);
+
+  useEffect(() => {
+    fetchRoles();
+    fetchCompanyInfo();
+    fetchVatRates();
+    fetchCrossBorderCountries();
+  }, [fetchRoles, fetchCompanyInfo, fetchVatRates, fetchCrossBorderCountries]);
+
+  useEffect(() => {
+    fetchConfigItems();
+  }, [fetchConfigItems]);
+
+  /* ================================================================ */
+  /*  SAVE / DELETE FUNCTIONS                                          */
+  /* ================================================================ */
+
+  // ── Roles ──
+  const openCreateRole = () => {
+    setRoleForm({ ...EMPTY_ROLE });
+    setRoleEditId(null);
+    setRoleModal(true);
+  };
+  const openEditRole = (r: RoleConfig) => {
+    setRoleForm({
+      name: r.name, label_de: r.label_de, label_en: r.label_en,
+      label_fr: r.label_fr, label_pt: r.label_pt,
+      permissions: [...r.permissions], is_system: r.is_system, is_active: r.is_active,
+    });
+    setRoleEditId(r.id);
+    setRoleModal(true);
+  };
+  const saveRole = async () => {
+    setSaving(true);
+    try {
+      const url = roleEditId
+        ? `${API}/api/v1/settings/roles/${roleEditId}`
+        : `${API}/api/v1/settings/roles`;
+      const r = await fetch(url, {
+        method: roleEditId ? "PUT" : "POST",
+        headers: headers(),
+        body: JSON.stringify(roleForm),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.saved);
+      setRoleModal(false);
+      fetchRoles();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const toggleRolePerm = (perm: Permission) => {
+    setRoleForm((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(perm)
+        ? prev.permissions.filter((p) => p !== perm)
+        : [...prev.permissions, perm],
+    }));
+  };
+
+  // ── Config lists ──
+  const openCreateConfig = () => {
+    setConfigForm({ ...EMPTY_CONFIG_FORM });
+    setConfigEditId(null);
+    setConfigModal(true);
+  };
+  const openEditConfig = (item: ConfigItem) => {
+    setConfigForm({
+      key: item.key, label: item.label,
+      sort_order: item.sort_order,
+      meta: item.meta ? JSON.stringify(item.meta) : "{}",
+    });
+    setConfigEditId(item.id);
+    setConfigModal(true);
+  };
+  const saveConfigItem = async () => {
+    setSaving(true);
+    try {
+      let metaParsed = {};
+      try { metaParsed = JSON.parse(configForm.meta); } catch { /* keep empty */ }
+      const body = {
+        category: configCategory,
+        key: configForm.key,
+        label: configForm.label,
+        sort_order: configForm.sort_order,
+        meta: metaParsed,
+      };
+      const url = configEditId
+        ? `${API}/api/v1/settings/config/${configCategory}/${configEditId}`
+        : `${API}/api/v1/settings/config/${configCategory}`;
+      const r = await fetch(url, {
+        method: configEditId ? "PUT" : "POST",
+        headers: headers(),
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.saved);
+      setConfigModal(false);
+      fetchConfigItems();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Company ──
+  const saveCompanyInfo = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch(`${API}/api/v1/settings/company`, {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify(companyForm),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      const saved = j.data ?? j;
+      setCompanyInfo(saved);
+      setCompanyForm(saved);
+      setCompanyEditing(false);
+      showToast(t.saved);
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── VAT Rates ──
+  const openCreateVat = () => {
+    setVatForm({ ...EMPTY_VAT_RATE });
+    setVatEditId(null);
+    setVatModal(true);
+  };
+  const openEditVat = (v: VatRate) => {
+    setVatForm({
+      country_code: v.country_code, country_name: v.country_name,
+      rate_type: v.rate_type, rate_percent: v.rate_percent,
+      description: v.description, is_active: v.is_active,
+    });
+    setVatEditId(v.id);
+    setVatModal(true);
+  };
+  const saveVatRate = async () => {
+    setSaving(true);
+    try {
+      const url = vatEditId
+        ? `${API}/api/v1/settings/vat-rates/${vatEditId}`
+        : `${API}/api/v1/settings/vat-rates`;
+      const r = await fetch(url, {
+        method: vatEditId ? "PUT" : "POST",
+        headers: headers(),
+        body: JSON.stringify(vatForm),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.saved);
+      setVatModal(false);
+      fetchVatRates();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Cross-Border Countries ──
+  const openCreateCB = () => {
+    setCbForm({ ...EMPTY_CROSS_BORDER });
+    setCbEditId(null);
+    setCbModal(true);
+  };
+  const openEditCB = (c: CrossBorderCountry) => {
+    setCbForm({
+      country_code: c.country_code, country_name: c.country_name,
+      currency: c.currency, vat_registered: c.vat_registered,
+      vat_number: c.vat_number, reverse_charge: c.reverse_charge,
+      notes: c.notes, is_active: c.is_active,
+    });
+    setCbEditId(c.id);
+    setCbModal(true);
+  };
+  const saveCrossBorder = async () => {
+    setSaving(true);
+    try {
+      const url = cbEditId
+        ? `${API}/api/v1/settings/cross-border/${cbEditId}`
+        : `${API}/api/v1/settings/cross-border`;
+      const r = await fetch(url, {
+        method: cbEditId ? "PUT" : "POST",
+        headers: headers(),
+        body: JSON.stringify(cbForm),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.saved);
+      setCbModal(false);
+      fetchCrossBorderCountries();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Generic delete ──
+  const deleteItem = async () => {
+    if (!confirmDel) return;
+    try {
+      const r = await fetch(`${API}/api/v1/settings/${confirmDel.type}/${confirmDel.id}`, {
+        method: "DELETE", headers: headers(),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      showToast(t.deleted);
+      if (confirmDel.type.startsWith("roles")) fetchRoles();
+      else if (confirmDel.type.startsWith("config")) fetchConfigItems();
+      else if (confirmDel.type.startsWith("vat")) fetchVatRates();
+      else if (confirmDel.type.startsWith("cross")) fetchCrossBorderCountries();
+    } catch (e) {
+      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
+    } finally {
+      setConfirmDel(null);
+    }
+  };
+
+  /* ================================================================ */
+  /*  ACCESS GUARD                                                     */
+  /* ================================================================ */
+
+  if (!isExecutive) {
+    return (
+      <div style={{ padding: 40, textAlign: "center", color: th.text }}>
+        <h2>{t.accessDenied}</h2>
+      </div>
+    );
+  }
+
+  /* ================================================================ */
+  /*  RENDER                                                           */
+  /* ================================================================ */
+
+  return (
+    <div style={{ padding: 24, color: th.text, minHeight: "100vh" }}>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", top: 20, right: 20, zIndex: 2000,
+          padding: "12px 24px", borderRadius: 8, color: "#fff",
+          background: toast.ok ? "#22c55e" : "#ef4444", fontWeight: 600,
+        }}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Header */}
+      <h1 style={{ margin: "0 0 20px", color: gold }}>{t.settings}</h1>
+
+      {/* Main Tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 0 }}>
+        {([
+          ["roles", t.roles],
+          ["config", t.configLists],
+          ["company", t.company],
+          ["vat", t.vatCrossBorder],
+        ] as [MainTab, string][]).map(([key, label]) => (
+          <button key={key} style={sTab(mainTab === key)} onClick={() => setMainTab(key)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div style={{ borderTop: `2px solid ${gold}`, paddingTop: 20 }}>
+
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {/*  ROLES TAB                                                 */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {mainTab === "roles" && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, color: gold }}>{t.roles}</h2>
+              <button style={sBtn(gold)} onClick={openCreateRole}>+ {t.newRole}</button>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={sTh}>{t.roleName}</th>
+                  <th style={sTh}>DE</th>
+                  <th style={sTh}>EN</th>
+                  <th style={sTh}>{t.permissions}</th>
+                  <th style={sTh}>{t.systemRole}</th>
+                  <th style={sTh}>{t.active}</th>
+                  <th style={sTh}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {roles.length === 0 && (
+                  <tr><td colSpan={7} style={{ ...sTd, textAlign: "center", color: dimText }}>{t.noResults}</td></tr>
+                )}
+                {roles.map((r) => (
+                  <tr key={r.id} style={{ cursor: "pointer" }} onClick={() => openEditRole(r)}>
+                    <td style={{ ...sTd, fontWeight: 700 }}>{r.name}</td>
+                    <td style={sTd}>{r.label_de}</td>
+                    <td style={sTd}>{r.label_en}</td>
+                    <td style={sTd}>
+                      <span style={{ fontSize: 12, color: dimText }}>{r.permissions.length} permissions</span>
+                    </td>
+                    <td style={sTd}>
+                      {r.is_system && <span style={{ padding: "2px 8px", borderRadius: 4, background: gold + "22", color: gold, fontSize: 11, fontWeight: 600 }}>System</span>}
+                    </td>
+                    <td style={sTd}>
+                      <span style={{ color: r.is_active ? "#22c55e" : "#6b7280" }}>●</span>
+                    </td>
+                    <td style={sTd}>
+                      {!r.is_system && (
+                        <button style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                          onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "roles", id: r.id }); }}>
+                          {t.delete}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {/*  CONFIG LISTS TAB                                          */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {mainTab === "config" && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {CONFIG_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.key}
+                    onClick={() => setConfigCategory(cat.key)}
+                    style={{
+                      padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      cursor: "pointer", border: "none",
+                      background: configCategory === cat.key ? gold + "22" : "transparent",
+                      color: configCategory === cat.key ? gold : th.text,
+                    }}
+                  >
+                    {t[cat.labelKey]}
+                  </button>
+                ))}
+              </div>
+              <button style={sBtn(gold)} onClick={openCreateConfig}>+ {t.newItem}</button>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={sTh}>{t.key}</th>
+                  <th style={sTh}>{t.label}</th>
+                  <th style={sTh}>{t.sortOrder}</th>
+                  <th style={sTh}>{t.active}</th>
+                  <th style={sTh}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {configItems.length === 0 && (
+                  <tr><td colSpan={5} style={{ ...sTd, textAlign: "center", color: dimText }}>{t.noResults}</td></tr>
+                )}
+                {configItems.map((item) => (
+                  <tr key={item.id} style={{ cursor: "pointer" }} onClick={() => openEditConfig(item)}>
+                    <td style={{ ...sTd, fontFamily: "monospace", fontWeight: 600 }}>{item.key}</td>
+                    <td style={sTd}>{item.label}</td>
+                    <td style={sTd}>{item.sort_order}</td>
+                    <td style={sTd}>
+                      <span style={{ color: item.is_active ? "#22c55e" : "#6b7280" }}>●</span>
+                    </td>
+                    <td style={sTd}>
+                      <button style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: `config/${configCategory}`, id: item.id }); }}>
+                        {t.delete}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {/*  COMPANY TAB                                               */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {mainTab === "company" && (
+          <div style={sCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h2 style={{ margin: 0, color: gold }}>{t.company}</h2>
+              {companyEditing ? (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={sBtn(gold)} disabled={saving} onClick={saveCompanyInfo}>
+                    {saving ? "…" : t.save}
+                  </button>
+                  <button style={sBtnOutline} onClick={() => { setCompanyEditing(false); setCompanyForm(companyInfo); }}>
+                    {t.cancel}
+                  </button>
+                </div>
+              ) : (
+                <button style={sBtn(gold)} onClick={() => setCompanyEditing(true)}>{t.edit}</button>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {/* Company identity */}
+              <div>
+                <label style={sLabel}>{t.companyName}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.company_name}
+                    onChange={(e) => setCompanyForm({ ...companyForm, company_name: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.company_name || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.legalForm}</label>
+                {companyEditing ? (
+                  <select style={sSelect} value={companyForm.legal_form}
+                    onChange={(e) => setCompanyForm({ ...companyForm, legal_form: e.target.value })}>
+                    {LEGAL_FORMS.map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.legal_form || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.uidNumber}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.uid_number} placeholder="CHE-xxx.xxx.xxx"
+                    onChange={(e) => setCompanyForm({ ...companyForm, uid_number: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0", fontFamily: "monospace" }}>{companyInfo.uid_number || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatNumber}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.vat_number} placeholder="CHE-xxx.xxx.xxx MWST"
+                    onChange={(e) => setCompanyForm({ ...companyForm, vat_number: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0", fontFamily: "monospace" }}>{companyInfo.vat_number || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.commercialRegister}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.commercial_register}
+                    onChange={(e) => setCompanyForm({ ...companyForm, commercial_register: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.commercial_register || "—"}</div>
+                )}
+              </div>
+
+              {/* Address */}
+              <div style={{ gridColumn: "1 / -1" }}>
+                <hr style={{ border: "none", borderTop: `1px solid ${th.border}`, margin: "8px 0 16px" }} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.street}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.street}
+                    onChange={(e) => setCompanyForm({ ...companyForm, street: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.street || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.postalCode} / {t.city}</label>
+                {companyEditing ? (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input style={{ ...sInput, maxWidth: 100 }} value={companyForm.postal_code}
+                      onChange={(e) => setCompanyForm({ ...companyForm, postal_code: e.target.value })} />
+                    <input style={sInput} value={companyForm.city}
+                      onChange={(e) => setCompanyForm({ ...companyForm, city: e.target.value })} />
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.postal_code} {companyInfo.city}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.canton}</label>
+                {companyEditing ? (
+                  <select style={sSelect} value={companyForm.canton}
+                    onChange={(e) => setCompanyForm({ ...companyForm, canton: e.target.value })}>
+                    <option value="">—</option>
+                    {SWISS_CANTONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.canton || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.country}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.country}
+                    onChange={(e) => setCompanyForm({ ...companyForm, country: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.country || "—"}</div>
+                )}
+              </div>
+
+              {/* Contact */}
+              <div style={{ gridColumn: "1 / -1" }}>
+                <hr style={{ border: "none", borderTop: `1px solid ${th.border}`, margin: "8px 0 16px" }} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.phone}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.phone}
+                    onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.phone || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.email}</label>
+                {companyEditing ? (
+                  <input style={sInput} type="email" value={companyForm.email}
+                    onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.email || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.website}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.website}
+                    onChange={(e) => setCompanyForm({ ...companyForm, website: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.website || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.logoUrl}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.logo_url}
+                    onChange={(e) => setCompanyForm({ ...companyForm, logo_url: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.logo_url || "—"}</div>
+                )}
+              </div>
+
+              {/* Banking */}
+              <div style={{ gridColumn: "1 / -1" }}>
+                <hr style={{ border: "none", borderTop: `1px solid ${th.border}`, margin: "8px 0 16px" }} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.bankName}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.bank_name}
+                    onChange={(e) => setCompanyForm({ ...companyForm, bank_name: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.bank_name || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.bankIban}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.bank_iban} placeholder="CH00 0000 0000 0000 0000 0"
+                    onChange={(e) => setCompanyForm({ ...companyForm, bank_iban: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0", fontFamily: "monospace" }}>{companyInfo.bank_iban || "—"}</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.bankBic}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.bank_bic}
+                    onChange={(e) => setCompanyForm({ ...companyForm, bank_bic: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0", fontFamily: "monospace" }}>{companyInfo.bank_bic || "—"}</div>
+                )}
+              </div>
+
+              {/* VAT settings */}
+              <div style={{ gridColumn: "1 / -1" }}>
+                <hr style={{ border: "none", borderTop: `1px solid ${th.border}`, margin: "8px 0 16px" }} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatMethod}</label>
+                {companyEditing ? (
+                  <select style={sSelect} value={companyForm.vat_method}
+                    onChange={(e) => setCompanyForm({ ...companyForm, vat_method: e.target.value })}>
+                    <option value="EFFECTIVE">{t.effective}</option>
+                    <option value="NET_RATE">{t.netRate}</option>
+                    <option value="FLAT_RATE">{t.flatRate}</option>
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>
+                    {companyInfo.vat_method === "EFFECTIVE" ? t.effective
+                      : companyInfo.vat_method === "NET_RATE" ? t.netRate : t.flatRate}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatPeriod}</label>
+                {companyEditing ? (
+                  <select style={sSelect} value={companyForm.vat_period}
+                    onChange={(e) => setCompanyForm({ ...companyForm, vat_period: e.target.value })}>
+                    <option value="QUARTERLY">{t.quarterly}</option>
+                    <option value="SEMI_ANNUAL">{t.semiAnnual}</option>
+                    <option value="ANNUAL">{t.annual}</option>
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>
+                    {companyInfo.vat_period === "QUARTERLY" ? t.quarterly
+                      : companyInfo.vat_period === "SEMI_ANNUAL" ? t.semiAnnual : t.annual}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatStandard} (%)</label>
+                {companyEditing ? (
+                  <input style={sInput} type="number" step="0.1" value={companyForm.vat_standard_rate}
+                    onChange={(e) => setCompanyForm({ ...companyForm, vat_standard_rate: parseFloat(e.target.value) || 0 })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.vat_standard_rate}%</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatReduced} (%)</label>
+                {companyEditing ? (
+                  <input style={sInput} type="number" step="0.1" value={companyForm.vat_reduced_rate}
+                    onChange={(e) => setCompanyForm({ ...companyForm, vat_reduced_rate: parseFloat(e.target.value) || 0 })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.vat_reduced_rate}%</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatSpecial} (%)</label>
+                {companyEditing ? (
+                  <input style={sInput} type="number" step="0.1" value={companyForm.vat_special_rate}
+                    onChange={(e) => setCompanyForm({ ...companyForm, vat_special_rate: parseFloat(e.target.value) || 0 })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.vat_special_rate}%</div>
+                )}
+              </div>
+              <div>
+                <label style={sLabel}>{t.fiscalYearStart}</label>
+                {companyEditing ? (
+                  <input style={sInput} value={companyForm.fiscal_year_start} placeholder="01-01"
+                    onChange={(e) => setCompanyForm({ ...companyForm, fiscal_year_start: e.target.value })} />
+                ) : (
+                  <div style={{ fontSize: 14, padding: "8px 0" }}>{companyInfo.fiscal_year_start || "01-01"}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {/*  VAT & CROSS-BORDER TAB                                    */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {mainTab === "vat" && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+              <button
+                style={{
+                  padding: "6px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", border: "none",
+                  background: vatSubTab === "rates" ? gold + "22" : "transparent",
+                  color: vatSubTab === "rates" ? gold : th.text,
+                }}
+                onClick={() => setVatSubTab("rates")}
+              >
+                {t.vatRates}
+              </button>
+              <button
+                style={{
+                  padding: "6px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", border: "none",
+                  background: vatSubTab === "countries" ? gold + "22" : "transparent",
+                  color: vatSubTab === "countries" ? gold : th.text,
+                }}
+                onClick={() => setVatSubTab("countries")}
+              >
+                {t.crossBorderCountries}
+              </button>
+            </div>
+
+            {/* VAT Rates */}
+            {vatSubTab === "rates" && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, color: gold }}>{t.vatRates}</h3>
+                  <button style={sBtn(gold)} onClick={openCreateVat}>+ {t.newVatRate}</button>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={sTh}>{t.countryCode}</th>
+                      <th style={sTh}>{t.countryName}</th>
+                      <th style={sTh}>{t.rateType}</th>
+                      <th style={sTh}>{t.ratePercent}</th>
+                      <th style={sTh}>{t.description}</th>
+                      <th style={sTh}>{t.active}</th>
+                      <th style={sTh}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vatRates.length === 0 && (
+                      <tr><td colSpan={7} style={{ ...sTd, textAlign: "center", color: dimText }}>{t.noResults}</td></tr>
+                    )}
+                    {vatRates.map((v) => (
+                      <tr key={v.id} style={{ cursor: "pointer" }} onClick={() => openEditVat(v)}>
+                        <td style={{ ...sTd, fontFamily: "monospace", fontWeight: 700 }}>{v.country_code}</td>
+                        <td style={sTd}>{v.country_name}</td>
+                        <td style={sTd}>
+                          <span style={{
+                            padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                            background: v.rate_type === "STANDARD" ? gold + "22" : v.rate_type === "REDUCED" ? "#22c55e22" : "#3b82f622",
+                            color: v.rate_type === "STANDARD" ? gold : v.rate_type === "REDUCED" ? "#22c55e" : "#3b82f6",
+                          }}>
+                            {v.rate_type}
+                          </span>
+                        </td>
+                        <td style={{ ...sTd, fontWeight: 700 }}>{v.rate_percent}%</td>
+                        <td style={sTd}>{v.description}</td>
+                        <td style={sTd}><span style={{ color: v.is_active ? "#22c55e" : "#6b7280" }}>●</span></td>
+                        <td style={sTd}>
+                          <button style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "vat-rates", id: v.id }); }}>
+                            {t.delete}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {/* Cross-Border Countries */}
+            {vatSubTab === "countries" && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, color: gold }}>{t.crossBorderCountries}</h3>
+                  <button style={sBtn(gold)} onClick={openCreateCB}>+ {t.newCountry}</button>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={sTh}>{t.countryCode}</th>
+                      <th style={sTh}>{t.countryName}</th>
+                      <th style={sTh}>{t.currency}</th>
+                      <th style={sTh}>{t.vatRegistered}</th>
+                      <th style={sTh}>{t.reverseCharge}</th>
+                      <th style={sTh}>{t.notes}</th>
+                      <th style={sTh}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {crossBorderCountries.length === 0 && (
+                      <tr><td colSpan={7} style={{ ...sTd, textAlign: "center", color: dimText }}>{t.noResults}</td></tr>
+                    )}
+                    {crossBorderCountries.map((c) => (
+                      <tr key={c.id} style={{ cursor: "pointer" }} onClick={() => openEditCB(c)}>
+                        <td style={{ ...sTd, fontFamily: "monospace", fontWeight: 700 }}>{c.country_code}</td>
+                        <td style={sTd}>{c.country_name}</td>
+                        <td style={sTd}>{c.currency}</td>
+                        <td style={sTd}><span style={{ color: c.vat_registered ? "#22c55e" : "#6b7280" }}>●</span></td>
+                        <td style={sTd}><span style={{ color: c.reverse_charge ? "#22c55e" : "#6b7280" }}>●</span></td>
+                        <td style={{ ...sTd, fontSize: 12, color: dimText }}>{c.notes?.slice(0, 50)}</td>
+                        <td style={sTd}>
+                          <button style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
+                            onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: "cross-border", id: c.id }); }}>
+                            {t.delete}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </>
+        )}
+
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/*  ROLE MODAL                                                */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {roleModal && (
+        <div style={sOverlay} onClick={() => setRoleModal(false)}>
+          <div style={sModal} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>
+              {roleEditId ? t.editRole : t.newRole}
+            </h2>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+              <div>
+                <label style={sLabel}>{t.roleName} (key) *</label>
+                <input style={sInput} value={roleForm.name}
+                  disabled={roleForm.is_system}
+                  onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value.toUpperCase().replace(/[^A-Z_]/g, "") })} />
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginTop: 20 }}>
+                  <input type="checkbox" checked={roleForm.is_active}
+                    onChange={(e) => setRoleForm({ ...roleForm, is_active: e.target.checked })} />
+                  {t.active}
+                </label>
+              </div>
+              <div>
+                <label style={sLabel}>Label DE</label>
+                <input style={sInput} value={roleForm.label_de}
+                  onChange={(e) => setRoleForm({ ...roleForm, label_de: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>Label EN</label>
+                <input style={sInput} value={roleForm.label_en}
+                  onChange={(e) => setRoleForm({ ...roleForm, label_en: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>Label FR</label>
+                <input style={sInput} value={roleForm.label_fr}
+                  onChange={(e) => setRoleForm({ ...roleForm, label_fr: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>Label PT</label>
+                <input style={sInput} value={roleForm.label_pt}
+                  onChange={(e) => setRoleForm({ ...roleForm, label_pt: e.target.value })} />
+              </div>
+            </div>
+
+            {/* Permission matrix */}
+            <h3 style={{ margin: "0 0 12px", color: gold, fontSize: 15 }}>{t.permissions}</h3>
+            <div style={{ maxHeight: 400, overflowY: "auto", border: `1px solid ${th.border}`, borderRadius: 8, padding: 12 }}>
+              {Object.entries(PERM_GROUPS).map(([group, perms]) => (
+                <div key={group} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: gold, marginBottom: 6 }}>{group}</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {perms.map((perm) => {
+                      const checked = roleForm.permissions.includes(perm);
+                      return (
+                        <label key={perm} style={{
+                          display: "flex", alignItems: "center", gap: 4, fontSize: 13,
+                          padding: "4px 10px", borderRadius: 6,
+                          background: checked ? "#22c55e18" : "transparent",
+                          border: `1px solid ${checked ? "#22c55e" : th.border}`,
+                          cursor: "pointer",
+                        }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={() => toggleRolePerm(perm)} />
+                          {perm.split(".")[1]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtnOutline} onClick={() => setRoleModal(false)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveRole}>
+                {saving ? "…" : t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/*  CONFIG ITEM MODAL                                         */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {configModal && (
+        <div style={sOverlay} onClick={() => setConfigModal(false)}>
+          <div style={{ ...sModal, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>
+              {configEditId ? t.edit : t.newItem} — {t[CONFIG_CATEGORIES.find((c) => c.key === configCategory)?.labelKey ?? ""] ?? configCategory}
+            </h2>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <div>
+                <label style={sLabel}>{t.key} *</label>
+                <input style={sInput} value={configForm.key}
+                  onChange={(e) => setConfigForm({ ...configForm, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.label} *</label>
+                <input style={sInput} value={configForm.label}
+                  onChange={(e) => setConfigForm({ ...configForm, label: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.sortOrder}</label>
+                <input style={sInput} type="number" value={configForm.sort_order}
+                  onChange={(e) => setConfigForm({ ...configForm, sort_order: parseInt(e.target.value) || 0 })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.metadata}</label>
+                <textarea style={{ ...sInput, minHeight: 80, fontFamily: "monospace", fontSize: 12, resize: "vertical" }}
+                  value={configForm.meta}
+                  onChange={(e) => setConfigForm({ ...configForm, meta: e.target.value })} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtnOutline} onClick={() => setConfigModal(false)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveConfigItem}>
+                {saving ? "…" : t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/*  VAT RATE MODAL                                            */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {vatModal && (
+        <div style={sOverlay} onClick={() => setVatModal(false)}>
+          <div style={{ ...sModal, maxWidth: 500 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>
+              {vatEditId ? t.edit : t.newVatRate}
+            </h2>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={sLabel}>{t.countryCode} *</label>
+                <input style={sInput} value={vatForm.country_code} maxLength={2}
+                  onChange={(e) => setVatForm({ ...vatForm, country_code: e.target.value.toUpperCase() })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.countryName}</label>
+                <input style={sInput} value={vatForm.country_name}
+                  onChange={(e) => setVatForm({ ...vatForm, country_name: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.rateType}</label>
+                <select style={sSelect} value={vatForm.rate_type}
+                  onChange={(e) => setVatForm({ ...vatForm, rate_type: e.target.value })}>
+                  <option value="STANDARD">Standard</option>
+                  <option value="REDUCED">Reduced</option>
+                  <option value="SPECIAL">Special</option>
+                  <option value="ZERO">Zero</option>
+                </select>
+              </div>
+              <div>
+                <label style={sLabel}>{t.ratePercent}</label>
+                <input style={sInput} type="number" step="0.01" value={vatForm.rate_percent}
+                  onChange={(e) => setVatForm({ ...vatForm, rate_percent: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.description}</label>
+                <input style={sInput} value={vatForm.description}
+                  onChange={(e) => setVatForm({ ...vatForm, description: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                  <input type="checkbox" checked={vatForm.is_active}
+                    onChange={(e) => setVatForm({ ...vatForm, is_active: e.target.checked })} />
+                  {t.active}
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtnOutline} onClick={() => setVatModal(false)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveVatRate}>
+                {saving ? "…" : t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/*  CROSS-BORDER COUNTRY MODAL                                */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {cbModal && (
+        <div style={sOverlay} onClick={() => setCbModal(false)}>
+          <div style={{ ...sModal, maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 16px", color: gold }}>
+              {cbEditId ? t.edit : t.newCountry}
+            </h2>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={sLabel}>{t.countryCode} *</label>
+                <input style={sInput} value={cbForm.country_code} maxLength={2}
+                  onChange={(e) => setCbForm({ ...cbForm, country_code: e.target.value.toUpperCase() })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.countryName} *</label>
+                <input style={sInput} value={cbForm.country_name}
+                  onChange={(e) => setCbForm({ ...cbForm, country_name: e.target.value })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.currency}</label>
+                <input style={sInput} value={cbForm.currency} maxLength={3}
+                  onChange={(e) => setCbForm({ ...cbForm, currency: e.target.value.toUpperCase() })} />
+              </div>
+              <div>
+                <label style={sLabel}>{t.vatNumber}</label>
+                <input style={sInput} value={cbForm.vat_number}
+                  onChange={(e) => setCbForm({ ...cbForm, vat_number: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                  <input type="checkbox" checked={cbForm.vat_registered}
+                    onChange={(e) => setCbForm({ ...cbForm, vat_registered: e.target.checked })} />
+                  {t.vatRegistered}
+                </label>
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                  <input type="checkbox" checked={cbForm.reverse_charge}
+                    onChange={(e) => setCbForm({ ...cbForm, reverse_charge: e.target.checked })} />
+                  {t.reverseCharge}
+                </label>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={sLabel}>{t.notes}</label>
+                <textarea style={{ ...sInput, minHeight: 80, resize: "vertical" }}
+                  value={cbForm.notes}
+                  onChange={(e) => setCbForm({ ...cbForm, notes: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                  <input type="checkbox" checked={cbForm.is_active}
+                    onChange={(e) => setCbForm({ ...cbForm, is_active: e.target.checked })} />
+                  {t.active}
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+              <button style={sBtnOutline} onClick={() => setCbModal(false)}>{t.cancel}</button>
+              <button style={sBtn(gold)} disabled={saving} onClick={saveCrossBorder}>
+                {saving ? "…" : t.save}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/*  DELETE CONFIRMATION MODAL                                  */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {confirmDel && (
+        <div style={sOverlay} onClick={() => setConfirmDel(null)}>
+          <div style={{ ...sModal, maxWidth: 400, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ color: "#ef4444", marginBottom: 16 }}>{t.confirmDelete}</h3>
+            <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+              <button style={sBtnOutline} onClick={() => setConfirmDel(null)}>{t.no}</button>
+              <button style={sBtn("#ef4444")} onClick={deleteItem}>{t.yes}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

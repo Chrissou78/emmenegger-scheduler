@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { themes, JOB_COLORS, ABS } from '../i18n/translations';
 import { format } from 'date-fns';
 import { useAuthStore } from '../contexts/authStore';
 import { supabase } from '../lib/supabaseClient';
+import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+
+const API = import.meta.env.VITE_API_URL || '';
 
 // ─── INTERFACES ───
 
@@ -98,6 +101,7 @@ const T: Record<string, Record<string, any>> = {
     clickToReport: 'Antippen zum Erfassen',
     loading: 'Laden...',
     kw: 'KW',
+    accessDenied: 'Kein Zugriff',
     status: {
       PLANNED: 'Geplant',
       COMPLETED: 'Erledigt',
@@ -141,6 +145,7 @@ const T: Record<string, Record<string, any>> = {
     clickToReport: 'Tap to log time',
     loading: 'Loading...',
     kw: 'CW',
+    accessDenied: 'Access Denied',
     status: {
       PLANNED: 'Planned',
       COMPLETED: 'Completed',
@@ -184,6 +189,7 @@ const T: Record<string, Record<string, any>> = {
     clickToReport: 'Appuyer pour saisir',
     loading: 'Chargement...',
     kw: 'SC',
+    accessDenied: 'Accès refusé',
     status: {
       PLANNED: 'Planifié',
       COMPLETED: 'Terminé',
@@ -227,6 +233,7 @@ const T: Record<string, Record<string, any>> = {
     clickToReport: 'Toque para registrar',
     loading: 'A carregar...',
     kw: 'SC',
+    accessDenied: 'Acesso negado',
     status: {
       PLANNED: 'Planeado',
       COMPLETED: 'Concluído',
@@ -286,7 +293,24 @@ export function ReportsPage() {
   const { isDark, lang } = useTheme();
   const th = isDark ? themes.dark : themes.light;
   const t = T[lang] || T.de;
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
+
+  /* ── permissions ── */
+  const perms = useMemo(() => {
+    const role: Role = (user?.role as Role) || 'EMPLOYEE';
+    return resolvePermissions(role, user?.custom_permissions);
+  }, [user]);
+  const canView = perms.has('reports.own' as Permission);
+
+  /* ── memoized auth headers ── */
+  const authHeaders = useMemo(() => ({
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  }), [token]);
+
+  const authHeadersSimple = useMemo(() => ({
+    Authorization: `Bearer ${token}`,
+  }), [token]);
 
   const [weekOff, setWeekOff] = useState(0);
   const [weeks, setWeeks] = useState<Week[]>([]);
@@ -316,20 +340,18 @@ export function ReportsPage() {
   const totalTasks = Object.values(mySlots).reduce((s, arr) => s + arr.length, 0);
   const totalAbs = Object.values(myAbsences).reduce((s, arr) => s + arr.length, 0);
 
-  const showToast = (msg: string, type: 'ok' | 'err') => {
+  const showToast = useCallback((msg: string, type: 'ok' | 'err') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2800);
-  };
+  }, []);
 
   // ─── DATA FETCHING ───
 
   useEffect(() => {
+    if (!token) return;
     const fetchWeeks = async () => {
-      const token = localStorage.getItem('token');
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/weeks`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(`${API}/api/v1/weeks`, { headers: authHeadersSimple });
         const data = await resp.json();
         setWeeks(Array.isArray(data.data) ? data.data : []);
       } catch (err) {
@@ -337,15 +359,13 @@ export function ReportsPage() {
       }
     };
     fetchWeeks();
-  }, []);
+  }, [token, authHeadersSimple]);
 
   useEffect(() => {
+    if (!token) return;
     const fetchTasks = async () => {
-      const token = localStorage.getItem('token');
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/tasks`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(`${API}/api/v1/tasks`, { headers: authHeadersSimple });
         const data = await resp.json();
         const map: Record<string, { code: string; name: string }> = {};
         if (Array.isArray(data.data)) {
@@ -359,14 +379,13 @@ export function ReportsPage() {
       }
     };
     fetchTasks();
-  }, []);
+  }, [token, authHeadersSimple]);
 
   useEffect(() => {
-    if (!user || weeks.length === 0 || Object.keys(taskMap).length === 0) return;
+    if (!user || !token || weeks.length === 0 || Object.keys(taskMap).length === 0) return;
 
     const fetchMyData = async () => {
       setLoading(true);
-      const token = localStorage.getItem('token');
       const currentKW = getKW(dates[0]);
       const currentYear = dates[0].getFullYear();
       const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
@@ -374,8 +393,8 @@ export function ReportsPage() {
       // Allocations
       const slots: Record<number, string[]> = {};
       try {
-        const resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/allocations?user_id=${user.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const resp = await fetch(`${API}/api/v1/allocations?user_id=${user.id}`, {
+          headers: authHeadersSimple,
         });
         const data = await resp.json();
         if (Array.isArray(data.data)) {
@@ -399,8 +418,8 @@ export function ReportsPage() {
       const endDate = format(dates[5], 'yyyy-MM-dd');
       try {
         const resp = await fetch(
-          `${import.meta.env.VITE_API_URL || ''}/api/v1/absences?startDate=${startDate}&endDate=${endDate}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          `${API}/api/v1/absences?startDate=${startDate}&endDate=${endDate}`,
+          { headers: authHeadersSimple }
         );
         const data = await resp.json();
         if (Array.isArray(data.data)) {
@@ -426,8 +445,8 @@ export function ReportsPage() {
       // Time reports for the week
       try {
         const resp = await fetch(
-          `${import.meta.env.VITE_API_URL || ''}/api/v1/reports?startDate=${startDate}&endDate=${endDate}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          `${API}/api/v1/reports?startDate=${startDate}&endDate=${endDate}`,
+          { headers: authHeadersSimple }
         );
         const data = await resp.json();
         setReports(Array.isArray(data.data) ? data.data : []);
@@ -439,18 +458,18 @@ export function ReportsPage() {
     };
 
     fetchMyData();
-  }, [weekOff, weeks, taskMap, user]);
+  }, [weekOff, weeks, taskMap, user, token, authHeadersSimple]);
 
   // ─── REPORT HELPERS ───
 
-  const getReportForTaskDay = (taskCode: string, dayIndex: number): TimeReport | null => {
+  const getReportForTaskDay = useCallback((taskCode: string, dayIndex: number): TimeReport | null => {
     const dateStr = format(dates[dayIndex], 'yyyy-MM-dd');
     const taskId = Object.entries(taskMap).find(([_, v]) => v.code === taskCode)?.[0];
     if (!taskId) return null;
     return reports.find(r => r.task_id === taskId && r.date === dateStr) || null;
-  };
+  }, [dates, taskMap, reports]);
 
-  const openReportModal = (taskCode: string, dayIndex: number) => {
+  const openReportModal = useCallback((taskCode: string, dayIndex: number) => {
     const taskEntry = Object.entries(taskMap).find(([_, v]) => v.code === taskCode);
     if (!taskEntry) return;
     const [taskId, taskInfo] = taskEntry;
@@ -490,7 +509,7 @@ export function ReportsPage() {
       setFormPhotos([]);
       setFormStatus('COMPLETED');
     }
-  };
+  }, [dates, taskMap, reports]);
 
   const computeActualHours = (): number => {
     const start = timeToHours(formStartTime);
@@ -528,17 +547,16 @@ export function ReportsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const removePhoto = (url: string) => {
+  const removePhoto = useCallback((url: string) => {
     setFormPhotos(prev => prev.filter(p => p !== url));
-  };
+  }, []);
 
   // ─── SAVE REPORT ───
 
   const saveReport = async () => {
-    if (!modal || !user) return;
+    if (!modal || !user || !canView) return;
     setSaving(true);
 
-    const token = localStorage.getItem('token');
     const actualHours = computeActualHours();
     const payload = {
       taskId: modal.taskId,
@@ -554,15 +572,15 @@ export function ReportsPage() {
     try {
       let resp;
       if (modal.existingReport) {
-        resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/reports/${modal.existingReport.id}`, {
+        resp = await fetch(`${API}/api/v1/reports/${modal.existingReport.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: authHeaders,
           body: JSON.stringify(payload),
         });
       } else {
-        resp = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/v1/reports`, {
+        resp = await fetch(`${API}/api/v1/reports`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          headers: authHeaders,
           body: JSON.stringify(payload),
         });
       }
@@ -590,14 +608,14 @@ export function ReportsPage() {
 
   // ─── RENDER HELPERS ───
 
-  const getJobColor = (code: string) => {
+  const getJobColor = useCallback((code: string) => {
     const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
     return {
       bg: isDark ? job?.bgD : job?.bgL,
       text: isDark ? job?.textD : job?.textL,
       label: job?.label || code,
     };
-  };
+  }, [isDark]);
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -608,6 +626,17 @@ export function ReportsPage() {
       default: return th.textDim;
     }
   };
+
+  /* ── ACCESS GUARD ── */
+  if (!canView) {
+    return (
+      <div style={{ maxWidth: 800, margin: '0 auto', padding: 60, textAlign: 'center' }}>
+        <h2 style={{ fontSize: 20, fontWeight: 300, color: th.gold, letterSpacing: 1 }}>
+          {t.accessDenied}
+        </h2>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>

@@ -4,6 +4,7 @@ import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+import { useRolesStore } from "../store/rolesStore";
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -215,10 +216,11 @@ export function CustomersPage() {
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
   /* ── permissions from roles system ── */
+  const { permissionMap } = useRolesStore();
   const perms = useMemo(() => {
-    const role: Role = user?.role || 'EMPLOYEE';
-    return resolvePermissions(role, user?.custom_permissions);
-  }, [user]);
+    const role: Role = user?.role || "EMPLOYEE";
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
 
   const canView = perms.has('customers.view');
   const canEdit = perms.has('customers.edit');

@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
+import { useRolesStore } from '../store/rolesStore';
+import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -35,6 +37,7 @@ const T: Record<string, Record<string, string>> = {
     deleted: 'Gelöscht', error: 'Fehler', paymentRecorded: 'Zahlung erfasst',
     bankTransfer: 'Überweisung', cash: 'Bar', creditCard: 'Kreditkarte',
     other: 'Andere', save: 'Speichern', cancel: 'Abbrechen',
+    accessDenied: 'Kein Zugriff',
   },
   en: {
     title: 'Invoices', search: 'Search...', number: 'No.', customer: 'Customer',
@@ -47,6 +50,7 @@ const T: Record<string, Record<string, string>> = {
     deleted: 'Deleted', error: 'Error', paymentRecorded: 'Payment recorded',
     bankTransfer: 'Bank Transfer', cash: 'Cash', creditCard: 'Credit Card',
     other: 'Other', save: 'Save', cancel: 'Cancel',
+    accessDenied: 'Access Denied',
   },
   fr: {
     title: 'Factures', search: 'Rechercher...', number: 'N°', customer: 'Client',
@@ -59,6 +63,7 @@ const T: Record<string, Record<string, string>> = {
     deleted: 'Supprimé', error: 'Erreur', paymentRecorded: 'Paiement enregistré',
     bankTransfer: 'Virement', cash: 'Espèces', creditCard: 'Carte de crédit',
     other: 'Autre', save: 'Enregistrer', cancel: 'Annuler',
+    accessDenied: 'Accès refusé',
   },
   pt: {
     title: 'Faturas', search: 'Pesquisar...', number: 'Nº', customer: 'Cliente',
@@ -71,6 +76,7 @@ const T: Record<string, Record<string, string>> = {
     deleted: 'Excluído', error: 'Erro', paymentRecorded: 'Pagamento registado',
     bankTransfer: 'Transferência', cash: 'Dinheiro', creditCard: 'Cartão',
     other: 'Outro', save: 'Salvar', cancel: 'Cancelar',
+    accessDenied: 'Acesso negado',
   },
 };
 
@@ -81,8 +87,24 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function InvoicesPage() {
   const { th, isDark, lang } = useTheme();
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
+  const { permissionMap } = useRolesStore();
   const t = T[lang] || T.de;
+
+  /* ── Permission handling ── */
+  const perms = useMemo(() => {
+    const role: Role = (user?.role as Role) || 'EMPLOYEE';
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
+
+  const canView = perms.has('invoices.view' as Permission);
+  const canEdit = perms.has('invoices.edit' as Permission);
+
+  /* ── Auth headers (memoized) ── */
+  const authHeaders = useMemo(() => ({
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  }), [token]);
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [total, setTotal] = useState(0);
@@ -103,11 +125,6 @@ export function InvoicesPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   };
 
-  const headers = useCallback(() => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  }), [token]);
-
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
@@ -116,21 +133,21 @@ export function InvoicesPage() {
       if (filterStatus !== 'ALL') params.set('status', filterStatus);
       params.set('limit', '100');
 
-      const res = await fetch(`${API}/api/v1/invoices?${params}`, { headers: headers() });
+      const res = await fetch(`${API}/api/v1/invoices?${params}`, { headers: authHeaders });
       const json = await res.json();
       setInvoices(json.data || []);
       setTotal(json.meta?.total || 0);
     } catch { showToast(t.error, true); }
     setLoading(false);
-  }, [search, filterStatus, headers, t.error]);
+  }, [search, filterStatus, authHeaders, t.error]);
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
   const recordPayment = async () => {
-    if (!paymentInvoice) return;
+    if (!paymentInvoice || !canEdit) return;
     try {
       const res = await fetch(`${API}/api/v1/invoices/${paymentInvoice.id}/payments`, {
-        method: 'POST', headers: headers(),
+        method: 'POST', headers: authHeaders,
         body: JSON.stringify({
           amount: parseFloat(paymentForm.amount),
           payment_date: paymentForm.payment_date || new Date().toISOString().split('T')[0],
@@ -172,6 +189,15 @@ export function InvoicesPage() {
   const totalAmount = invoices.reduce((s, i) => s + (i.total_gross || 0), 0);
   const totalPaid = invoices.reduce((s, i) => s + (i.amount_paid || 0), 0);
   const totalDue = invoices.reduce((s, i) => s + (i.amount_due || 0), 0);
+
+  /* ── Access guard ── */
+  if (!canView) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: th.text }}>
+        <h2>{t.accessDenied}</h2>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 24, fontFamily: "'Inter','Segoe UI',sans-serif", color: th.text, minHeight: '100vh' }}>
@@ -221,15 +247,15 @@ export function InvoicesPage() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40, color: th.textDim }}>⏳</div>
+        <div style={{ textAlign: 'center', padding: 40, color: th.textDim }}>Loading...</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
-            <tr style={{ background: th.bgHeader, borderBottom: `1px solid ${th.border}` }}>
+            <tr style={{ background: th.bgCard, borderBottom: `1px solid ${th.border}` }}>
               {[t.number, t.customer, t.invoiceTitle, t.date, t.status, t.total, t.paid, t.due].map(h => (
                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: th.textMuted, fontSize: 11, letterSpacing: .5, textTransform: 'uppercase' }}>{h}</th>
               ))}
-              <th style={{ width: 120 }}></th>
+              {canEdit && <th style={{ width: 120 }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -252,15 +278,17 @@ export function InvoicesPage() {
                 <td style={{ padding: '10px 12px', fontWeight: 600 }}>{chf(inv.total_gross)}</td>
                 <td style={{ padding: '10px 12px', color: '#22c55e' }}>{chf(inv.amount_paid)}</td>
                 <td style={{ padding: '10px 12px', fontWeight: 600, color: (inv.amount_due || 0) > 0 ? '#f59e0b' : th.textDim }}>{chf(inv.amount_due)}</td>
-                <td style={{ padding: '10px 12px' }}>
-                  {inv.status !== 'PAID' && inv.status !== 'CANCELLED' && (
-                    <button style={{ ...btn(true), fontSize: 10, padding: '4px 8px' }}
-                      onClick={() => {
-                        setPaymentInvoice(inv);
-                        setPaymentForm({ amount: String(inv.amount_due || 0), payment_date: new Date().toISOString().split('T')[0], method: 'BANK_TRANSFER', reference: '' });
-                      }}>{t.addPayment}</button>
-                  )}
-                </td>
+                {canEdit && (
+                  <td style={{ padding: '10px 12px' }}>
+                    {inv.status !== 'PAID' && inv.status !== 'CANCELLED' && (
+                      <button style={{ ...btn(true), fontSize: 10, padding: '4px 8px' }}
+                        onClick={() => {
+                          setPaymentInvoice(inv);
+                          setPaymentForm({ amount: String(inv.amount_due || 0), payment_date: new Date().toISOString().split('T')[0], method: 'BANK_TRANSFER', reference: '' });
+                        }}>{t.addPayment}</button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -268,7 +296,7 @@ export function InvoicesPage() {
       )}
 
       {/* Payment Modal */}
-      {paymentInvoice && (
+      {paymentInvoice && canEdit && (
         <div style={{
           position: 'fixed', inset: 0, background: th.modalBg, display: 'flex',
           alignItems: 'center', justifyContent: 'center', zIndex: 9999,

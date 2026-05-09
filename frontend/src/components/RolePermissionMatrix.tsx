@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useTheme } from "../contexts/themeContext";
 import {
-  ROLES,
+  BUILT_IN_ROLES,
   PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
   type Role,
@@ -113,7 +113,7 @@ export function RolePermissionMatrix({
         <thead>
           <tr>
             <th style={{ ...headerCell, textAlign: "left", minWidth: 160 }}>Permission</th>
-            {ROLES.map((r) => (
+            {BUILT_IN_ROLES.map((r) => (
               <th key={r} style={headerCell}>{r}</th>
             ))}
             {userId && userRole && (
@@ -129,7 +129,7 @@ export function RolePermissionMatrix({
               {/* group header */}
               <tr>
                 <td
-                  colSpan={ROLES.length + 1 + (userId ? 1 : 0)}
+                  colSpan={BUILT_IN_ROLES.length + 1 + (userId ? 1 : 0)}
                   style={{
                     padding: "8px 8px 4px",
                     fontWeight: 700,
@@ -146,7 +146,7 @@ export function RolePermissionMatrix({
                   <td style={{ ...cellStyle, textAlign: "left", color: th.text }}>
                     {perm.split(".")[1]}
                   </td>
-                  {ROLES.map((r) => {
+                  {BUILT_IN_ROLES.map((r) => {
                     const has = DEFAULT_ROLE_PERMISSIONS[r]?.includes(perm);
                     return (
                       <td key={r} style={cellStyle}>

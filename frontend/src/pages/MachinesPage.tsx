@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
 import { resolvePermissions, type Role } from '../../../shared/constants/roles';
+import { useRolesStore } from "../store/rolesStore";
 
 /* ─── types ─── */
 interface Machine {
@@ -146,10 +147,11 @@ export function MachinesPage() {
   const API = import.meta.env.VITE_API_URL || '';
 
   /* ── permissions from roles system ── */
+  const { permissionMap } = useRolesStore();
   const perms = useMemo(() => {
-    const role: Role = user?.role || 'EMPLOYEE';
-    return resolvePermissions(role, user?.custom_permissions);
-  }, [user]);
+    const role: Role = user?.role || "EMPLOYEE";
+    return resolvePermissions(role, user?.custom_permissions, permissionMap);
+  }, [user, permissionMap]);
 
   const canView = perms.has('machines.view');
   const canEdit = perms.has('machines.edit');
