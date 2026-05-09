@@ -824,7 +824,7 @@ export default function AdminPage() {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <CsvToolbar
             columns={currentCsvCols}
-            data={csvData as any[]}
+            data={csvData as Record<string, any>[]}
             filename={tab}
             exampleRows={currentCsvExamples}
             onImport={handleCsvImport}
@@ -1277,12 +1277,12 @@ export default function AdminPage() {
                   Default permissions for <strong>{roleLabel(userForm.role)}</strong>. Toggle to add or remove overrides for this user.
                 </p>
                 <RolePermissionMatrix
-                  {...{
-                    role: userForm.role,
-                    customPermissions: userCustomPerms,
-                    onChange: setUserCustomPerms,
-                    lang,
-                  } as any}
+                  userId={editId ?? undefined}
+                  userRole={userForm.role}
+                  userCustomAdd={userCustomPerms.add}
+                  userCustomRemove={userCustomPerms.remove}
+                  onChangeCustom={(add, remove) => setUserCustomPerms({ add, remove })}
+                  readOnly={!canManageRoles}
                 />
               </div>
             )}
