@@ -1,7 +1,9 @@
+// src/pages/CustomersPage.tsx
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
+import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -160,7 +162,6 @@ function formatCurrency(val?: number): string {
   return val.toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/* ── Normalize API response into our Customer shape ── */
 function normalizeCustomer(raw: any): Customer {
   return {
     id: raw.id,
@@ -186,7 +187,6 @@ function normalizeCustomer(raw: any): Customer {
   };
 }
 
-/* ── Build a form object from a Customer ── */
 function customerToForm(c: Customer): Partial<Customer> {
   return {
     name: c.name || '',
@@ -212,8 +212,20 @@ export function CustomersPage() {
   const { token, user } = useAuthStore();
   const t = T[lang] || T.de;
   const locale = DATE_LOCALES[lang] || 'de-CH';
-  const isManager = ['LOCAL_MANAGER', 'GLOBAL_MANAGER'].includes((user?.role || '').toUpperCase());
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  /* ── permissions from roles system ── */
+  const perms = useMemo(() => {
+    const role = (user?.role || 'EMPLOYEE').toUpperCase() as Role;
+    const custom = user?.custom_permissions as
+      | { add?: Permission[]; remove?: Permission[] }
+      | undefined;
+    return resolvePermissions(role, custom);
+  }, [user]);
+
+  const canView = perms.has('customers.view');
+  const canEdit = perms.has('customers.edit');
+  const canDelete = perms.has('customers.delete');
 
   /* ── state ── */
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -272,13 +284,13 @@ export function CustomersPage() {
 
   const btnPrimary: React.CSSProperties = {
     padding: '8px 18px', borderRadius: 8, border: 'none',
-    background: th.accent || '#4ecdc4', color: '#fff',
+    background: th.gold, color: '#000',
     fontWeight: 600, cursor: 'pointer', fontSize: 14,
     transition: 'opacity .15s',
   };
 
   const btnDanger: React.CSSProperties = {
-    ...btnPrimary, background: '#e74c3c',
+    ...btnPrimary, background: '#e74c3c', color: '#fff',
   };
 
   const btnSecondary: React.CSSProperties = {
@@ -301,7 +313,7 @@ export function CustomersPage() {
     background: active ? (isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.04)') : 'transparent',
     color: active ? th.text : dimText,
     fontWeight: active ? 700 : 500, cursor: 'pointer',
-    borderBottom: active ? `2px solid ${th.accent || '#4ecdc4'}` : '2px solid transparent',
+    borderBottom: active ? `2px solid ${th.gold}` : '2px solid transparent',
     transition: 'all .15s',
   });
 
@@ -309,10 +321,10 @@ export function CustomersPage() {
     padding: '8px 16px', borderRadius: 8, border: 'none',
     background: disabled
       ? (isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.04)')
-      : (th.accent || '#4ecdc4'),
+      : th.gold,
     color: disabled
       ? (isDark ? 'rgba(255,255,255,.25)' : 'rgba(0,0,0,.25)')
-      : '#fff',
+      : '#000',
     fontWeight: 600, fontSize: 14,
     cursor: disabled ? 'default' : 'pointer',
     opacity: disabled ? 0.6 : 1,
@@ -385,14 +397,8 @@ export function CustomersPage() {
       const res = await fetch(`${API}/api/v1/customers/${id}`, { headers });
       if (!res.ok) throw new Error();
       const json = await res.json();
-
-      /* Unwrap { data: ... } if present */
       const raw = json.data ?? json;
       const cust = normalizeCustomer(raw);
-
-      console.log('[CustomersPage] fetchDetail raw:', raw);
-      console.log('[CustomersPage] fetchDetail normalized:', cust);
-
       setSelected(cust);
       setContacts(cust.contacts ?? []);
       setForm(customerToForm(cust));
@@ -419,9 +425,14 @@ export function CustomersPage() {
         : `${API}/api/v1/customers`;
       const res = await fetch(url, { method, headers, body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
+      const json = await res.json();
+      const saved = normalizeCustomer(json.data ?? json);
       showToast(t.saved);
       if (selected) {
-        await fetchDetail(selected.id);
+        setSelected(saved);
+        setForm(customerToForm(saved));
+        setCustomers((prev) => prev.map((c) => (c.id === saved.id ? saved : c)));
+        setEditing(false);
       } else {
         closeDetail();
       }
@@ -544,6 +555,9 @@ export function CustomersPage() {
     [allCustomers],
   );
 
+  /* ── if user has no view permission, render nothing ── */
+  if (!canView) return null;
+
   /* ────────────────── render ────────────────── */
   return (
     <div style={{ padding: '24px 16px', maxWidth: 1400, margin: '0 auto', color: th.text }}>
@@ -587,10 +601,10 @@ export function CustomersPage() {
               validators={{
                 name: (v: string) => (v ? null : 'Name is required'),
               }}
-              canImport={isManager}
+              canImport={canEdit}
               onImport={handleCsvImport}
             />
-            {isManager && (
+            {canEdit && (
               <button
                 onClick={() => {
                   setSelected(null);
@@ -768,7 +782,7 @@ export function CustomersPage() {
                   : (selected?.name || '')}
               </h2>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {selected && !editing && isManager && (
+                {selected && !editing && canEdit && (
                   <>
                     <button
                       onClick={() => {
@@ -779,22 +793,24 @@ export function CustomersPage() {
                     >
                       {t.edit}
                     </button>
-                    {confirmDelete ? (
-                      <>
-                        <span style={{ color: th.text, alignSelf: 'center', fontSize: 13 }}>
-                          {t.confirmDelete}
-                        </span>
-                        <button onClick={deleteCustomer} style={btnDanger}>
-                          {t.yes}
+                    {canDelete && (
+                      confirmDelete ? (
+                        <>
+                          <span style={{ color: th.text, alignSelf: 'center', fontSize: 13 }}>
+                            {t.confirmDelete}
+                          </span>
+                          <button onClick={deleteCustomer} style={btnDanger}>
+                            {t.yes}
+                          </button>
+                          <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>
+                            {t.no}
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => setConfirmDelete(true)} style={btnDanger}>
+                          {t.delete}
                         </button>
-                        <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>
-                          {t.no}
-                        </button>
-                      </>
-                    ) : (
-                      <button onClick={() => setConfirmDelete(true)} style={btnDanger}>
-                        {t.delete}
-                      </button>
+                      )
                     )}
                   </>
                 )}
@@ -947,7 +963,7 @@ export function CustomersPage() {
             {/* ── Contacts Tab ── */}
             {tab === 'contacts' && (
               <div>
-                {contacts.length === 0 && !isManager && (
+                {contacts.length === 0 && !canEdit && (
                   <p style={{ color: dimText, textAlign: 'center', padding: 20 }}>—</p>
                 )}
                 {contacts.map((c) => (
@@ -979,14 +995,14 @@ export function CustomersPage() {
                         {c.phone || ''}
                       </div>
                     </div>
-                    {isManager && (
+                    {canEdit && (
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           onClick={() => {
                             setContactForm({ ...c });
                             setEditingContact(c.id);
                           }}
-                          style={contactBtnSmall(th.accent || '#4ecdc4')}
+                          style={contactBtnSmall(th.gold)}
                         >
                           {t.edit}
                         </button>
@@ -1002,7 +1018,7 @@ export function CustomersPage() {
                 ))}
 
                 {/* Contact add/edit form */}
-                {isManager && (
+                {canEdit && (
                   <div style={{
                     marginTop: 20, padding: 16, borderRadius: 10,
                     background: isDark ? 'rgba(255,255,255,.03)' : 'rgba(0,0,0,.02)',

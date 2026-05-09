@@ -16,10 +16,9 @@ authRouter.post('/login', async (req, res) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    // Fetch user from database
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, password_hash, first_name, last_name, role, departments, is_active')
+      .select('id, email, password_hash, first_name, last_name, role, departments, custom_permissions, is_active')
       .eq('email', email)
       .single();
 
@@ -39,7 +38,6 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
-    // Verify password
     const passwordValid = await bcryptjs.compare(password, user.password_hash);
     if (!passwordValid) {
       console.error('❌ Password mismatch for:', email);
@@ -49,7 +47,6 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
-    // Generate JWT token (7 days expiry)
     const token = jwt.sign(
       {
         userId: user.id,
@@ -72,6 +69,7 @@ authRouter.post('/login', async (req, res) => {
         last_name: user.last_name,
         role: user.role,
         departments: user.departments,
+        custom_permissions: user.custom_permissions || null,
       },
     });
   } catch (error) {
@@ -83,7 +81,7 @@ authRouter.post('/login', async (req, res) => {
   }
 });
 
-// POST /api/v1/auth/register (optional, for dev)
+// POST /api/v1/auth/register
 authRouter.post('/register', async (req, res) => {
   try {
     const { email, password, first_name, last_name, role, departments } = req.body;
@@ -97,11 +95,11 @@ authRouter.post('/register', async (req, res) => {
         password_hash: passwordHash,
         first_name: first_name || '',
         last_name: last_name || '',
-        role: role || 'ARBEITER',
+        role: role || 'EMPLOYEE',
         departments: departments || ['GARTEN_TIEFBAU'],
         is_active: true,
       })
-      .select('id, email, first_name, last_name, role, departments')
+      .select('id, email, first_name, last_name, role, departments, custom_permissions')
       .single();
 
     if (insertError) {
@@ -125,7 +123,7 @@ authRouter.post('/register', async (req, res) => {
   }
 });
 
-// GET /api/v1/auth/me (verify token)
+// GET /api/v1/auth/me
 authRouter.get('/me', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
@@ -144,7 +142,7 @@ authRouter.get('/me', async (req, res) => {
 
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, first_name, last_name, role, departments, is_active')
+      .select('id, email, first_name, last_name, role, departments, custom_permissions, is_active')
       .eq('id', decoded.userId)
       .single();
 

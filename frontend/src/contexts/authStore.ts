@@ -1,12 +1,17 @@
 import { create } from 'zustand';
+import type { Role, Permission } from '../../../shared/constants/roles';
 
 export interface User {
   id: string;
   email: string;
   first_name: string;
   last_name?: string;
-  role: 'ARBEITER' | 'LOCAL_MANAGER' | 'GLOBAL_MANAGER';
+  role: Role;
   departments: string[];
+  custom_permissions?: {
+    add?: Permission[];
+    remove?: Permission[];
+  };
 }
 
 export interface AuthState {
