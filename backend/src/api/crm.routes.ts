@@ -13,7 +13,7 @@ crmRouter.get('/dashboard', async (req: any, res) => {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const role = (req.user.role || '').toUpperCase();
     const isSales = role === 'SALES';
 
@@ -97,7 +97,7 @@ crmRouter.get('/customers', async (req: any, res) => {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const role = (req.user.role || '').toUpperCase();
     const { search, sort, order } = req.query;
 
@@ -183,7 +183,7 @@ crmRouter.get('/activities', async (req: any, res) => {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const role = (req.user.role || '').toUpperCase();
     const { customer_id, type, limit: lim } = req.query;
 
@@ -219,7 +219,7 @@ crmRouter.post('/activities', async (req: any, res) => {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const {
       customer_id, type, subject, description,
       activity_date, duration_minutes, outcome,
@@ -310,7 +310,7 @@ crmRouter.get('/opportunities', async (req: any, res) => {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const role = (req.user.role || '').toUpperCase();
     const { customer_id, stage } = req.query;
 
@@ -344,7 +344,7 @@ crmRouter.post('/opportunities', async (req: any, res) => {
     if (!req.user?.id) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const {
       customer_id, title, description, stage,
       estimated_value, probability, expected_close_date,
