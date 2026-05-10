@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { useAuthStore } from '../contexts/authStore';
 import { useRolesStore } from '../store/rolesStore';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+import { getTranslations, type LangCode } from '../i18n';
 
 /* ─── Theme type ─── */
 type Theme = typeof themes.dark;
@@ -16,69 +17,6 @@ interface Week { id: string; week_number: number; year: number; schedule_type: s
 interface Task { id: string; code: string; name: string; color: string; schedule_type: string; status?: string; customer?: { id: string; name: string } | null; }
 
 const API = import.meta.env.VITE_API_URL || '';
-
-const T: Record<string, any> = {
-  de: {
-    employees: 'Mitarbeiter', assignments: 'Zuweisungen', absences: 'Absenzen',
-    objects: 'Objekte', today: 'Heute', absenzen: 'Absenzen', objectDir: 'Aufträge',
-    bothDept: 'Alle', gartenFull: 'Garten & Tiefbau', unterhaltFull: 'Unterhalt',
-    days: ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
-    daysShort: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'],
-    abs: { '1': 'Ferien', '2': 'Schule', '3': 'ÜK', '4': 'Unfall', '5': 'Krank', '6': 'Teilzeit' } as Record<string, string>,
-    removed: 'Entfernt', cancel: 'Abbrechen', setAbsence: 'Absenz setzen',
-    searchTasks: 'Auftrag suchen...', noMatch: 'Kein Treffer', max2: 'Max. 2 Aufträge',
-    blocked: 'Blockiert (Absenz)', skipped: 'übersprungen',
-    activeTasks: 'Aktive Aufträge', absenceLegend: 'Absenzen',
-    kw: 'KW', bulkDay: 'Ganzer Tag', bulkEmployee: 'Ganze Woche',
-    networkError: 'Netzwerkfehler', error: 'Fehler', weekNotFound: 'Woche nicht gefunden',
-    remove: 'Entfernen', accessDenied: 'Zugriff verweigert',
-  },
-  en: {
-    employees: 'Employees', assignments: 'Assignments', absences: 'Absences',
-    objects: 'Objects', today: 'Today', absenzen: 'Absences', objectDir: 'Tasks',
-    bothDept: 'All', gartenFull: 'Garden & Civil Eng.', unterhaltFull: 'Maintenance',
-    days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    daysShort: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-    abs: { '1': 'Vacation', '2': 'School', '3': 'Course', '4': 'Accident', '5': 'Sick', '6': 'Part-time' } as Record<string, string>,
-    removed: 'Removed', cancel: 'Cancel', setAbsence: 'Set Absence',
-    searchTasks: 'Search task...', noMatch: 'No match', max2: 'Max. 2 tasks',
-    blocked: 'Blocked (Absence)', skipped: 'skipped',
-    activeTasks: 'Active Tasks', absenceLegend: 'Absences',
-    kw: 'CW', bulkDay: 'Entire Day', bulkEmployee: 'Entire Week',
-    networkError: 'Network error', error: 'Error', weekNotFound: 'Week not found',
-    remove: 'Remove', accessDenied: 'Access Denied',
-  },
-  fr: {
-    employees: 'Employés', assignments: 'Affectations', absences: 'Absences',
-    objects: 'Objets', today: "Aujourd'hui", absenzen: 'Absences', objectDir: 'Tâches',
-    bothDept: 'Tous', gartenFull: 'Jardin & Génie civil', unterhaltFull: 'Entretien',
-    days: ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
-    daysShort: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'],
-    abs: { '1': 'Vacances', '2': 'École', '3': 'Cours', '4': 'Accident', '5': 'Maladie', '6': 'Temps partiel' } as Record<string, string>,
-    removed: 'Supprimé', cancel: 'Annuler', setAbsence: 'Définir absence',
-    searchTasks: 'Rechercher une tâche...', noMatch: 'Aucun résultat', max2: 'Max. 2 tâches',
-    blocked: 'Bloqué (Absence)', skipped: 'ignoré',
-    activeTasks: 'Tâches actives', absenceLegend: 'Absences',
-    kw: 'S', bulkDay: 'Journée entière', bulkEmployee: 'Semaine entière',
-    networkError: 'Erreur réseau', error: 'Erreur', weekNotFound: 'Semaine introuvable',
-    remove: 'Supprimer', accessDenied: 'Accès refusé',
-  },
-  pt: {
-    employees: 'Funcionários', assignments: 'Alocações', absences: 'Ausências',
-    objects: 'Objetos', today: 'Hoje', absenzen: 'Ausências', objectDir: 'Tarefas',
-    bothDept: 'Todos', gartenFull: 'Jardim & Eng. Civil', unterhaltFull: 'Manutenção',
-    days: ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
-    daysShort: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
-    abs: { '1': 'Férias', '2': 'Escola', '3': 'Curso', '4': 'Acidente', '5': 'Doente', '6': 'Meio período' } as Record<string, string>,
-    removed: 'Removido', cancel: 'Cancelar', setAbsence: 'Definir ausência',
-    searchTasks: 'Pesquisar tarefa...', noMatch: 'Sem resultado', max2: 'Máx. 2 tarefas',
-    blocked: 'Bloqueado (Ausência)', skipped: 'ignorado',
-    activeTasks: 'Tarefas ativas', absenceLegend: 'Ausências',
-    kw: 'S', bulkDay: 'Dia inteiro', bulkEmployee: 'Semana inteira',
-    networkError: 'Erro de rede', error: 'Erro', weekNotFound: 'Semana não encontrada',
-    remove: 'Remover', accessDenied: 'Acesso negado',
-  },
-};
 
 /* ─── Color palette ─── */
 const PALETTE = [
@@ -109,7 +47,7 @@ function getKW(d: Date) {
 export function SchedulePage() {
   const { isDark, lang } = useTheme();
   const th: Theme = isDark ? themes.dark : themes.light;
-  const t = T[lang] || T.de;
+  const t = getTranslations(lang as LangCode);
 
   /* ─── Auth & Permissions ─── */
   const { user, token } = useAuthStore();

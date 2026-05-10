@@ -5,6 +5,7 @@ import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
 import { useRolesStore } from '../store/rolesStore';
+import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -49,118 +50,6 @@ interface MachineAllocation {
   task?: { id: string; name: string; code: string; color?: string };
   user?: { id: string; first_name: string; last_name: string };
 }
-
-/* ────────────────── translations ────────────────── */
-const T: Record<string, Record<string, string>> = {
-  de: {
-    title: 'Maschinen', search: 'Suchen…', allCategories: 'Alle Kategorien',
-    allStatuses: 'Alle Status', add: '+ Neue Maschine', name: 'Name', type: 'Typ',
-    category: 'Kategorie', licensePlate: 'Kennzeichen', status: 'Status',
-    department: 'Abteilung', notes: 'Notizen', brand: 'Marke', model: 'Modell',
-    year: 'Jahrgang', serialNumber: 'Seriennummer',
-    save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten', delete: 'Löschen',
-    confirmDelete: 'Wirklich löschen?', yes: 'Ja', no: 'Nein',
-    general: 'Allgemein', allocations: 'Zuweisungen', notesTab: 'Notizen',
-    noMachines: 'Keine Maschinen gefunden.', saved: 'Gespeichert', deleted: 'Gelöscht',
-    error: 'Fehler', imported: 'importiert', loading: 'Laden…',
-    back: '← Zurück zur Liste', prev: '← Zurück', next: 'Weiter →',
-    page: 'Seite', of: 'von', total: 'Total', available: 'Verfügbar',
-    close: 'Schliessen', task: 'Auftrag', user: 'Mitarbeiter', date: 'Datum',
-    startTime: 'Start', endTime: 'Ende',
-    // statuses
-    AVAILABLE: 'Verfügbar', IN_USE: 'In Gebrauch', MAINTENANCE: 'Wartung', OUT_OF_SERVICE: 'Ausser Betrieb',
-    // categories
-    CAT_EXCAVATOR: 'Bagger', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Walze',
-    CAT_LOADER: 'Radlader', CAT_CRANE: 'Kran', CAT_TRUCK: 'Lastwagen',
-    CAT_VAN: 'Lieferwagen', CAT_CAR: 'Auto', CAT_TRAILER: 'Anhänger',
-    CAT_MOWER: 'Mäher', CAT_CHAINSAW: 'Kettensäge', CAT_COMPACTOR: 'Verdichter',
-    CAT_GENERATOR: 'Generator', CAT_PUMP: 'Pumpe', CAT_LIGHT_EQUIPMENT: 'Kleingeräte',
-    CAT_OTHER: 'Sonstiges',
-    // types
-    TYPE_VEHICLE: 'Fahrzeug', TYPE_HEAVY: 'Schwere Maschine', TYPE_LIGHT: 'Leichte Maschine',
-    TYPE_TOOL: 'Werkzeug', TYPE_ATTACHMENT: 'Anbaugerät', TYPE_OTHER: 'Sonstiges',
-    // departments
-    DEPT_GARTEN_TIEFBAU: 'Garten & Tiefbau', DEPT_UNTERHALT: 'Unterhalt',
-  },
-  en: {
-    title: 'Machines', search: 'Search…', allCategories: 'All Categories',
-    allStatuses: 'All Statuses', add: '+ New Machine', name: 'Name', type: 'Type',
-    category: 'Category', licensePlate: 'License Plate', status: 'Status',
-    department: 'Department', notes: 'Notes', brand: 'Brand', model: 'Model',
-    year: 'Year', serialNumber: 'Serial Number',
-    save: 'Save', cancel: 'Cancel', edit: 'Edit', delete: 'Delete',
-    confirmDelete: 'Really delete?', yes: 'Yes', no: 'No',
-    general: 'General', allocations: 'Allocations', notesTab: 'Notes',
-    noMachines: 'No machines found.', saved: 'Saved', deleted: 'Deleted',
-    error: 'Error', imported: 'imported', loading: 'Loading…',
-    back: '← Back to list', prev: '← Previous', next: 'Next →',
-    page: 'Page', of: 'of', total: 'Total', available: 'Available',
-    close: 'Close', task: 'Task', user: 'Employee', date: 'Date',
-    startTime: 'Start', endTime: 'End',
-    AVAILABLE: 'Available', IN_USE: 'In Use', MAINTENANCE: 'Maintenance', OUT_OF_SERVICE: 'Out of Service',
-    CAT_EXCAVATOR: 'Excavator', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Roller',
-    CAT_LOADER: 'Loader', CAT_CRANE: 'Crane', CAT_TRUCK: 'Truck',
-    CAT_VAN: 'Van', CAT_CAR: 'Car', CAT_TRAILER: 'Trailer',
-    CAT_MOWER: 'Mower', CAT_CHAINSAW: 'Chainsaw', CAT_COMPACTOR: 'Compactor',
-    CAT_GENERATOR: 'Generator', CAT_PUMP: 'Pump', CAT_LIGHT_EQUIPMENT: 'Light Equipment',
-    CAT_OTHER: 'Other',
-    TYPE_VEHICLE: 'Vehicle', TYPE_HEAVY: 'Heavy Machine', TYPE_LIGHT: 'Light Machine',
-    TYPE_TOOL: 'Tool', TYPE_ATTACHMENT: 'Attachment', TYPE_OTHER: 'Other',
-    DEPT_GARTEN_TIEFBAU: 'Garden & Civil Works', DEPT_UNTERHALT: 'Maintenance',
-  },
-  fr: {
-    title: 'Machines', search: 'Rechercher…', allCategories: 'Toutes les catégories',
-    allStatuses: 'Tous les statuts', add: '+ Nouvelle machine', name: 'Nom', type: 'Type',
-    category: 'Catégorie', licensePlate: 'Plaque', status: 'Statut',
-    department: 'Département', notes: 'Notes', brand: 'Marque', model: 'Modèle',
-    year: 'Année', serialNumber: 'Numéro de série',
-    save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier', delete: 'Supprimer',
-    confirmDelete: 'Vraiment supprimer ?', yes: 'Oui', no: 'Non',
-    general: 'Général', allocations: 'Attributions', notesTab: 'Notes',
-    noMachines: 'Aucune machine trouvée.', saved: 'Enregistré', deleted: 'Supprimé',
-    error: 'Erreur', imported: 'importé(s)', loading: 'Chargement…',
-    back: '← Retour à la liste', prev: '← Précédent', next: 'Suivant →',
-    page: 'Page', of: 'de', total: 'Total', available: 'Disponible',
-    close: 'Fermer', task: 'Tâche', user: 'Employé', date: 'Date',
-    startTime: 'Début', endTime: 'Fin',
-    AVAILABLE: 'Disponible', IN_USE: 'En utilisation', MAINTENANCE: 'Maintenance', OUT_OF_SERVICE: 'Hors service',
-    CAT_EXCAVATOR: 'Pelle', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Rouleau',
-    CAT_LOADER: 'Chargeuse', CAT_CRANE: 'Grue', CAT_TRUCK: 'Camion',
-    CAT_VAN: 'Fourgon', CAT_CAR: 'Voiture', CAT_TRAILER: 'Remorque',
-    CAT_MOWER: 'Tondeuse', CAT_CHAINSAW: 'Tronçonneuse', CAT_COMPACTOR: 'Compacteur',
-    CAT_GENERATOR: 'Générateur', CAT_PUMP: 'Pompe', CAT_LIGHT_EQUIPMENT: 'Petit matériel',
-    CAT_OTHER: 'Autre',
-    TYPE_VEHICLE: 'Véhicule', TYPE_HEAVY: 'Machine lourde', TYPE_LIGHT: 'Machine légère',
-    TYPE_TOOL: 'Outil', TYPE_ATTACHMENT: 'Accessoire', TYPE_OTHER: 'Autre',
-    DEPT_GARTEN_TIEFBAU: 'Jardin & Génie civil', DEPT_UNTERHALT: 'Entretien',
-  },
-  pt: {
-    title: 'Máquinas', search: 'Pesquisar…', allCategories: 'Todas as categorias',
-    allStatuses: 'Todos os estados', add: '+ Nova máquina', name: 'Nome', type: 'Tipo',
-    category: 'Categoria', licensePlate: 'Matrícula', status: 'Estado',
-    department: 'Departamento', notes: 'Notas', brand: 'Marca', model: 'Modelo',
-    year: 'Ano', serialNumber: 'Número de série',
-    save: 'Guardar', cancel: 'Cancelar', edit: 'Editar', delete: 'Eliminar',
-    confirmDelete: 'Eliminar mesmo?', yes: 'Sim', no: 'Não',
-    general: 'Geral', allocations: 'Alocações', notesTab: 'Notas',
-    noMachines: 'Nenhuma máquina encontrada.', saved: 'Guardado', deleted: 'Eliminado',
-    error: 'Erro', imported: 'importado(s)', loading: 'A carregar…',
-    back: '← Voltar à lista', prev: '← Anterior', next: 'Seguinte →',
-    page: 'Página', of: 'de', total: 'Total', available: 'Disponível',
-    close: 'Fechar', task: 'Tarefa', user: 'Funcionário', date: 'Data',
-    startTime: 'Início', endTime: 'Fim',
-    AVAILABLE: 'Disponível', IN_USE: 'Em uso', MAINTENANCE: 'Manutenção', OUT_OF_SERVICE: 'Fora de serviço',
-    CAT_EXCAVATOR: 'Escavadora', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Rolo',
-    CAT_LOADER: 'Carregadora', CAT_CRANE: 'Grua', CAT_TRUCK: 'Camião',
-    CAT_VAN: 'Carrinha', CAT_CAR: 'Carro', CAT_TRAILER: 'Reboque',
-    CAT_MOWER: 'Cortador', CAT_CHAINSAW: 'Motosserra', CAT_COMPACTOR: 'Compactador',
-    CAT_GENERATOR: 'Gerador', CAT_PUMP: 'Bomba', CAT_LIGHT_EQUIPMENT: 'Equipamento leve',
-    CAT_OTHER: 'Outro',
-    TYPE_VEHICLE: 'Veículo', TYPE_HEAVY: 'Máquina pesada', TYPE_LIGHT: 'Máquina leve',
-    TYPE_TOOL: 'Ferramenta', TYPE_ATTACHMENT: 'Acessório', TYPE_OTHER: 'Outro',
-    DEPT_GARTEN_TIEFBAU: 'Jardim & Obras', DEPT_UNTERHALT: 'Manutenção',
-  },
-};
 
 /* ────────────────── constants ────────────────── */
 const STATUS_COLORS: Record<string, string> = {
@@ -255,7 +144,7 @@ const CSV_EXAMPLE_ROWS = [
 export function MachinesPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
-  const t = T[lang] || T.de;
+  const t = getTranslations(lang as LangCode);
   const locale = DATE_LOCALES[lang] || 'de-CH';
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 

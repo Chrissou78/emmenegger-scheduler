@@ -3,12 +3,8 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useTheme } from "../contexts/themeContext";
 import { useAuthStore } from "../contexts/authStore";
 import { useRolesStore } from "../store/rolesStore";
-import {
-  PERMISSIONS,
-  resolvePermissions,
-  type Role,
-  type Permission,
-} from "../../../shared/constants/roles";
+import { getTranslations, type LangCode, ALL_LANG_CODES, LANG_META, getLangName, getLangFlag,} from '../i18n';
+import { PERMISSIONS, resolvePermissions, type Role, type Permission,} from "../../../shared/constants/roles";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
@@ -114,410 +110,6 @@ interface ConfigForm {
 }
 
 /* ================================================================== */
-/*  Translations                                                       */
-/* ================================================================== */
-
-const L_ALL: Record<string, Record<string, string>> = {
-  de: {
-    settings: "Einstellungen",
-    roles: "Rollen & Berechtigungen",
-    configLists: "Konfigurationslisten",
-    company: "Unternehmen",
-    vatCrossBorder: "MwSt & Grenzüberschreitend",
-    roleName: "Rollenname",
-    permissions: "Berechtigungen",
-    systemRole: "Systemrolle",
-    newRole: "Neue Rolle",
-    editRole: "Rolle bearbeiten",
-    contractTypes: "Vertragsarten",
-    salaryTypes: "Lohnarten",
-    scheduleTypes: "Einsatzarten",
-    absenceTypes: "Abwesenheitstypen",
-    absenceCodes: "Abwesenheitscodes",
-    machineCategories: "Maschinenkategorien",
-    machineOperators: "Maschinenführer-Typen",
-    key: "Schlüssel",
-    label: "Bezeichnung",
-    sortOrder: "Reihenfolge",
-    metadata: "Metadaten (JSON)",
-    newItem: "Neuer Eintrag",
-    companyName: "Firmenname",
-    legalForm: "Rechtsform",
-    uidNumber: "UID-Nummer",
-    vatNumber: "MwSt-Nummer",
-    commercialRegister: "Handelsregister-Nr.",
-    street: "Strasse",
-    postalCode: "PLZ",
-    city: "Ort",
-    canton: "Kanton",
-    country: "Land",
-    phone: "Telefon",
-    email: "E-Mail",
-    website: "Website",
-    bankName: "Bank",
-    bankIban: "IBAN",
-    bankBic: "BIC/SWIFT",
-    vatMethod: "MwSt-Methode",
-    vatPeriod: "MwSt-Periode",
-    vatStandard: "Normalsatz",
-    vatReduced: "Reduzierter Satz",
-    vatSpecial: "Sondersatz (Beherbergung)",
-    fiscalYearStart: "Geschäftsjahresbeginn",
-    logoUrl: "Logo-URL",
-    effective: "Effektive Methode",
-    netRate: "Saldosteuersatz",
-    flatRate: "Pauschalsteuersatz",
-    quarterly: "Vierteljährlich",
-    semiAnnual: "Halbjährlich",
-    annual: "Jährlich",
-    vatRates: "MwSt-Sätze",
-    crossBorderCountries: "Länder (grenzüberschreitend)",
-    countryCode: "Ländercode",
-    countryName: "Land",
-    currency: "Währung",
-    rateType: "Satztyp",
-    ratePercent: "Satz %",
-    description: "Beschreibung",
-    vatRegistered: "MwSt registriert",
-    reverseCharge: "Reverse Charge",
-    notes: "Notizen",
-    newVatRate: "Neuer MwSt-Satz",
-    newCountry: "Neues Land",
-    save: "Speichern",
-    cancel: "Abbrechen",
-    delete: "Löschen",
-    edit: "Bearbeiten",
-    active: "Aktiv",
-    inactive: "Inaktiv",
-    confirmDelete: "Wirklich löschen?",
-    yes: "Ja",
-    no: "Nein",
-    saved: "Gespeichert",
-    deleted: "Gelöscht",
-    error: "Fehler",
-    accessDenied: "Zugriff verweigert",
-    loading: "Laden…",
-    noResults: "Keine Einträge",
-    // Hierarchy
-    hierarchy: "Hierarchie",
-    hierarchyDesc: "Mitarbeiter → Teamleiter → Geschäftsleitung zuweisen",
-    teamLeader: "Teamleiter",
-    executive: "Geschäftsleitung",
-    employees: "Mitarbeiter",
-    unassigned: "Nicht zugewiesen",
-    assignTeamLeader: "Teamleiter zuweisen",
-    assignExecutive: "GL zuweisen",
-    team: "Team",
-    directReports: "Direkt unterstellt",
-    bulkAssign: "Zuweisungen",
-    orgChart: "Organigramm",
-    role: "Rolle",
-    changed: "geändert",
-    noLeader: "Kein Teamleiter",
-    noExec: "Keine GL",
-    filterByRole: "Nach Rolle filtern",
-    allRoles: "Alle Rollen",
-  },
-  en: {
-    settings: "Settings",
-    roles: "Roles & Permissions",
-    configLists: "Configuration Lists",
-    company: "Company",
-    vatCrossBorder: "VAT & Cross-Border",
-    roleName: "Role Name",
-    permissions: "Permissions",
-    systemRole: "System Role",
-    newRole: "New Role",
-    editRole: "Edit Role",
-    contractTypes: "Contract Types",
-    salaryTypes: "Salary Types",
-    scheduleTypes: "Schedule Types",
-    absenceTypes: "Absence Types",
-    absenceCodes: "Absence Codes",
-    machineCategories: "Machine Categories",
-    machineOperators: "Machine Operator Types",
-    key: "Key",
-    label: "Label",
-    sortOrder: "Sort Order",
-    metadata: "Metadata (JSON)",
-    newItem: "New Item",
-    companyName: "Company Name",
-    legalForm: "Legal Form",
-    uidNumber: "UID Number",
-    vatNumber: "VAT Number",
-    commercialRegister: "Commercial Register No.",
-    street: "Street",
-    postalCode: "Postal Code",
-    city: "City",
-    canton: "Canton",
-    country: "Country",
-    phone: "Phone",
-    email: "Email",
-    website: "Website",
-    bankName: "Bank",
-    bankIban: "IBAN",
-    bankBic: "BIC/SWIFT",
-    vatMethod: "VAT Method",
-    vatPeriod: "VAT Period",
-    vatStandard: "Standard Rate",
-    vatReduced: "Reduced Rate",
-    vatSpecial: "Special Rate (Accommodation)",
-    fiscalYearStart: "Fiscal Year Start",
-    logoUrl: "Logo URL",
-    effective: "Effective Method",
-    netRate: "Net Rate Method",
-    flatRate: "Flat Rate Method",
-    quarterly: "Quarterly",
-    semiAnnual: "Semi-Annual",
-    annual: "Annual",
-    vatRates: "VAT Rates",
-    crossBorderCountries: "Cross-Border Countries",
-    countryCode: "Country Code",
-    countryName: "Country",
-    currency: "Currency",
-    rateType: "Rate Type",
-    ratePercent: "Rate %",
-    description: "Description",
-    vatRegistered: "VAT Registered",
-    reverseCharge: "Reverse Charge",
-    notes: "Notes",
-    newVatRate: "New VAT Rate",
-    newCountry: "New Country",
-    save: "Save",
-    cancel: "Cancel",
-    delete: "Delete",
-    edit: "Edit",
-    active: "Active",
-    inactive: "Inactive",
-    confirmDelete: "Really delete?",
-    yes: "Yes",
-    no: "No",
-    saved: "Saved",
-    deleted: "Deleted",
-    error: "Error",
-    accessDenied: "Access Denied",
-    loading: "Loading…",
-    noResults: "No entries",
-    hierarchy: "Hierarchy",
-    hierarchyDesc: "Assign employees → team leaders → executives",
-    teamLeader: "Team Leader",
-    executive: "Executive",
-    employees: "Employees",
-    unassigned: "Unassigned",
-    assignTeamLeader: "Assign Team Leader",
-    assignExecutive: "Assign Executive",
-    team: "Team",
-    directReports: "Direct Reports",
-    bulkAssign: "Assignments",
-    orgChart: "Org Chart",
-    role: "Role",
-    changed: "changed",
-    noLeader: "No team leader",
-    noExec: "No executive",
-    filterByRole: "Filter by role",
-    allRoles: "All roles",
-  },
-  fr: {
-    settings: "Paramètres",
-    roles: "Rôles & Permissions",
-    configLists: "Listes de configuration",
-    company: "Entreprise",
-    vatCrossBorder: "TVA & Transfrontalier",
-    roleName: "Nom du rôle",
-    permissions: "Permissions",
-    systemRole: "Rôle système",
-    newRole: "Nouveau rôle",
-    editRole: "Modifier le rôle",
-    contractTypes: "Types de contrat",
-    salaryTypes: "Types de salaire",
-    scheduleTypes: "Types de planning",
-    absenceTypes: "Types d'absence",
-    absenceCodes: "Codes d'absence",
-    machineCategories: "Catégories de machines",
-    machineOperators: "Types d'opérateurs",
-    key: "Clé",
-    label: "Libellé",
-    sortOrder: "Ordre",
-    metadata: "Métadonnées (JSON)",
-    newItem: "Nouvel élément",
-    companyName: "Raison sociale",
-    legalForm: "Forme juridique",
-    uidNumber: "Numéro IDE",
-    vatNumber: "Numéro TVA",
-    commercialRegister: "Registre du commerce",
-    street: "Rue",
-    postalCode: "Code postal",
-    city: "Ville",
-    canton: "Canton",
-    country: "Pays",
-    phone: "Téléphone",
-    email: "E-mail",
-    website: "Site web",
-    bankName: "Banque",
-    bankIban: "IBAN",
-    bankBic: "BIC/SWIFT",
-    vatMethod: "Méthode TVA",
-    vatPeriod: "Période TVA",
-    vatStandard: "Taux normal",
-    vatReduced: "Taux réduit",
-    vatSpecial: "Taux spécial (hébergement)",
-    fiscalYearStart: "Début exercice fiscal",
-    logoUrl: "URL du logo",
-    effective: "Méthode effective",
-    netRate: "Taux de la dette fiscale nette",
-    flatRate: "Méthode forfaitaire",
-    quarterly: "Trimestriel",
-    semiAnnual: "Semestriel",
-    annual: "Annuel",
-    vatRates: "Taux de TVA",
-    crossBorderCountries: "Pays transfrontaliers",
-    countryCode: "Code pays",
-    countryName: "Pays",
-    currency: "Devise",
-    rateType: "Type de taux",
-    ratePercent: "Taux %",
-    description: "Description",
-    vatRegistered: "Enregistré TVA",
-    reverseCharge: "Autoliquidation",
-    notes: "Notes",
-    newVatRate: "Nouveau taux TVA",
-    newCountry: "Nouveau pays",
-    save: "Enregistrer",
-    cancel: "Annuler",
-    delete: "Supprimer",
-    edit: "Modifier",
-    active: "Actif",
-    inactive: "Inactif",
-    confirmDelete: "Vraiment supprimer ?",
-    yes: "Oui",
-    no: "Non",
-    saved: "Enregistré",
-    deleted: "Supprimé",
-    error: "Erreur",
-    accessDenied: "Accès refusé",
-    loading: "Chargement…",
-    noResults: "Aucune entrée",
-    hierarchy: "Hiérarchie",
-    hierarchyDesc: "Affecter employés → chefs d'équipe → direction",
-    teamLeader: "Chef d'équipe",
-    executive: "Direction",
-    employees: "Employés",
-    unassigned: "Non attribué",
-    assignTeamLeader: "Attribuer chef d'équipe",
-    assignExecutive: "Attribuer direction",
-    team: "Équipe",
-    directReports: "Subordonnés directs",
-    bulkAssign: "Attributions",
-    orgChart: "Organigramme",
-    role: "Rôle",
-    changed: "modifié",
-    noLeader: "Aucun chef d'équipe",
-    noExec: "Aucune direction",
-    filterByRole: "Filtrer par rôle",
-    allRoles: "Tous les rôles",
-  },
-  pt: {
-    settings: "Configurações",
-    roles: "Funções & Permissões",
-    configLists: "Listas de Configuração",
-    company: "Empresa",
-    vatCrossBorder: "IVA & Transfronteiriço",
-    roleName: "Nome da Função",
-    permissions: "Permissões",
-    systemRole: "Função do Sistema",
-    newRole: "Nova Função",
-    editRole: "Editar Função",
-    contractTypes: "Tipos de Contrato",
-    salaryTypes: "Tipos de Salário",
-    scheduleTypes: "Tipos de Horário",
-    absenceTypes: "Tipos de Ausência",
-    absenceCodes: "Códigos de Ausência",
-    machineCategories: "Categorias de Máquinas",
-    machineOperators: "Tipos de Operador",
-    key: "Chave",
-    label: "Rótulo",
-    sortOrder: "Ordem",
-    metadata: "Metadados (JSON)",
-    newItem: "Novo Item",
-    companyName: "Nome da Empresa",
-    legalForm: "Forma Jurídica",
-    uidNumber: "Número UID",
-    vatNumber: "Número IVA",
-    commercialRegister: "Registo Comercial",
-    street: "Rua",
-    postalCode: "Código Postal",
-    city: "Cidade",
-    canton: "Cantão",
-    country: "País",
-    phone: "Telefone",
-    email: "E-mail",
-    website: "Website",
-    bankName: "Banco",
-    bankIban: "IBAN",
-    bankBic: "BIC/SWIFT",
-    vatMethod: "Método IVA",
-    vatPeriod: "Período IVA",
-    vatStandard: "Taxa Normal",
-    vatReduced: "Taxa Reduzida",
-    vatSpecial: "Taxa Especial (Alojamento)",
-    fiscalYearStart: "Início Ano Fiscal",
-    logoUrl: "URL do Logo",
-    effective: "Método Efetivo",
-    netRate: "Taxa Líquida",
-    flatRate: "Taxa Fixa",
-    quarterly: "Trimestral",
-    semiAnnual: "Semestral",
-    annual: "Anual",
-    vatRates: "Taxas IVA",
-    crossBorderCountries: "Países Transfronteiriços",
-    countryCode: "Código País",
-    countryName: "País",
-    currency: "Moeda",
-    rateType: "Tipo de Taxa",
-    ratePercent: "Taxa %",
-    description: "Descrição",
-    vatRegistered: "Registado IVA",
-    reverseCharge: "Reverse Charge",
-    notes: "Notas",
-    newVatRate: "Nova Taxa IVA",
-    newCountry: "Novo País",
-    save: "Guardar",
-    cancel: "Cancelar",
-    delete: "Eliminar",
-    edit: "Editar",
-    active: "Ativo",
-    inactive: "Inativo",
-    confirmDelete: "Eliminar mesmo?",
-    yes: "Sim",
-    no: "Não",
-    saved: "Guardado",
-    deleted: "Eliminado",
-    error: "Erro",
-    accessDenied: "Acesso Negado",
-    loading: "A carregar…",
-    noResults: "Sem entradas",
-    hierarchy: "Hierarquia",
-    hierarchyDesc: "Atribuir funcionários → líderes → direção",
-    teamLeader: "Líder de equipa",
-    executive: "Direção",
-    employees: "Funcionários",
-    unassigned: "Não atribuído",
-    assignTeamLeader: "Atribuir líder",
-    assignExecutive: "Atribuir direção",
-    team: "Equipa",
-    directReports: "Subordinados diretos",
-    bulkAssign: "Atribuições",
-    orgChart: "Organograma",
-    role: "Função",
-    changed: "alterado",
-    noLeader: "Sem líder",
-    noExec: "Sem direção",
-    filterByRole: "Filtrar por função",
-    allRoles: "Todas as funções",
-  },
-};
-
-/* ================================================================== */
 /*  Permission group labels for the role editor                        */
 /* ================================================================== */
 
@@ -607,12 +199,12 @@ function isLeaderOrAbove(role: string): boolean {
 /*  Component                                                          */
 /* ================================================================== */
 
-type MainTab = "roles" | "config" | "company" | "vat" | "hierarchy";
+type MainTab = "roles" | "config" | "company" | "vat" | "hierarchy" | "languages";
 
 export default function SettingsPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
-  const t = L_ALL[lang] ?? L_ALL.de;
+  const t = getTranslations(lang as LangCode);
   const gold = th.gold;
   const dimText = isDark ? "rgba(255,255,255,.45)" : "rgba(0,0,0,.4)";
   const inputBg = isDark ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.04)";
@@ -730,6 +322,58 @@ export default function SettingsPage() {
     }),
     [token],
   );
+
+  const { enabledLangs, setEnabledLangs, defaultLang, setDefaultLang, setLanguage } = useTheme();
+
+  const [langEditing, setLangEditing] = useState(false);
+  const [langDraft, setLangDraft] = useState<LangCode[]>([...enabledLangs]);
+  const [langDefault, setLangDefault] = useState<LangCode>(defaultLang);
+
+  // Save language settings:
+  const saveLanguageSettings = async () => {
+    if (langDraft.length === 0) {
+      showToast(t.atLeastOneLang, true);
+      return;
+    }
+    if (!langDraft.includes(langDefault)) {
+      showToast(t.cannotDisableDefault, true);
+      return;
+    }
+    try {
+      setSaving(true);
+      await fetch(`${API}/api/v1/settings/languages`, {
+        method: 'PUT',
+        headers: hdrs(),
+        body: JSON.stringify({
+          enabled_languages: langDraft,
+          default_language: langDefault,
+        }),
+      });
+      setEnabledLangs(langDraft);
+      setDefaultLang(langDefault);
+      // If current lang is no longer enabled, switch to default
+      if (!langDraft.includes(lang)) {
+        setLanguage(langDefault);
+      }
+      setLangEditing(false);
+      showToast(t.languageSaved);
+    } catch {
+      showToast(t.error, true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleLangEnabled = (code: LangCode) => {
+    setLangDraft(prev => {
+      if (prev.includes(code)) {
+        // Don't allow removing the default
+        if (code === langDefault) return prev;
+        return prev.filter(c => c !== code);
+      }
+      return [...prev, code];
+    });
+  };
 
   /* ================================================================ */
   /*  FETCH FUNCTIONS                                                  */
@@ -1024,6 +668,21 @@ export default function SettingsPage() {
             {label}
           </button>
         ))}
+        <button
+          onClick={() => setMainTab("languages")}
+          style={{
+            padding: "8px 20px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            border: "none",
+            background: mainTab === "languages" ? gold + "22" : "transparent",
+            color: mainTab === "languages" ? gold : th.text,
+          }}
+        >
+          {t.languages}
+        </button>
       </div>
       <div style={{ borderTop: `2px solid ${gold}`, paddingTop: 20 }}>
 
@@ -1129,6 +788,141 @@ export default function SettingsPage() {
               </tbody>
             </table>
           </>
+        )}
+        {/* LANGUAGES TAB */}
+        {mainTab === "languages" && (
+          <div style={{ background: th.bgCard, borderRadius: 12, padding: 24, border: `1px solid ${th.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div>
+                <h3 style={{ margin: 0, color: th.text, fontSize: 18 }}>{t.languageManagement}</h3>
+                <p style={{ margin: "4px 0 0", color: dimText, fontSize: 13 }}>{t.languageManagementDesc}</p>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {langEditing ? (
+                  <>
+                    <button
+                      style={{ ...sBtn("#6b7280"), padding: "8px 16px" }}
+                      onClick={() => {
+                        setLangDraft([...enabledLangs]);
+                        setLangDefault(defaultLang);
+                        setLangEditing(false);
+                      }}
+                    >
+                      {t.cancel}
+                    </button>
+                    <button
+                      style={{ ...sBtn(gold), padding: "8px 16px" }}
+                      onClick={saveLanguageSettings}
+                      disabled={saving}
+                    >
+                      {saving ? t.loading : t.save}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    style={{ ...sBtn(gold), padding: "8px 16px" }}
+                    onClick={() => setLangEditing(true)}
+                  >
+                    {t.edit}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={sTh}>{t.language}</th>
+                  <th style={sTh}>{t.roleName}</th>
+                  <th style={{ ...sTh, textAlign: "center" }}>{t.status}</th>
+                  <th style={{ ...sTh, textAlign: "center" }}>{t.defaultLanguage}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ALL_LANG_CODES.map((code) => {
+                  const isEnabled = langDraft.includes(code);
+                  const isDefault = langDefault === code;
+                  const meta = LANG_META.find(m => m.code === code);
+                  return (
+                    <tr key={code} style={{ borderBottom: `1px solid ${th.border}` }}>
+                      <td style={sTd}>
+                        <span style={{ fontSize: 20, marginRight: 8 }}>{meta?.flag ?? ''}</span>
+                        <span style={{ fontWeight: 600 }}>{code.toUpperCase()}</span>
+                      </td>
+                      <td style={sTd}>
+                        <span style={{ color: th.text }}>{meta?.name ?? code}</span>
+                      </td>
+                      <td style={{ ...sTd, textAlign: "center" }}>
+                        {langEditing ? (
+                          <button
+                            onClick={() => toggleLangEnabled(code)}
+                            disabled={isDefault && isEnabled}
+                            style={{
+                              padding: "4px 12px",
+                              borderRadius: 6,
+                              border: "none",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: (isDefault && isEnabled) ? "not-allowed" : "pointer",
+                              background: isEnabled ? "#22c55e22" : "#ef444422",
+                              color: isEnabled ? "#22c55e" : "#ef4444",
+                            }}
+                          >
+                            {isEnabled ? t.enabled : t.disabled}
+                          </button>
+                        ) : (
+                          <span style={{ color: isEnabled ? "#22c55e" : "#6b7280" }}>
+                            {isEnabled ? "●" : "○"} {isEnabled ? t.enabled : t.disabled}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ ...sTd, textAlign: "center" }}>
+                        {langEditing ? (
+                          <button
+                            onClick={() => {
+                              if (isEnabled) setLangDefault(code);
+                            }}
+                            disabled={!isEnabled}
+                            style={{
+                              padding: "4px 12px",
+                              borderRadius: 6,
+                              border: isDefault ? `2px solid ${gold}` : `1px solid ${th.border}`,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: isEnabled ? "pointer" : "not-allowed",
+                              background: isDefault ? gold + "22" : "transparent",
+                              color: isDefault ? gold : dimText,
+                            }}
+                          >
+                            {isDefault ? "★ " + t.defaultLanguage : t.setAsDefault}
+                          </button>
+                        ) : (
+                          isDefault && (
+                            <span style={{ color: gold, fontWeight: 600, fontSize: 13 }}>
+                              ★ {t.defaultLanguage}
+                            </span>
+                          )
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Preview: currently active language */}
+            <div style={{
+              marginTop: 24,
+              padding: 16,
+              borderRadius: 8,
+              background: th.bgCard,
+              border: `1px solid ${th.border}`,
+            }}>
+              <p style={{ margin: 0, fontSize: 13, color: dimText }}>
+                {t.language}: <strong style={{ color: gold }}>{getLangName(lang)} {getLangFlag(lang)}</strong>
+              </p>
+            </div>
+          </div>
         )}
         {/* ═══════════════════════════════════════════════════════════ */}
         {/*  COMPANY TAB                                               */}

@@ -5,6 +5,7 @@ import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
 import { useRolesStore } from "../store/rolesStore";
+import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -41,78 +42,6 @@ interface Customer {
   total_hours?: number;
   created_at?: string;
 }
-
-/* ────────────────── translations ────────────────── */
-const T: Record<string, Record<string, string>> = {
-  de: {
-    title: 'Kunden', search: 'Suchen…', allTypes: 'Alle Typen', allStatuses: 'Alle Status',
-    add: '+ Neuer Kunde', name: 'Name', type: 'Typ', company: 'Firma', street: 'Strasse',
-    postalCode: 'PLZ', city: 'Ort', canton: 'Kanton', phone: 'Telefon', email: 'E-Mail',
-    website: 'Website', status: 'Status', language: 'Sprache', paymentTerms: 'Zahlungsfrist (Tage)',
-    notes: 'Notizen', save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten', delete: 'Löschen',
-    confirmDelete: 'Wirklich löschen?', yes: 'Ja', no: 'Nein', general: 'Allgemein',
-    contacts: 'Kontakte', billing: 'Abrechnung', notesTab: 'Notizen', tasks: 'Aufträge',
-    activeTasks: 'Aktive Aufträge', totalHours: 'Total Stunden', memberSince: 'Kunde seit',
-    noCustomers: 'Keine Kunden gefunden.', saved: 'Gespeichert', deleted: 'Gelöscht',
-    error: 'Fehler', imported: 'importiert', addContact: '+ Kontakt', firstName: 'Vorname',
-    lastName: 'Nachname', role: 'Funktion', primary: 'Hauptkontakt', prev: '← Zurück',
-    next: 'Weiter →', page: 'Seite', of: 'von', total: 'Total', active: 'Aktiv',
-    inactive: 'Inaktiv', PRIVATE: 'Privat', COMPANY: 'Firma', ACTIVE: 'Aktiv',
-    INACTIVE: 'Inaktiv', BLOCKED: 'Gesperrt', close: 'Schliessen',
-    loading: 'Laden…', back: '← Zurück zur Liste',
-  },
-  en: {
-    title: 'Customers', search: 'Search…', allTypes: 'All Types', allStatuses: 'All Statuses',
-    add: '+ New Customer', name: 'Name', type: 'Type', company: 'Company', street: 'Street',
-    postalCode: 'Postal Code', city: 'City', canton: 'Canton', phone: 'Phone', email: 'Email',
-    website: 'Website', status: 'Status', language: 'Language', paymentTerms: 'Payment Terms (days)',
-    notes: 'Notes', save: 'Save', cancel: 'Cancel', edit: 'Edit', delete: 'Delete',
-    confirmDelete: 'Really delete?', yes: 'Yes', no: 'No', general: 'General',
-    contacts: 'Contacts', billing: 'Billing', notesTab: 'Notes', tasks: 'Tasks',
-    activeTasks: 'Active Tasks', totalHours: 'Total Hours', memberSince: 'Customer since',
-    noCustomers: 'No customers found.', saved: 'Saved', deleted: 'Deleted',
-    error: 'Error', imported: 'imported', addContact: '+ Contact', firstName: 'First Name',
-    lastName: 'Last Name', role: 'Role', primary: 'Primary Contact', prev: '← Previous',
-    next: 'Next →', page: 'Page', of: 'of', total: 'Total', active: 'Active',
-    inactive: 'Inactive', PRIVATE: 'Private', COMPANY: 'Company', ACTIVE: 'Active',
-    INACTIVE: 'Inactive', BLOCKED: 'Blocked', close: 'Close',
-    loading: 'Loading…', back: '← Back to list',
-  },
-  fr: {
-    title: 'Clients', search: 'Rechercher…', allTypes: 'Tous les types', allStatuses: 'Tous les statuts',
-    add: '+ Nouveau client', name: 'Nom', type: 'Type', company: 'Entreprise', street: 'Rue',
-    postalCode: 'Code postal', city: 'Ville', canton: 'Canton', phone: 'Téléphone', email: 'E-mail',
-    website: 'Site web', status: 'Statut', language: 'Langue', paymentTerms: 'Délai de paiement (jours)',
-    notes: 'Notes', save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier', delete: 'Supprimer',
-    confirmDelete: 'Vraiment supprimer ?', yes: 'Oui', no: 'Non', general: 'Général',
-    contacts: 'Contacts', billing: 'Facturation', notesTab: 'Notes', tasks: 'Tâches',
-    activeTasks: 'Tâches actives', totalHours: 'Heures totales', memberSince: 'Client depuis',
-    noCustomers: 'Aucun client trouvé.', saved: 'Enregistré', deleted: 'Supprimé',
-    error: 'Erreur', imported: 'importé(s)', addContact: '+ Contact', firstName: 'Prénom',
-    lastName: 'Nom', role: 'Fonction', primary: 'Contact principal', prev: '← Précédent',
-    next: 'Suivant →', page: 'Page', of: 'de', total: 'Total', active: 'Actif',
-    inactive: 'Inactif', PRIVATE: 'Privé', COMPANY: 'Entreprise', ACTIVE: 'Actif',
-    INACTIVE: 'Inactif', BLOCKED: 'Bloqué', close: 'Fermer',
-    loading: 'Chargement…', back: '← Retour à la liste',
-  },
-  pt: {
-    title: 'Clientes', search: 'Pesquisar…', allTypes: 'Todos os tipos', allStatuses: 'Todos os estados',
-    add: '+ Novo cliente', name: 'Nome', type: 'Tipo', company: 'Empresa', street: 'Rua',
-    postalCode: 'Código postal', city: 'Cidade', canton: 'Cantão', phone: 'Telefone', email: 'E-mail',
-    website: 'Website', status: 'Estado', language: 'Idioma', paymentTerms: 'Prazo de pagamento (dias)',
-    notes: 'Notas', save: 'Guardar', cancel: 'Cancelar', edit: 'Editar', delete: 'Eliminar',
-    confirmDelete: 'Eliminar mesmo?', yes: 'Sim', no: 'Não', general: 'Geral',
-    contacts: 'Contactos', billing: 'Faturação', notesTab: 'Notas', tasks: 'Tarefas',
-    activeTasks: 'Tarefas ativas', totalHours: 'Total de horas', memberSince: 'Cliente desde',
-    noCustomers: 'Nenhum cliente encontrado.', saved: 'Guardado', deleted: 'Eliminado',
-    error: 'Erro', imported: 'importado(s)', addContact: '+ Contacto', firstName: 'Nome próprio',
-    lastName: 'Apelido', role: 'Função', primary: 'Contacto principal', prev: '← Anterior',
-    next: 'Seguinte →', page: 'Página', of: 'de', total: 'Total', active: 'Ativo',
-    inactive: 'Inativo', PRIVATE: 'Privado', COMPANY: 'Empresa', ACTIVE: 'Ativo',
-    INACTIVE: 'Inativo', BLOCKED: 'Bloqueado', close: 'Fechar',
-    loading: 'A carregar…', back: '← Voltar à lista',
-  },
-};
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: '#4ecdc4', INACTIVE: '#95a5a6', BLOCKED: '#e74c3c',
@@ -211,7 +140,7 @@ function customerToForm(c: Customer): Partial<Customer> {
 export function CustomersPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
-  const t = T[lang] || T.de;
+  const t = getTranslations(lang as LangCode);
   const locale = DATE_LOCALES[lang] || 'de-CH';
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 

@@ -11,6 +11,7 @@ import {
   type Role,
   type Permission,
 } from "../../../shared/constants/roles";
+import { getTranslations, type LangCode } from '../i18n';
 import { RolePermissionMatrix } from "../components/RolePermissionMatrix";
 import { useRolesStore } from "../store/rolesStore";
 
@@ -192,119 +193,6 @@ const SWISS_CANTONS = [
   "NE","NW","OW","SG","SH","SO","SZ","TG","TI","UR","VD","VS","ZG","ZH",
 ];
 
-/* ───────────────────── Translations ───────────────────── */
-const L_ALL: Record<string, Record<string, string>> = {
-  de: {
-    admin: "Administration", users: "Benutzer", customers: "Kunden",
-    machines: "Maschinen", tasks: "Aufgaben", search: "Suchen…",
-    newUser: "Neuer Benutzer", newCustomer: "Neuer Kunde",
-    newMachine: "Neue Maschine", newTask: "Neue Aufgabe",
-    save: "Speichern", cancel: "Abbrechen", delete: "Löschen",
-    confirmDelete: "Wirklich löschen?", yes: "Ja", no: "Nein",
-    email: "E-Mail", firstName: "Vorname", lastName: "Nachname",
-    role: "Rolle", departments: "Abteilungen", password: "Passwort",
-    active: "Aktiv", name: "Name", company: "Firma", phone: "Telefon",
-    street: "Strasse", city: "Ort", postalCode: "PLZ", country: "Land",
-    type: "Typ", status: "Status", notes: "Notizen", title: "Titel",
-    description: "Beschreibung", priority: "Priorität", assignedTo: "Zugewiesen an",
-    customer: "Kunde", startDate: "Startdatum", endDate: "Enddatum",
-    category: "Kategorie", licensePlate: "Kennzeichen", department: "Abteilung",
-    saved: "Gespeichert", deleted: "Gelöscht", error: "Fehler",
-    noResults: "Keine Ergebnisse", filter: "Filter",
-    // HR
-    hrInfo: "HR-Informationen", entryDate: "Eintrittsdatum", exitDate: "Austrittsdatum",
-    contractType: "Vertragsart", salaryType: "Lohnart", salaryAmount: "Lohn (CHF)",
-    workPensum: "Pensum (%)", hoursPerWeek: "Std/Woche", ahvNumber: "AHV-Nummer",
-    iban: "IBAN", nationality: "Nationalität", permitType: "Ausweis",
-    maritalStatus: "Zivilstand", childrenCount: "Kinder", canton: "Kanton",
-    bvgCode: "BVG-Code", permissions: "Berechtigungen",
-    permanent: "Festanstellung", temporary: "Temporär", apprentice: "Lernende/r",
-    intern: "Praktikant/in", freelance: "Freelance",
-    monthly: "Monatlich", hourly: "Stundenlohn",
-  },
-  en: {
-    admin: "Administration", users: "Users", customers: "Customers",
-    machines: "Machines", tasks: "Tasks", search: "Search…",
-    newUser: "New User", newCustomer: "New Customer",
-    newMachine: "New Machine", newTask: "New Task",
-    save: "Save", cancel: "Cancel", delete: "Delete",
-    confirmDelete: "Really delete?", yes: "Yes", no: "No",
-    email: "Email", firstName: "First Name", lastName: "Last Name",
-    role: "Role", departments: "Departments", password: "Password",
-    active: "Active", name: "Name", company: "Company", phone: "Phone",
-    street: "Street", city: "City", postalCode: "Postal Code", country: "Country",
-    type: "Type", status: "Status", notes: "Notes", title: "Title",
-    description: "Description", priority: "Priority", assignedTo: "Assigned To",
-    customer: "Customer", startDate: "Start Date", endDate: "End Date",
-    category: "Category", licensePlate: "License Plate", department: "Department",
-    saved: "Saved", deleted: "Deleted", error: "Error",
-    noResults: "No results", filter: "Filter",
-    hrInfo: "HR Information", entryDate: "Entry Date", exitDate: "Exit Date",
-    contractType: "Contract Type", salaryType: "Salary Type", salaryAmount: "Salary (CHF)",
-    workPensum: "Pensum (%)", hoursPerWeek: "Hours/Week", ahvNumber: "AHV Number",
-    iban: "IBAN", nationality: "Nationality", permitType: "Permit",
-    maritalStatus: "Marital Status", childrenCount: "Children", canton: "Canton",
-    bvgCode: "BVG Code", permissions: "Permissions",
-    permanent: "Permanent", temporary: "Temporary", apprentice: "Apprentice",
-    intern: "Intern", freelance: "Freelance",
-    monthly: "Monthly", hourly: "Hourly",
-  },
-  fr: {
-    admin: "Administration", users: "Utilisateurs", customers: "Clients",
-    machines: "Machines", tasks: "Tâches", search: "Rechercher…",
-    newUser: "Nouvel utilisateur", newCustomer: "Nouveau client",
-    newMachine: "Nouvelle machine", newTask: "Nouvelle tâche",
-    save: "Enregistrer", cancel: "Annuler", delete: "Supprimer",
-    confirmDelete: "Vraiment supprimer ?", yes: "Oui", no: "Non",
-    email: "E-mail", firstName: "Prénom", lastName: "Nom",
-    role: "Rôle", departments: "Départements", password: "Mot de passe",
-    active: "Actif", name: "Nom", company: "Entreprise", phone: "Téléphone",
-    street: "Rue", city: "Ville", postalCode: "Code postal", country: "Pays",
-    type: "Type", status: "Statut", notes: "Notes", title: "Titre",
-    description: "Description", priority: "Priorité", assignedTo: "Assigné à",
-    customer: "Client", startDate: "Date de début", endDate: "Date de fin",
-    category: "Catégorie", licensePlate: "Plaque", department: "Département",
-    saved: "Enregistré", deleted: "Supprimé", error: "Erreur",
-    noResults: "Aucun résultat", filter: "Filtre",
-    hrInfo: "Informations RH", entryDate: "Date d'entrée", exitDate: "Date de sortie",
-    contractType: "Type de contrat", salaryType: "Type de salaire", salaryAmount: "Salaire (CHF)",
-    workPensum: "Taux (%)", hoursPerWeek: "H/Semaine", ahvNumber: "Numéro AVS",
-    iban: "IBAN", nationality: "Nationalité", permitType: "Permis",
-    maritalStatus: "État civil", childrenCount: "Enfants", canton: "Canton",
-    bvgCode: "Code LPP", permissions: "Permissions",
-    permanent: "CDI", temporary: "CDD", apprentice: "Apprenti(e)",
-    intern: "Stagiaire", freelance: "Freelance",
-    monthly: "Mensuel", hourly: "Horaire",
-  },
-  pt: {
-    admin: "Administração", users: "Utilizadores", customers: "Clientes",
-    machines: "Máquinas", tasks: "Tarefas", search: "Pesquisar…",
-    newUser: "Novo Utilizador", newCustomer: "Novo Cliente",
-    newMachine: "Nova Máquina", newTask: "Nova Tarefa",
-    save: "Guardar", cancel: "Cancelar", delete: "Eliminar",
-    confirmDelete: "Eliminar mesmo?", yes: "Sim", no: "Não",
-    email: "E-mail", firstName: "Nome", lastName: "Apelido",
-    role: "Função", departments: "Departamentos", password: "Palavra-passe",
-    active: "Ativo", name: "Nome", company: "Empresa", phone: "Telefone",
-    street: "Rua", city: "Cidade", postalCode: "Código Postal", country: "País",
-    type: "Tipo", status: "Estado", notes: "Notas", title: "Título",
-    description: "Descrição", priority: "Prioridade", assignedTo: "Atribuído a",
-    customer: "Cliente", startDate: "Data de Início", endDate: "Data de Fim",
-    category: "Categoria", licensePlate: "Matrícula", department: "Departamento",
-    saved: "Guardado", deleted: "Eliminado", error: "Erro",
-    noResults: "Sem resultados", filter: "Filtro",
-    hrInfo: "Informações RH", entryDate: "Data de Entrada", exitDate: "Data de Saída",
-    contractType: "Tipo de Contrato", salaryType: "Tipo de Salário", salaryAmount: "Salário (CHF)",
-    workPensum: "Taxa (%)", hoursPerWeek: "H/Semana", ahvNumber: "Número AHV",
-    iban: "IBAN", nationality: "Nacionalidade", permitType: "Autorização",
-    maritalStatus: "Estado Civil", childrenCount: "Filhos", canton: "Cantão",
-    bvgCode: "Código BVG", permissions: "Permissões",
-    permanent: "Permanente", temporary: "Temporário", apprentice: "Aprendiz",
-    intern: "Estagiário", freelance: "Freelance",
-    monthly: "Mensal", hourly: "Por hora",
-  },
-};
-
 /* ───────────────────── CSV Definitions ───────────────────── */
 const csvColumnsUsers = (t: Record<string, string>) => [
   { key: "email", label: t.email },
@@ -363,7 +251,7 @@ const statusColor = (s: string): string => {
 export default function AdminPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
-  const t = L_ALL[lang] ?? L_ALL.de;
+  const t = getTranslations(lang as LangCode);
   const { getRoleNames, getRoleLabel, permissionMap } = useRolesStore();
   const roleNames = getRoleNames();
 

@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { useRolesStore } from '../store/rolesStore';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -25,114 +26,6 @@ interface Task { id:string; name:string; short_code?:string; status:string; colo
 interface Machine { id:string; name:string; category:string; status:string; notes?:string; }
 interface MachineAllocation { id:string; machine_id:string; user_id?:string; task_id?:string; date:string; start_time?:string; end_time?:string; }
 type Period = 'week' | 'month' | 'quarter' | 'year';
-
-/* ────────────────────── i18n ────────────────────── */
-const LABELS: Record<string,Record<string,string>> = {
-  de:{
-    title:'Statistiken',period:'Zeitraum',
-    week:'Woche',month:'Monat',quarter:'Quartal',year:'Jahr',
-    teamOccupation:'Team-Auslastung',successRate:'Erfolgsrate',absenceRate:'Absenzenquote',machineOccupation:'Maschinen-Auslastung',
-    occupied:'Belegt',free:'Frei',absent:'Abwesend',
-    completed:'Abgeschlossen',pending:'Offen',cancelled:'Abgebrochen',active:'Aktiv',
-    available:'Verfügbar',inUse:'In Betrieb',maintenance:'Wartung',
-    totalSlots:'Gesamte Slots',filledSlots:'Belegte Slots',
-    totalTasks:'Aufträge gesamt',completedTasks:'Abgeschlossen',
-    totalDays:'Arbeitstage gesamt',absentDays:'Abwesende Tage',
-    totalMachines:'Maschinen gesamt',usedMachines:'Eingesetzte Maschinen',
-    byEmployee:'Nach Mitarbeiter',byDepartment:'Nach Abteilung',
-    byDay:'Nach Wochentag',byMachine:'Nach Maschine',byType:'Nach Typ',byStatus:'Nach Status',byCategory:'Nach Kategorie',
-    noData:'Keine Daten verfügbar',
-    employees:'Mitarbeiter',department:'Abteilung',
-    mon:'Mo',tue:'Di',wed:'Mi',thu:'Do',fri:'Fr',sat:'Sa',
-    garten:'Garten',unterhalt:'Unterhalt',
-    loading:'Laden…',rate:'Quote',export:'Exportieren',
-    trend:'Trend',weekNum:'KW',tasks:'Aufträge',
-    overview:'Übersicht',details:'Details',heatmap:'Heatmap',
-    accessDenied:'Kein Zugriff',
-    taskDistribution:'Auftragsverteilung',absenceBreakdown:'Absenz-Übersicht',
-    weeklyTrend:'Wöchentlicher Verlauf',machineStatus:'Maschinenstatus',
-    occupationHeatmap:'Auslastungs-Heatmap',hours:'Stunden',slots:'Slots',
-    GARTEN_TIEFBAU:'Garten & Tiefbau', UNTERHALT:'Unterhalt',
-  },
-  en:{
-    title:'Statistics',period:'Period',
-    week:'Week',month:'Month',quarter:'Quarter',year:'Year',
-    teamOccupation:'Team Occupation',successRate:'Success Rate',absenceRate:'Absence Rate',machineOccupation:'Machine Occupation',
-    occupied:'Occupied',free:'Free',absent:'Absent',
-    completed:'Completed',pending:'Pending',cancelled:'Cancelled',active:'Active',
-    available:'Available',inUse:'In Use',maintenance:'Maintenance',
-    totalSlots:'Total Slots',filledSlots:'Filled Slots',
-    totalTasks:'Total Tasks',completedTasks:'Completed',
-    totalDays:'Total Workdays',absentDays:'Absent Days',
-    totalMachines:'Total Machines',usedMachines:'Used Machines',
-    byEmployee:'By Employee',byDepartment:'By Department',
-    byDay:'By Weekday',byMachine:'By Machine',byType:'By Type',byStatus:'By Status',byCategory:'By Category',
-    noData:'No data available',
-    employees:'Employees',department:'Department',
-    mon:'Mon',tue:'Tue',wed:'Wed',thu:'Thu',fri:'Fri',sat:'Sat',
-    garten:'Garden',unterhalt:'Maintenance',
-    loading:'Loading…',rate:'Rate',export:'Export',
-    trend:'Trend',weekNum:'CW',tasks:'Tasks',
-    overview:'Overview',details:'Details',heatmap:'Heatmap',
-    accessDenied:'Access Denied',
-    taskDistribution:'Task Distribution',absenceBreakdown:'Absence Breakdown',
-    weeklyTrend:'Weekly Trend',machineStatus:'Machine Status',
-    occupationHeatmap:'Occupation Heatmap',hours:'Hours',slots:'Slots',
-    GARTEN_TIEFBAU:'Garden & Civil Eng.', UNTERHALT:'Maintenance',
-  },
-  fr:{
-    title:'Statistiques',period:'Période',
-    week:'Semaine',month:'Mois',quarter:'Trimestre',year:'Année',
-    teamOccupation:"Taux d'occupation",successRate:'Taux de réussite',absenceRate:"Taux d'absence",machineOccupation:'Occupation machines',
-    occupied:'Occupé',free:'Libre',absent:'Absent',
-    completed:'Terminé',pending:'En cours',cancelled:'Annulé',active:'Actif',
-    available:'Disponible',inUse:'En service',maintenance:'Maintenance',
-    totalSlots:'Créneaux totaux',filledSlots:'Créneaux remplis',
-    totalTasks:'Tâches totales',completedTasks:'Terminées',
-    totalDays:'Jours ouvrables',absentDays:'Jours absents',
-    totalMachines:'Machines totales',usedMachines:'Machines utilisées',
-    byEmployee:'Par employé',byDepartment:'Par département',
-    byDay:'Par jour',byMachine:'Par machine',byType:'Par type',byStatus:'Par statut',byCategory:'Par catégorie',
-    noData:'Aucune donnée',
-    employees:'Employés',department:'Département',
-    mon:'Lun',tue:'Mar',wed:'Mer',thu:'Jeu',fri:'Ven',sat:'Sam',
-    garten:'Jardin',unterhalt:'Entretien',
-    loading:'Chargement…',rate:'Taux',export:'Exporter',
-    trend:'Tendance',weekNum:'S',tasks:'Tâches',
-    overview:'Aperçu',details:'Détails',heatmap:'Carte de chaleur',
-    accessDenied:'Accès refusé',
-    taskDistribution:'Répartition des tâches',absenceBreakdown:'Répartition des absences',
-    weeklyTrend:'Tendance hebdomadaire',machineStatus:'État des machines',
-    occupationHeatmap:"Carte d'occupation",hours:'Heures',slots:'Créneaux',
-    GARTEN_TIEFBAU:'Jardin & Génie civil', UNTERHALT:'Entretien',
-  },
-  pt:{
-    title:'Estatísticas',period:'Período',
-    week:'Semana',month:'Mês',quarter:'Trimestre',year:'Ano',
-    teamOccupation:'Ocupação da Equipa',successRate:'Taxa de Sucesso',absenceRate:'Taxa de Ausência',machineOccupation:'Ocupação de Máquinas',
-    occupied:'Ocupado',free:'Livre',absent:'Ausente',
-    completed:'Concluído',pending:'Pendente',cancelled:'Cancelado',active:'Ativo',
-    available:'Disponível',inUse:'Em uso',maintenance:'Manutenção',
-    totalSlots:'Slots totais',filledSlots:'Slots preenchidos',
-    totalTasks:'Tarefas totais',completedTasks:'Concluídas',
-    totalDays:'Dias úteis totais',absentDays:'Dias ausentes',
-    totalMachines:'Máquinas totais',usedMachines:'Máquinas usadas',
-    byEmployee:'Por funcionário',byDepartment:'Por departamento',
-    byDay:'Por dia',byMachine:'Por máquina',byType:'Por tipo',byStatus:'Por estado',byCategory:'Por categoria',
-    noData:'Sem dados',
-    employees:'Funcionários',department:'Departamento',
-    mon:'Seg',tue:'Ter',wed:'Qua',thu:'Qui',fri:'Sex',sat:'Sáb',
-    garten:'Jardim',unterhalt:'Manutenção',
-    loading:'Carregando…',rate:'Taxa',export:'Exportar',
-    trend:'Tendência',weekNum:'S',tasks:'Tarefas',
-    overview:'Visão geral',details:'Detalhes',heatmap:'Mapa de calor',
-    accessDenied:'Acesso negado',
-    taskDistribution:'Distribuição de tarefas',absenceBreakdown:'Visão de ausências',
-    weeklyTrend:'Tendência semanal',machineStatus:'Estado das máquinas',
-    occupationHeatmap:'Mapa de ocupação',hours:'Horas',slots:'Slots',
-    GARTEN_TIEFBAU:'Jardim & Eng. Civil', UNTERHALT:'Manutenção',
-  },
-};
 
 const ABS_LABELS: Record<string,Record<string,string>> = {
   de:{'1':'Krankheit','2':'Urlaub','3':'Fortbildung','4':'Dienstreise','5':'Homeoffice','6':'Sonstiges'},
@@ -457,7 +350,7 @@ export function StatsPage(){
   const {isDark,th,lang}=useTheme();
   const {token,user}=useAuthStore();
   const {permissionMap}=useRolesStore();
-  const L=LABELS[lang||'de']||LABELS.de;
+  const L=getTranslations(lang as LangCode);
 
   /* ── permissions ── */
   const perms=useMemo(()=>{

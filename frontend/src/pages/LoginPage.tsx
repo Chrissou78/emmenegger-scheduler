@@ -4,73 +4,14 @@ import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { themes } from '../i18n/translations';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
-
-/* ─── Login-specific translations ─── */
-const LT: Record<string, Record<string, string>> = {
-  de: {
-    signIn: 'Anmelden',
-    signingIn: 'Anmeldung…',
-    email: 'E-Mail',
-    password: 'Passwort',
-    forgotPassword: 'Passwort vergessen?',
-    admin: 'Admin',
-    manager: 'Manager',
-    worker: 'Arbeiter',
-    hr: 'Personal',
-    finance: 'Finanzen',
-    sales: 'Verkauf',
-    devHint: 'Entwickler-Zugänge',
-  },
-  en: {
-    signIn: 'Sign In',
-    signingIn: 'Signing in…',
-    email: 'Email',
-    password: 'Password',
-    forgotPassword: 'Forgot password?',
-    admin: 'Admin',
-    manager: 'Manager',
-    worker: 'Worker',
-    hr: 'HR',
-    finance: 'Finance',
-    sales: 'Sales',
-    devHint: 'Dev accounts',
-  },
-  fr: {
-    signIn: 'Connexion',
-    signingIn: 'Connexion…',
-    email: 'E-mail',
-    password: 'Mot de passe',
-    forgotPassword: 'Mot de passe oublié ?',
-    admin: 'Admin',
-    manager: 'Manager',
-    worker: 'Ouvrier',
-    hr: 'RH',
-    finance: 'Finance',
-    sales: 'Ventes',
-    devHint: 'Comptes de développement',
-  },
-  pt: {
-    signIn: 'Entrar',
-    signingIn: 'Entrando…',
-    email: 'E-mail',
-    password: 'Senha',
-    forgotPassword: 'Esqueceu a senha?',
-    admin: 'Admin',
-    manager: 'Gerente',
-    worker: 'Trabalhador',
-    hr: 'RH',
-    finance: 'Finanças',
-    sales: 'Vendas',
-    devHint: 'Contas de desenvolvimento',
-  },
-};
+import { getTranslations, type LangCode } from '../i18n';
 
 export function LoginPage() {
   const { t, isDark, lang, setLanguage, toggleTheme } = useTheme();
   const th = isDark ? themes.dark : themes.light;
   const navigate = useNavigate();
   const { login, loading, error: authError } = useAuthStore();
-  const lt = LT[lang || 'de'] || LT.de;
+  const lt = getTranslations(lang as LangCode);
 
   const [email, setEmail] = useState('admin@emmenegger.ch');
   const [password, setPassword] = useState('admin');

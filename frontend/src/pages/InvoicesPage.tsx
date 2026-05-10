@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { useRolesStore } from '../store/rolesStore';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -25,61 +26,6 @@ interface Invoice {
   payments?: any[];
 }
 
-const T: Record<string, Record<string, string>> = {
-  de: {
-    title: 'Rechnungen', search: 'Suchen...', number: 'Nr.', customer: 'Kunde',
-    invoiceTitle: 'Titel', date: 'Datum', status: 'Status', total: 'Total',
-    paid: 'Bezahlt', due: 'Offen', all: 'Alle',
-    draft: 'Entwurf', sent: 'Gesendet', partiallyPaid: 'Teilweise bezahlt',
-    paidStatus: 'Bezahlt', overdue: 'Überfällig', cancelled: 'Storniert',
-    addPayment: 'Zahlung erfassen', amount: 'Betrag', paymentDate: 'Datum',
-    method: 'Zahlungsart', reference: 'Referenz', saved: 'Gespeichert',
-    deleted: 'Gelöscht', error: 'Fehler', paymentRecorded: 'Zahlung erfasst',
-    bankTransfer: 'Überweisung', cash: 'Bar', creditCard: 'Kreditkarte',
-    other: 'Andere', save: 'Speichern', cancel: 'Abbrechen',
-    accessDenied: 'Kein Zugriff',
-  },
-  en: {
-    title: 'Invoices', search: 'Search...', number: 'No.', customer: 'Customer',
-    invoiceTitle: 'Title', date: 'Date', status: 'Status', total: 'Total',
-    paid: 'Paid', due: 'Due', all: 'All',
-    draft: 'Draft', sent: 'Sent', partiallyPaid: 'Partially Paid',
-    paidStatus: 'Paid', overdue: 'Overdue', cancelled: 'Cancelled',
-    addPayment: 'Record Payment', amount: 'Amount', paymentDate: 'Date',
-    method: 'Method', reference: 'Reference', saved: 'Saved',
-    deleted: 'Deleted', error: 'Error', paymentRecorded: 'Payment recorded',
-    bankTransfer: 'Bank Transfer', cash: 'Cash', creditCard: 'Credit Card',
-    other: 'Other', save: 'Save', cancel: 'Cancel',
-    accessDenied: 'Access Denied',
-  },
-  fr: {
-    title: 'Factures', search: 'Rechercher...', number: 'N°', customer: 'Client',
-    invoiceTitle: 'Titre', date: 'Date', status: 'Statut', total: 'Total',
-    paid: 'Payé', due: 'Dû', all: 'Tous',
-    draft: 'Brouillon', sent: 'Envoyé', partiallyPaid: 'Partiellement payé',
-    paidStatus: 'Payé', overdue: 'En retard', cancelled: 'Annulé',
-    addPayment: 'Enregistrer un paiement', amount: 'Montant', paymentDate: 'Date',
-    method: 'Méthode', reference: 'Référence', saved: 'Enregistré',
-    deleted: 'Supprimé', error: 'Erreur', paymentRecorded: 'Paiement enregistré',
-    bankTransfer: 'Virement', cash: 'Espèces', creditCard: 'Carte de crédit',
-    other: 'Autre', save: 'Enregistrer', cancel: 'Annuler',
-    accessDenied: 'Accès refusé',
-  },
-  pt: {
-    title: 'Faturas', search: 'Pesquisar...', number: 'Nº', customer: 'Cliente',
-    invoiceTitle: 'Título', date: 'Data', status: 'Estado', total: 'Total',
-    paid: 'Pago', due: 'Em aberto', all: 'Todos',
-    draft: 'Rascunho', sent: 'Enviado', partiallyPaid: 'Parcialmente pago',
-    paidStatus: 'Pago', overdue: 'Vencido', cancelled: 'Cancelado',
-    addPayment: 'Registar pagamento', amount: 'Montante', paymentDate: 'Data',
-    method: 'Método', reference: 'Referência', saved: 'Salvo',
-    deleted: 'Excluído', error: 'Erro', paymentRecorded: 'Pagamento registado',
-    bankTransfer: 'Transferência', cash: 'Dinheiro', creditCard: 'Cartão',
-    other: 'Outro', save: 'Salvar', cancel: 'Cancelar',
-    accessDenied: 'Acesso negado',
-  },
-};
-
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: '#6b7280', SENT: '#3b82f6', PARTIALLY_PAID: '#f59e0b',
   PAID: '#22c55e', OVERDUE: '#ef4444', CANCELLED: '#6b7280',
@@ -89,7 +35,7 @@ export function InvoicesPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
   const { permissionMap } = useRolesStore();
-  const t = T[lang] || T.de;
+  const t = getTranslations(lang as LangCode);
 
   /* ── Permission handling ── */
   const perms = useMemo(() => {

@@ -4,6 +4,7 @@ import { useAuthStore } from '../contexts/authStore';
 import { useRolesStore } from '../store/rolesStore';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
 import { CsvToolbar } from '../components/CsvToolbar';
+import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -58,53 +59,6 @@ const TYPE_LABELS: Record<string, Record<string, string>> = {
   pt: { GARTEN_TIEFBAU: 'Jardim & Obras', UNTERHALT: 'Manutenção' },
 };
 
-const PAGE_LABELS: Record<string, Record<string, string>> = {
-  de: {
-    title: 'Aufträge', search: 'Suchen...', all: 'Alle', addTask: 'Neuer Auftrag',
-    code: 'Code', name: 'Name', customer: 'Kunde', type: 'Typ', hours: 'Stunden',
-    status: 'Status', actions: 'Aktionen', edit: 'Bearbeiten', delete: 'Löschen',
-    save: 'Speichern', cancel: 'Abbrechen', description: 'Beschreibung',
-    estimatedHours: 'Geschätzte Stunden', color: 'Farbe', noTasks: 'Keine Aufträge gefunden',
-    totalHours: 'Total Stunden', taskCount: 'Aufträge', editTask: 'Auftrag bearbeiten',
-    confirmDelete: 'Auftrag wirklich stornieren?', noCustomer: 'Kein Kunde',
-    h: 'h', d: 'Tage', imported: 'Aufträge importiert',
-    accessDenied: 'Kein Zugriff',
-  },
-  en: {
-    title: 'Tasks', search: 'Search...', all: 'All', addTask: 'New Task',
-    code: 'Code', name: 'Name', customer: 'Customer', type: 'Type', hours: 'Hours',
-    status: 'Status', actions: 'Actions', edit: 'Edit', delete: 'Delete',
-    save: 'Save', cancel: 'Cancel', description: 'Description',
-    estimatedHours: 'Estimated Hours', color: 'Color', noTasks: 'No tasks found',
-    totalHours: 'Total Hours', taskCount: 'Tasks', editTask: 'Edit Task',
-    confirmDelete: 'Really cancel this task?', noCustomer: 'No customer',
-    h: 'h', d: 'days', imported: 'tasks imported',
-    accessDenied: 'Access Denied',
-  },
-  fr: {
-    title: 'Tâches', search: 'Rechercher...', all: 'Toutes', addTask: 'Nouvelle tâche',
-    code: 'Code', name: 'Nom', customer: 'Client', type: 'Type', hours: 'Heures',
-    status: 'Statut', actions: 'Actions', edit: 'Modifier', delete: 'Supprimer',
-    save: 'Enregistrer', cancel: 'Annuler', description: 'Description',
-    estimatedHours: 'Heures estimées', color: 'Couleur', noTasks: 'Aucune tâche trouvée',
-    totalHours: 'Total heures', taskCount: 'Tâches', editTask: 'Modifier tâche',
-    confirmDelete: 'Vraiment annuler cette tâche?', noCustomer: 'Aucun client',
-    h: 'h', d: 'jours', imported: 'tâches importées',
-    accessDenied: 'Accès refusé',
-  },
-  pt: {
-    title: 'Tarefas', search: 'Pesquisar...', all: 'Todas', addTask: 'Nova Tarefa',
-    code: 'Código', name: 'Nome', customer: 'Cliente', type: 'Tipo', hours: 'Horas',
-    status: 'Status', actions: 'Ações', edit: 'Editar', delete: 'Excluir',
-    save: 'Salvar', cancel: 'Cancelar', description: 'Descrição',
-    estimatedHours: 'Horas estimadas', color: 'Cor', noTasks: 'Nenhuma tarefa encontrada',
-    totalHours: 'Total horas', taskCount: 'Tarefas', editTask: 'Editar Tarefa',
-    confirmDelete: 'Realmente cancelar esta tarefa?', noCustomer: 'Sem cliente',
-    h: 'h', d: 'dias', imported: 'tarefas importadas',
-    accessDenied: 'Acesso negado',
-  },
-};
-
 const csvColumns = (lbl: Record<string, string>) => [
   { key: 'code', label: lbl.code },
   { key: 'name', label: lbl.name },
@@ -135,7 +89,7 @@ export function TasksPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
   const { permissionMap } = useRolesStore();
-  const lbl = PAGE_LABELS[lang] || PAGE_LABELS.de;
+  const lbl = getTranslations(lang as LangCode);
   const statusLbl = STATUS_LABELS[lang] || STATUS_LABELS.de;
   const typeLbl = TYPE_LABELS[lang] || TYPE_LABELS.de;
 

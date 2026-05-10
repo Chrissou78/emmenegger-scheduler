@@ -147,3 +147,56 @@ settingsRouter.delete('/roles/:id', requireRole('GLOBAL_MANAGER'), async (req: a
     res.status(500).json({ error: err.message });
   }
 });
+
+/* ------------------------------------------------------------------ */
+/*  Language Settings                                                   */
+/* ------------------------------------------------------------------ */
+
+// GET /api/v1/settings/languages
+settingsRouter.get('/languages', async (_req, res) => {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('*')
+    .eq('key', 'language_config')
+    .single();
+
+  if (error && error.code !== 'PGRST116') {
+    return res.status(500).json({ error: error.message });
+  }
+
+  // Return defaults if no setting exists yet
+  const config = data?.value ?? {
+    enabled_languages: ['de', 'en', 'fr', 'pt'],
+    default_language: 'de',
+  };
+
+  res.json(config);
+});
+
+// PUT /api/v1/settings/languages
+settingsRouter.put('/languages', async (req, res) => {
+  const { enabled_languages, default_language } = req.body;
+
+  if (!Array.isArray(enabled_languages) || enabled_languages.length === 0) {
+    return res.status(400).json({ error: 'At least one language must be enabled' });
+  }
+
+  if (!enabled_languages.includes(default_language)) {
+    return res.status(400).json({ error: 'Default language must be in enabled list' });
+  }
+
+  const value = { enabled_languages, default_language };
+
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert(
+      { key: 'language_config', value },
+      { onConflict: 'key' }
+    );
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ success: true, ...value });
+});

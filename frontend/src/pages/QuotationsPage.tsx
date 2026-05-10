@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { useRolesStore } from '../store/rolesStore';
 import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
@@ -57,110 +58,6 @@ interface Quotation {
   notes?: string;
   created_at: string;
 }
-
-/* ────────────────── translations ────────────────── */
-const T: Record<string, Record<string, string>> = {
-  de: {
-    title: 'Offerten', add: '+ Neue Offerte', search: 'Suchen…',
-    allStatuses: 'Alle Status', number: 'Nr.', customer: 'Kunde',
-    offerTitle: 'Titel', date: 'Datum', validUntil: 'Gültig bis',
-    status: 'Status', total: 'Total', lines: 'Positionen',
-    description: 'Beschreibung', quantity: 'Menge', unit: 'Einheit',
-    unitPrice: 'Einheitspreis', discount: 'Rabatt %', lineTotal: 'Total',
-    addLine: '+ Position', removeLine: 'Entfernen',
-    subtotal: 'Zwischensumme', vat: 'MwSt', vatRate: 'MwSt-Satz %',
-    grandTotal: 'Gesamttotal', notes: 'Bemerkungen',
-    save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten',
-    delete: 'Löschen', confirmDelete: 'Wirklich löschen?',
-    yes: 'Ja', no: 'Nein', back: '← Zurück zur Liste',
-    saved: 'Gespeichert', deleted: 'Gelöscht', error: 'Fehler',
-    noQuotations: 'Keine Offerten gefunden.',
-    searchTask: 'Auftrag suchen…', orTypeManually: 'oder manuell eingeben',
-    selectTask: 'Auftrag auswählen', clearTask: '✕ Verknüpfung lösen',
-    fromTask: 'Aus Auftrag', freeText: 'Freitext',
-    DRAFT: 'Entwurf', SENT: 'Gesendet', ACCEPTED: 'Angenommen',
-    REJECTED: 'Abgelehnt', EXPIRED: 'Abgelaufen',
-    loading: 'Laden…', duplicate: 'Duplizieren',
-    hours: 'Stunden', pieces: 'Stück', m2: 'm²', m3: 'm³',
-    flatRate: 'Pauschale', days: 'Tage',
-    chf: 'CHF', accessDenied: 'Kein Zugriff',
-  },
-  en: {
-    title: 'Quotations', add: '+ New Quotation', search: 'Search…',
-    allStatuses: 'All Statuses', number: 'No.', customer: 'Customer',
-    offerTitle: 'Title', date: 'Date', validUntil: 'Valid Until',
-    status: 'Status', total: 'Total', lines: 'Line Items',
-    description: 'Description', quantity: 'Quantity', unit: 'Unit',
-    unitPrice: 'Unit Price', discount: 'Discount %', lineTotal: 'Total',
-    addLine: '+ Line Item', removeLine: 'Remove',
-    subtotal: 'Subtotal', vat: 'VAT', vatRate: 'VAT Rate %',
-    grandTotal: 'Grand Total', notes: 'Notes',
-    save: 'Save', cancel: 'Cancel', edit: 'Edit',
-    delete: 'Delete', confirmDelete: 'Really delete?',
-    yes: 'Yes', no: 'No', back: '← Back to list',
-    saved: 'Saved', deleted: 'Deleted', error: 'Error',
-    noQuotations: 'No quotations found.',
-    searchTask: 'Search task…', orTypeManually: 'or type manually',
-    selectTask: 'Select task', clearTask: '✕ Clear link',
-    fromTask: 'From Task', freeText: 'Free Text',
-    DRAFT: 'Draft', SENT: 'Sent', ACCEPTED: 'Accepted',
-    REJECTED: 'Rejected', EXPIRED: 'Expired',
-    loading: 'Loading…', duplicate: 'Duplicate',
-    hours: 'Hours', pieces: 'Pieces', m2: 'm²', m3: 'm³',
-    flatRate: 'Flat Rate', days: 'Days',
-    chf: 'CHF', accessDenied: 'Access Denied',
-  },
-  fr: {
-    title: 'Devis', add: '+ Nouveau devis', search: 'Rechercher…',
-    allStatuses: 'Tous les statuts', number: 'N°', customer: 'Client',
-    offerTitle: 'Titre', date: 'Date', validUntil: 'Valable jusqu\'au',
-    status: 'Statut', total: 'Total', lines: 'Postes',
-    description: 'Description', quantity: 'Quantité', unit: 'Unité',
-    unitPrice: 'Prix unitaire', discount: 'Remise %', lineTotal: 'Total',
-    addLine: '+ Poste', removeLine: 'Supprimer',
-    subtotal: 'Sous-total', vat: 'TVA', vatRate: 'Taux TVA %',
-    grandTotal: 'Total général', notes: 'Remarques',
-    save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier',
-    delete: 'Supprimer', confirmDelete: 'Vraiment supprimer ?',
-    yes: 'Oui', no: 'Non', back: '← Retour à la liste',
-    saved: 'Enregistré', deleted: 'Supprimé', error: 'Erreur',
-    noQuotations: 'Aucun devis trouvé.',
-    searchTask: 'Rechercher tâche…', orTypeManually: 'ou saisir manuellement',
-    selectTask: 'Choisir tâche', clearTask: '✕ Supprimer le lien',
-    fromTask: 'Depuis tâche', freeText: 'Texte libre',
-    DRAFT: 'Brouillon', SENT: 'Envoyé', ACCEPTED: 'Accepté',
-    REJECTED: 'Refusé', EXPIRED: 'Expiré',
-    loading: 'Chargement…', duplicate: 'Dupliquer',
-    hours: 'Heures', pieces: 'Pièces', m2: 'm²', m3: 'm³',
-    flatRate: 'Forfait', days: 'Jours',
-    chf: 'CHF', accessDenied: 'Accès refusé',
-  },
-  pt: {
-    title: 'Orçamentos', add: '+ Novo orçamento', search: 'Pesquisar…',
-    allStatuses: 'Todos os estados', number: 'N.º', customer: 'Cliente',
-    offerTitle: 'Título', date: 'Data', validUntil: 'Válido até',
-    status: 'Estado', total: 'Total', lines: 'Itens',
-    description: 'Descrição', quantity: 'Quantidade', unit: 'Unidade',
-    unitPrice: 'Preço unitário', discount: 'Desconto %', lineTotal: 'Total',
-    addLine: '+ Item', removeLine: 'Remover',
-    subtotal: 'Subtotal', vat: 'IVA', vatRate: 'Taxa IVA %',
-    grandTotal: 'Total geral', notes: 'Observações',
-    save: 'Guardar', cancel: 'Cancelar', edit: 'Editar',
-    delete: 'Eliminar', confirmDelete: 'Eliminar mesmo?',
-    yes: 'Sim', no: 'Não', back: '← Voltar à lista',
-    saved: 'Guardado', deleted: 'Eliminado', error: 'Erro',
-    noQuotations: 'Nenhum orçamento encontrado.',
-    searchTask: 'Pesquisar tarefa…', orTypeManually: 'ou digitar manualmente',
-    selectTask: 'Selecionar tarefa', clearTask: '✕ Remover ligação',
-    fromTask: 'Da tarefa', freeText: 'Texto livre',
-    DRAFT: 'Rascunho', SENT: 'Enviado', ACCEPTED: 'Aceite',
-    REJECTED: 'Rejeitado', EXPIRED: 'Expirado',
-    loading: 'A carregar…', duplicate: 'Duplicar',
-    hours: 'Horas', pieces: 'Peças', m2: 'm²', m3: 'm³',
-    flatRate: 'Forfait', days: 'Dias',
-    chf: 'CHF', accessDenied: 'Acesso negado',
-  },
-};
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: '#95a5a6', SENT: '#3498db', ACCEPTED: '#4ecdc4',
@@ -352,7 +249,7 @@ export function QuotationsPage() {
   const { th, isDark, lang } = useTheme();
   const { token, user } = useAuthStore();
   const { permissionMap } = useRolesStore();
-  const t = T[lang] || T.de;
+  const t = getTranslations(lang as LangCode);
 
   /* ── Permission handling ── */
   const perms = useMemo(() => {

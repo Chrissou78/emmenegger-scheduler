@@ -1,55 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
-
-// ─── TRANSLATIONS (defined before the component so they're available) ───
-
-const L_ALL: Record<string, Record<string, string>> = {
-  de: {
-    title: 'Mein Profil', personal: 'Persönliche Daten', security: 'Sicherheit',
-    stats: 'Meine Statistiken', firstName: 'Vorname', lastName: 'Nachname',
-    email: 'E-Mail', phone: 'Telefon', memberSince: 'Mitglied seit',
-    currentPassword: 'Aktuelles Passwort', newPassword: 'Neues Passwort',
-    confirmPassword: 'Passwort bestätigen', changePassword: 'Passwort ändern',
-    save: 'Speichern', saved: 'Gespeichert', error: 'Fehler',
-    passwordMismatch: 'Passwörter stimmen nicht überein', passwordChanged: 'Passwort geändert',
-    passwordTooShort: 'Mindestens 6 Zeichen', thisWeek: 'Diese Woche',
-    tasks: 'Aufgaben', absences: 'Abwesenheiten', reports: 'Berichte', hoursLogged: 'Erfasste Stunden',
-  },
-  en: {
-    title: 'My Profile', personal: 'Personal Data', security: 'Security',
-    stats: 'My Statistics', firstName: 'First Name', lastName: 'Last Name',
-    email: 'Email', phone: 'Phone', memberSince: 'Member since',
-    currentPassword: 'Current Password', newPassword: 'New Password',
-    confirmPassword: 'Confirm Password', changePassword: 'Change Password',
-    save: 'Save', saved: 'Saved', error: 'Error',
-    passwordMismatch: 'Passwords do not match', passwordChanged: 'Password changed',
-    passwordTooShort: 'At least 6 characters', thisWeek: 'This Week',
-    tasks: 'Tasks', absences: 'Absences', reports: 'Reports', hoursLogged: 'Hours Logged',
-  },
-  fr: {
-    title: 'Mon Profil', personal: 'Données personnelles', security: 'Sécurité',
-    stats: 'Mes Statistiques', firstName: 'Prénom', lastName: 'Nom',
-    email: 'E-mail', phone: 'Téléphone', memberSince: 'Membre depuis',
-    currentPassword: 'Mot de passe actuel', newPassword: 'Nouveau mot de passe',
-    confirmPassword: 'Confirmer le mot de passe', changePassword: 'Changer le mot de passe',
-    save: 'Enregistrer', saved: 'Enregistré', error: 'Erreur',
-    passwordMismatch: 'Les mots de passe ne correspondent pas', passwordChanged: 'Mot de passe changé',
-    passwordTooShort: 'Minimum 6 caractères', thisWeek: 'Cette semaine',
-    tasks: 'Tâches', absences: 'Absences', reports: 'Rapports', hoursLogged: 'Heures enregistrées',
-  },
-  pt: {
-    title: 'Meu Perfil', personal: 'Dados Pessoais', security: 'Segurança',
-    stats: 'Minhas Estatísticas', firstName: 'Nome', lastName: 'Apelido',
-    email: 'E-mail', phone: 'Telefone', memberSince: 'Membro desde',
-    currentPassword: 'Senha atual', newPassword: 'Nova senha',
-    confirmPassword: 'Confirmar senha', changePassword: 'Alterar senha',
-    save: 'Salvar', saved: 'Salvo', error: 'Erro',
-    passwordMismatch: 'As senhas não coincidem', passwordChanged: 'Senha alterada',
-    passwordTooShort: 'Mínimo 6 caracteres', thisWeek: 'Esta semana',
-    tasks: 'Tarefas', absences: 'Ausências', reports: 'Relatórios', hoursLogged: 'Horas registadas',
-  },
-};
+import { getTranslations, type LangCode } from '../i18n';
 
 const ROLE_LABELS: Record<string, Record<string, string>> = {
   de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter' },
@@ -69,7 +21,7 @@ const DATE_LOCALES: Record<string, string> = {
 
 export function ProfilePage() {
   const { isDark, th, lang } = useTheme();
-  const L = L_ALL[lang] || L_ALL.de;
+  const L = getTranslations(lang as LangCode);
   const roleLabel = (r: string) => (ROLE_LABELS[lang] || ROLE_LABELS.de)[r] || r;
   const { user, token } = useAuthStore();
   const API = import.meta.env.VITE_API_URL || '';

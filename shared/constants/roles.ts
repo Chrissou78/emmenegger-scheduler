@@ -4,7 +4,7 @@
 /*  Built-in roles (used as DB seed + fallback)                        */
 /* ------------------------------------------------------------------ */
 export const BUILT_IN_ROLES = [
-  "ADMIN", "MANAGER", "HR", "FINANCE", "SALES", "EMPLOYEE",
+  "CEO", "ADMIN", "MANAGER", "HR", "FINANCE", "SALES", "EMPLOYEE",
 ] as const;
 
 export type BuiltInRole = (typeof BUILT_IN_ROLES)[number];
@@ -12,8 +12,28 @@ export type BuiltInRole = (typeof BUILT_IN_ROLES)[number];
 /** Runtime role = any string. Built-in ones are type-safe, custom ones are dynamic. */
 export type Role = BuiltInRole | (string & {});
 
+/** Hierarchy level: higher number = more authority */
+export const ROLE_HIERARCHY: Record<string, number> = {
+  CEO:      100,
+  ADMIN:    80,
+  MANAGER:  60,
+  HR:       50,
+  FINANCE:  50,
+  SALES:    50,
+  EMPLOYEE: 10,
+};
+
+export function getRoleLevel(role: string): number {
+  return ROLE_HIERARCHY[role] ?? 0;
+}
+
+export function isRoleAbove(a: string, b: string): boolean {
+  return getRoleLevel(a) > getRoleLevel(b);
+}
+
 export const ROLE_LABELS: Record<string, Record<string, string>> = {
   de: {
+    CEO:      "Geschäftsleitung (CEO)",
     ADMIN:    "Geschäftsführer",
     MANAGER:  "Teamleiter",
     HR:       "Personal (HR)",
@@ -22,6 +42,7 @@ export const ROLE_LABELS: Record<string, Record<string, string>> = {
     EMPLOYEE: "Mitarbeiter",
   },
   en: {
+    CEO:      "Chief Executive Officer",
     ADMIN:    "Executive",
     MANAGER:  "Team Leader",
     HR:       "Human Resources",
@@ -30,6 +51,7 @@ export const ROLE_LABELS: Record<string, Record<string, string>> = {
     EMPLOYEE: "Employee",
   },
   fr: {
+    CEO:      "Directeur Général (CEO)",
     ADMIN:    "Direction",
     MANAGER:  "Chef d'équipe",
     HR:       "Ressources humaines",
@@ -38,12 +60,40 @@ export const ROLE_LABELS: Record<string, Record<string, string>> = {
     EMPLOYEE: "Employé",
   },
   pt: {
+    CEO:      "Diretor Executivo (CEO)",
     ADMIN:    "Diretor",
     MANAGER:  "Líder de equipa",
     HR:       "Recursos Humanos",
     FINANCE:  "Finanças",
     SALES:    "Vendas",
     EMPLOYEE: "Funcionário",
+  },
+  nl: {
+    CEO:      "Algemeen Directeur (CEO)",
+    ADMIN:    "Directeur",
+    MANAGER:  "Teamleider",
+    HR:       "Personeelszaken",
+    FINANCE:  "Financiën",
+    SALES:    "Verkoop",
+    EMPLOYEE: "Medewerker",
+  },
+  it: {
+    CEO:      "Amministratore Delegato (CEO)",
+    ADMIN:    "Dirigente",
+    MANAGER:  "Caposquadra",
+    HR:       "Risorse Umane",
+    FINANCE:  "Finanza",
+    SALES:    "Vendite",
+    EMPLOYEE: "Dipendente",
+  },
+  es: {
+    CEO:      "Director Ejecutivo (CEO)",
+    ADMIN:    "Director",
+    MANAGER:  "Líder de Equipo",
+    HR:       "Recursos Humanos",
+    FINANCE:  "Finanzas",
+    SALES:    "Ventas",
+    EMPLOYEE: "Empleado",
   },
 };
 
@@ -62,17 +112,31 @@ export const PERMISSIONS = [
   "admin.view", "admin.users", "admin.roles",
   "admin.customers", "admin.machines", "admin.tasks",
   "reports.own", "reports.team", "reports.all",
+  "ceo.dashboard", "ceo.org", "ceo.settings",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 
 /* ------------------------------------------------------------------ */
 /*  Default permission matrix — seed values for built-in roles         */
-/*  At runtime, the actual matrix comes from the DB via                */
-/*  GET /api/v1/settings/roles                                         */
 /* ------------------------------------------------------------------ */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
-  ADMIN: [...PERMISSIONS],
+  CEO: [...PERMISSIONS],   // CEO has every permission
+
+  ADMIN: [
+    "schedule.view", "schedule.edit",
+    "customers.view", "customers.edit", "customers.delete",
+    "machines.view", "machines.edit", "machines.delete",
+    "tasks.view", "tasks.edit", "tasks.delete",
+    "quotations.view", "quotations.edit", "quotations.delete",
+    "invoices.view", "invoices.edit", "invoices.delete",
+    "hr.view", "hr.edit", "hr.payroll",
+    "finance.view", "finance.reports",
+    "admin.view", "admin.users", "admin.roles",
+    "admin.customers", "admin.machines", "admin.tasks",
+    "reports.own", "reports.team", "reports.all",
+    // ADMIN does NOT get ceo.* permissions
+  ],
 
   MANAGER: [
     "schedule.view", "schedule.edit",
@@ -122,12 +186,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
 /* ------------------------------------------------------------------ */
 /*  Resolve effective permissions for a user                           */
-/*  rolePermissions = live map from DB (falls back to defaults)        */
 /* ------------------------------------------------------------------ */
 export function resolvePermissions(
   role: Role,
   customPermissions?: { add?: Permission[]; remove?: Permission[] } | null,
-  /** Pass the live role→permissions map from the DB when available */
   liveRolePermissions?: Record<string, Permission[]>,
 ): Set<Permission> {
   const source = liveRolePermissions ?? DEFAULT_ROLE_PERMISSIONS;
