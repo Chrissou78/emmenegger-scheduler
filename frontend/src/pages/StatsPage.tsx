@@ -6,6 +6,16 @@ import { resolvePermissions, type Role, type Permission } from '../../../shared/
 
 const API = import.meta.env.VITE_API_URL || '';
 
+function normalizeRole(raw: string): Role {
+  const upper = (raw || '').toUpperCase();
+  switch (upper) {
+    case 'GLOBAL_MANAGER': return 'ADMIN';
+    case 'LOCAL_MANAGER':  return 'MANAGER';
+    case 'ARBEITER':       return 'EMPLOYEE';
+    default:               return (upper as Role) || 'EMPLOYEE';
+  }
+}
+
 /* ────────────────────── types ────────────────────── */
 interface User { id:string; email:string; first_name:string; last_name:string; role:string; departments:string[]; is_active:boolean; manager_id?:string; }
 interface Week { id:string; week_number:number; year:number; }
@@ -42,6 +52,7 @@ const LABELS: Record<string,Record<string,string>> = {
     taskDistribution:'Auftragsverteilung',absenceBreakdown:'Absenz-Übersicht',
     weeklyTrend:'Wöchentlicher Verlauf',machineStatus:'Maschinenstatus',
     occupationHeatmap:'Auslastungs-Heatmap',hours:'Stunden',slots:'Slots',
+    GARTEN_TIEFBAU:'Garten & Tiefbau', UNTERHALT:'Unterhalt',
   },
   en:{
     title:'Statistics',period:'Period',
@@ -67,6 +78,7 @@ const LABELS: Record<string,Record<string,string>> = {
     taskDistribution:'Task Distribution',absenceBreakdown:'Absence Breakdown',
     weeklyTrend:'Weekly Trend',machineStatus:'Machine Status',
     occupationHeatmap:'Occupation Heatmap',hours:'Hours',slots:'Slots',
+    GARTEN_TIEFBAU:'Garden & Civil Eng.', UNTERHALT:'Maintenance',
   },
   fr:{
     title:'Statistiques',period:'Période',
@@ -92,6 +104,7 @@ const LABELS: Record<string,Record<string,string>> = {
     taskDistribution:'Répartition des tâches',absenceBreakdown:'Répartition des absences',
     weeklyTrend:'Tendance hebdomadaire',machineStatus:'État des machines',
     occupationHeatmap:"Carte d'occupation",hours:'Heures',slots:'Créneaux',
+    GARTEN_TIEFBAU:'Jardin & Génie civil', UNTERHALT:'Entretien',
   },
   pt:{
     title:'Estatísticas',period:'Período',
@@ -117,6 +130,7 @@ const LABELS: Record<string,Record<string,string>> = {
     taskDistribution:'Distribuição de tarefas',absenceBreakdown:'Visão de ausências',
     weeklyTrend:'Tendência semanal',machineStatus:'Estado das máquinas',
     occupationHeatmap:'Mapa de ocupação',hours:'Horas',slots:'Slots',
+    GARTEN_TIEFBAU:'Jardim & Eng. Civil', UNTERHALT:'Manutenção',
   },
 };
 
@@ -322,6 +336,7 @@ function VerticalBarChart({groups,height=180,th}:{
 function AreaSparkline({data,color,width=220,height=55,labels}:{
   data:number[];color:string;width?:number;height?:number;labels?:string[];
 }){
+  const uid = useRef(`area-${Math.random().toString(36).slice(2,8)}`).current;
   if(data.length<2) return null;
   const pad=4;const max=Math.max(...data,1);const min=Math.min(...data,0);const range=max-min||1;
   const pts=data.map((v,i)=>{
@@ -335,12 +350,12 @@ function AreaSparkline({data,color,width=220,height=55,labels}:{
     <div>
       <svg width={width} height={height+20} style={{display:'block'}}>
         <defs>
-          <linearGradient id={`area-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.35}/>
             <stop offset="100%" stopColor={color} stopOpacity={0.02}/>
           </linearGradient>
         </defs>
-        <polygon points={area} fill={`url(#area-${color.replace('#','')})`}/>
+        <polygon points={area} fill={`url(#${uid})`}/>
         <polyline points={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/>
         {pts.map((p,i)=>(
           <circle key={i} cx={p.x} cy={p.y} r={i===pts.length-1?4:2.5} fill={color} stroke="#fff" strokeWidth={1}/>
@@ -446,7 +461,7 @@ export function StatsPage(){
 
   /* ── permissions ── */
   const perms=useMemo(()=>{
-    const role:Role=(user?.role as Role)||'EMPLOYEE';
+    const role = normalizeRole(user?.role || '');
     return resolvePermissions(role,user?.custom_permissions,permissionMap);
   },[user,permissionMap]);
   const canView=perms.has('reports.team' as Permission)||perms.has('stats.view' as Permission);
@@ -513,7 +528,7 @@ export function StatsPage(){
       return{label:`${u.first_name} ${u.last_name}`,value:userSlots,max:maxSlots};
     }).sort((a,b)=>(b.value/(b.max||1))-(a.value/(a.max||1)));
 
-    const depts=['garten','unterhalt'];
+    const depts=['GARTEN_TIEFBAU','UNTERHALT'];
     const byDept=depts.map(dept=>{
       const deptUsers=activeUsers.filter(u=>(u.departments||[]).includes(dept));
       const deptAllocs=periodAllocations.filter(a=>deptUsers.some(u=>u.id===a.user_id)).length;

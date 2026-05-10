@@ -9,11 +9,7 @@ reportsRouter.get('/', async (req, res, next) => {
   try {
     const { userId, startDate, endDate, status } = req.query;
 
-    let query = supabase.from('time_reports').select(`
-      *,
-      task:tasks(id, name, code, color),
-      user:users(id, first_name, last_name)
-    `);
+    let query = supabase.from('time_reports').select('*');
 
     // Workers can only see their own reports
     if (req.user?.role === 'ARBEITER') {

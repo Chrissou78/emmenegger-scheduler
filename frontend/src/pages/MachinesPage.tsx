@@ -1,724 +1,971 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+// src/pages/MachinesPage.tsx
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { CsvToolbar } from '../components/CsvToolbar';
-import { resolvePermissions, type Role } from '../../../shared/constants/roles';
-import { useRolesStore } from "../store/rolesStore";
+import { resolvePermissions, type Role, type Permission } from '../../../shared/constants/roles';
+import { useRolesStore } from '../store/rolesStore';
 
-/* ─── types ─── */
+const API = import.meta.env.VITE_API_URL || '';
+
+/* ────────────────── normalizeRole ────────────────── */
+function normalizeRole(raw: string): Role {
+  const upper = (raw || '').toUpperCase();
+  switch (upper) {
+    case 'GLOBAL_MANAGER': return 'ADMIN';
+    case 'LOCAL_MANAGER':  return 'MANAGER';
+    case 'ARBEITER':       return 'EMPLOYEE';
+    default:               return (upper as Role) || 'EMPLOYEE';
+  }
+}
+
+/* ────────────────── interfaces ────────────────── */
 interface Machine {
   id: string;
   name: string;
-  category: string;
-  status: 'AVAILABLE' | 'IN_USE' | 'MAINTENANCE' | 'OUT_OF_SERVICE';
+  type?: string;
+  category?: string;
+  license_plate?: string;
+  status: string;
+  department?: string;
   notes?: string;
-  operators?: string[];
-  created_at: string;
+  year?: number;
+  brand?: string;
+  model?: string;
+  serial_number?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface MachineAllocation {
   id: string;
   machine_id: string;
-  user_id: string;
-  task_id?: string;
+  task_id: string;
+  user_id?: string;
   date: string;
   start_time?: string;
   end_time?: string;
   notes?: string;
+  task?: { id: string; name: string; code: string; color?: string };
+  user?: { id: string; first_name: string; last_name: string };
 }
 
-interface MachineForm {
-  name: string;
-  category: string;
-  status: Machine['status'];
-  notes: string;
-}
-
-interface AllocForm {
-  machine_id: string;
-  user_id: string;
-  task_id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  notes: string;
-}
-
-const emptyMachine: MachineForm = { name: '', category: '', status: 'AVAILABLE', notes: '' };
-const emptyAlloc: AllocForm = { machine_id: '', user_id: '', task_id: '', date: '', start_time: '07:00', end_time: '17:00', notes: '' };
-
-const STATUS_OPTIONS: Machine['status'][] = ['AVAILABLE', 'IN_USE', 'MAINTENANCE', 'OUT_OF_SERVICE'];
-
-const L_ALL: Record<string, Record<string, string>> = {
+/* ────────────────── translations ────────────────── */
+const T: Record<string, Record<string, string>> = {
   de: {
-    title: 'Maschinenpark', machines: 'Maschinen', allocations: 'Zuweisungen',
-    addMachine: 'Neue Maschine', editMachine: 'Maschine bearbeiten', addAlloc: 'Neue Zuweisung',
-    name: 'Name', category: 'Kategorie', status: 'Status', notes: 'Notizen',
-    save: 'Speichern', cancel: 'Abbrechen', delete: 'Löschen', search: 'Suchen…',
-    allCategories: 'Alle Kategorien', allStatuses: 'Alle Status',
-    noMachines: 'Keine Maschinen', noAllocs: 'Keine Zuweisungen',
-    machine: 'Maschine', employee: 'Mitarbeiter', task: 'Auftrag', date: 'Datum',
-    startTime: 'Startzeit', endTime: 'Endzeit', saved: 'Gespeichert', deleted: 'Gelöscht',
-    error: 'Fehler', available: 'Verfügbar', inUse: 'In Gebrauch', maintenance: 'Wartung',
-    outOfService: 'Ausser Betrieb', total: 'Total', today: 'Heute',
-    imported: 'importiert',
+    title: 'Maschinen', search: 'Suchen…', allCategories: 'Alle Kategorien',
+    allStatuses: 'Alle Status', add: '+ Neue Maschine', name: 'Name', type: 'Typ',
+    category: 'Kategorie', licensePlate: 'Kennzeichen', status: 'Status',
+    department: 'Abteilung', notes: 'Notizen', brand: 'Marke', model: 'Modell',
+    year: 'Jahrgang', serialNumber: 'Seriennummer',
+    save: 'Speichern', cancel: 'Abbrechen', edit: 'Bearbeiten', delete: 'Löschen',
+    confirmDelete: 'Wirklich löschen?', yes: 'Ja', no: 'Nein',
+    general: 'Allgemein', allocations: 'Zuweisungen', notesTab: 'Notizen',
+    noMachines: 'Keine Maschinen gefunden.', saved: 'Gespeichert', deleted: 'Gelöscht',
+    error: 'Fehler', imported: 'importiert', loading: 'Laden…',
+    back: '← Zurück zur Liste', prev: '← Zurück', next: 'Weiter →',
+    page: 'Seite', of: 'von', total: 'Total', available: 'Verfügbar',
+    close: 'Schliessen', task: 'Auftrag', user: 'Mitarbeiter', date: 'Datum',
+    startTime: 'Start', endTime: 'Ende',
+    // statuses
+    AVAILABLE: 'Verfügbar', IN_USE: 'In Gebrauch', MAINTENANCE: 'Wartung', OUT_OF_SERVICE: 'Ausser Betrieb',
+    // categories
+    CAT_EXCAVATOR: 'Bagger', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Walze',
+    CAT_LOADER: 'Radlader', CAT_CRANE: 'Kran', CAT_TRUCK: 'Lastwagen',
+    CAT_VAN: 'Lieferwagen', CAT_CAR: 'Auto', CAT_TRAILER: 'Anhänger',
+    CAT_MOWER: 'Mäher', CAT_CHAINSAW: 'Kettensäge', CAT_COMPACTOR: 'Verdichter',
+    CAT_GENERATOR: 'Generator', CAT_PUMP: 'Pumpe', CAT_LIGHT_EQUIPMENT: 'Kleingeräte',
+    CAT_OTHER: 'Sonstiges',
+    // types
+    TYPE_VEHICLE: 'Fahrzeug', TYPE_HEAVY: 'Schwere Maschine', TYPE_LIGHT: 'Leichte Maschine',
+    TYPE_TOOL: 'Werkzeug', TYPE_ATTACHMENT: 'Anbaugerät', TYPE_OTHER: 'Sonstiges',
+    // departments
+    DEPT_GARTEN_TIEFBAU: 'Garten & Tiefbau', DEPT_UNTERHALT: 'Unterhalt',
   },
   en: {
-    title: 'Machine Park', machines: 'Machines', allocations: 'Allocations',
-    addMachine: 'New Machine', editMachine: 'Edit Machine', addAlloc: 'New Allocation',
-    name: 'Name', category: 'Category', status: 'Status', notes: 'Notes',
-    save: 'Save', cancel: 'Cancel', delete: 'Delete', search: 'Search…',
-    allCategories: 'All Categories', allStatuses: 'All Statuses',
-    noMachines: 'No machines', noAllocs: 'No allocations',
-    machine: 'Machine', employee: 'Employee', task: 'Task', date: 'Date',
-    startTime: 'Start Time', endTime: 'End Time', saved: 'Saved', deleted: 'Deleted',
-    error: 'Error', available: 'Available', inUse: 'In Use', maintenance: 'Maintenance',
-    outOfService: 'Out of Service', total: 'Total', today: 'Today',
-    imported: 'imported',
+    title: 'Machines', search: 'Search…', allCategories: 'All Categories',
+    allStatuses: 'All Statuses', add: '+ New Machine', name: 'Name', type: 'Type',
+    category: 'Category', licensePlate: 'License Plate', status: 'Status',
+    department: 'Department', notes: 'Notes', brand: 'Brand', model: 'Model',
+    year: 'Year', serialNumber: 'Serial Number',
+    save: 'Save', cancel: 'Cancel', edit: 'Edit', delete: 'Delete',
+    confirmDelete: 'Really delete?', yes: 'Yes', no: 'No',
+    general: 'General', allocations: 'Allocations', notesTab: 'Notes',
+    noMachines: 'No machines found.', saved: 'Saved', deleted: 'Deleted',
+    error: 'Error', imported: 'imported', loading: 'Loading…',
+    back: '← Back to list', prev: '← Previous', next: 'Next →',
+    page: 'Page', of: 'of', total: 'Total', available: 'Available',
+    close: 'Close', task: 'Task', user: 'Employee', date: 'Date',
+    startTime: 'Start', endTime: 'End',
+    AVAILABLE: 'Available', IN_USE: 'In Use', MAINTENANCE: 'Maintenance', OUT_OF_SERVICE: 'Out of Service',
+    CAT_EXCAVATOR: 'Excavator', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Roller',
+    CAT_LOADER: 'Loader', CAT_CRANE: 'Crane', CAT_TRUCK: 'Truck',
+    CAT_VAN: 'Van', CAT_CAR: 'Car', CAT_TRAILER: 'Trailer',
+    CAT_MOWER: 'Mower', CAT_CHAINSAW: 'Chainsaw', CAT_COMPACTOR: 'Compactor',
+    CAT_GENERATOR: 'Generator', CAT_PUMP: 'Pump', CAT_LIGHT_EQUIPMENT: 'Light Equipment',
+    CAT_OTHER: 'Other',
+    TYPE_VEHICLE: 'Vehicle', TYPE_HEAVY: 'Heavy Machine', TYPE_LIGHT: 'Light Machine',
+    TYPE_TOOL: 'Tool', TYPE_ATTACHMENT: 'Attachment', TYPE_OTHER: 'Other',
+    DEPT_GARTEN_TIEFBAU: 'Garden & Civil Works', DEPT_UNTERHALT: 'Maintenance',
   },
   fr: {
-    title: 'Parc machines', machines: 'Machines', allocations: 'Affectations',
-    addMachine: 'Nouvelle machine', editMachine: 'Modifier machine', addAlloc: 'Nouvelle affectation',
-    name: 'Nom', category: 'Catégorie', status: 'Statut', notes: 'Notes',
-    save: 'Enregistrer', cancel: 'Annuler', delete: 'Supprimer', search: 'Rechercher…',
-    allCategories: 'Toutes catégories', allStatuses: 'Tous les statuts',
-    noMachines: 'Aucune machine', noAllocs: 'Aucune affectation',
-    machine: 'Machine', employee: 'Employé', task: 'Tâche', date: 'Date',
-    startTime: 'Heure début', endTime: 'Heure fin', saved: 'Enregistré', deleted: 'Supprimé',
-    error: 'Erreur', available: 'Disponible', inUse: 'En service', maintenance: 'Maintenance',
-    outOfService: 'Hors service', total: 'Total', today: "Aujourd'hui",
-    imported: 'importé(s)',
+    title: 'Machines', search: 'Rechercher…', allCategories: 'Toutes les catégories',
+    allStatuses: 'Tous les statuts', add: '+ Nouvelle machine', name: 'Nom', type: 'Type',
+    category: 'Catégorie', licensePlate: 'Plaque', status: 'Statut',
+    department: 'Département', notes: 'Notes', brand: 'Marque', model: 'Modèle',
+    year: 'Année', serialNumber: 'Numéro de série',
+    save: 'Enregistrer', cancel: 'Annuler', edit: 'Modifier', delete: 'Supprimer',
+    confirmDelete: 'Vraiment supprimer ?', yes: 'Oui', no: 'Non',
+    general: 'Général', allocations: 'Attributions', notesTab: 'Notes',
+    noMachines: 'Aucune machine trouvée.', saved: 'Enregistré', deleted: 'Supprimé',
+    error: 'Erreur', imported: 'importé(s)', loading: 'Chargement…',
+    back: '← Retour à la liste', prev: '← Précédent', next: 'Suivant →',
+    page: 'Page', of: 'de', total: 'Total', available: 'Disponible',
+    close: 'Fermer', task: 'Tâche', user: 'Employé', date: 'Date',
+    startTime: 'Début', endTime: 'Fin',
+    AVAILABLE: 'Disponible', IN_USE: 'En utilisation', MAINTENANCE: 'Maintenance', OUT_OF_SERVICE: 'Hors service',
+    CAT_EXCAVATOR: 'Pelle', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Rouleau',
+    CAT_LOADER: 'Chargeuse', CAT_CRANE: 'Grue', CAT_TRUCK: 'Camion',
+    CAT_VAN: 'Fourgon', CAT_CAR: 'Voiture', CAT_TRAILER: 'Remorque',
+    CAT_MOWER: 'Tondeuse', CAT_CHAINSAW: 'Tronçonneuse', CAT_COMPACTOR: 'Compacteur',
+    CAT_GENERATOR: 'Générateur', CAT_PUMP: 'Pompe', CAT_LIGHT_EQUIPMENT: 'Petit matériel',
+    CAT_OTHER: 'Autre',
+    TYPE_VEHICLE: 'Véhicule', TYPE_HEAVY: 'Machine lourde', TYPE_LIGHT: 'Machine légère',
+    TYPE_TOOL: 'Outil', TYPE_ATTACHMENT: 'Accessoire', TYPE_OTHER: 'Autre',
+    DEPT_GARTEN_TIEFBAU: 'Jardin & Génie civil', DEPT_UNTERHALT: 'Entretien',
   },
   pt: {
-    title: 'Parque de Máquinas', machines: 'Máquinas', allocations: 'Alocações',
-    addMachine: 'Nova Máquina', editMachine: 'Editar Máquina', addAlloc: 'Nova Alocação',
-    name: 'Nome', category: 'Categoria', status: 'Estado', notes: 'Notas',
-    save: 'Salvar', cancel: 'Cancelar', delete: 'Excluir', search: 'Pesquisar…',
-    allCategories: 'Todas categorias', allStatuses: 'Todos os estados',
-    noMachines: 'Sem máquinas', noAllocs: 'Sem alocações',
-    machine: 'Máquina', employee: 'Funcionário', task: 'Tarefa', date: 'Data',
-    startTime: 'Hora início', endTime: 'Hora fim', saved: 'Salvo', deleted: 'Excluído',
-    error: 'Erro', available: 'Disponível', inUse: 'Em uso', maintenance: 'Manutenção',
-    outOfService: 'Fora de serviço', total: 'Total', today: 'Hoje',
-    imported: 'importado(s)',
+    title: 'Máquinas', search: 'Pesquisar…', allCategories: 'Todas as categorias',
+    allStatuses: 'Todos os estados', add: '+ Nova máquina', name: 'Nome', type: 'Tipo',
+    category: 'Categoria', licensePlate: 'Matrícula', status: 'Estado',
+    department: 'Departamento', notes: 'Notas', brand: 'Marca', model: 'Modelo',
+    year: 'Ano', serialNumber: 'Número de série',
+    save: 'Guardar', cancel: 'Cancelar', edit: 'Editar', delete: 'Eliminar',
+    confirmDelete: 'Eliminar mesmo?', yes: 'Sim', no: 'Não',
+    general: 'Geral', allocations: 'Alocações', notesTab: 'Notas',
+    noMachines: 'Nenhuma máquina encontrada.', saved: 'Guardado', deleted: 'Eliminado',
+    error: 'Erro', imported: 'importado(s)', loading: 'A carregar…',
+    back: '← Voltar à lista', prev: '← Anterior', next: 'Seguinte →',
+    page: 'Página', of: 'de', total: 'Total', available: 'Disponível',
+    close: 'Fechar', task: 'Tarefa', user: 'Funcionário', date: 'Data',
+    startTime: 'Início', endTime: 'Fim',
+    AVAILABLE: 'Disponível', IN_USE: 'Em uso', MAINTENANCE: 'Manutenção', OUT_OF_SERVICE: 'Fora de serviço',
+    CAT_EXCAVATOR: 'Escavadora', CAT_DUMPER: 'Dumper', CAT_ROLLER: 'Rolo',
+    CAT_LOADER: 'Carregadora', CAT_CRANE: 'Grua', CAT_TRUCK: 'Camião',
+    CAT_VAN: 'Carrinha', CAT_CAR: 'Carro', CAT_TRAILER: 'Reboque',
+    CAT_MOWER: 'Cortador', CAT_CHAINSAW: 'Motosserra', CAT_COMPACTOR: 'Compactador',
+    CAT_GENERATOR: 'Gerador', CAT_PUMP: 'Bomba', CAT_LIGHT_EQUIPMENT: 'Equipamento leve',
+    CAT_OTHER: 'Outro',
+    TYPE_VEHICLE: 'Veículo', TYPE_HEAVY: 'Máquina pesada', TYPE_LIGHT: 'Máquina leve',
+    TYPE_TOOL: 'Ferramenta', TYPE_ATTACHMENT: 'Acessório', TYPE_OTHER: 'Outro',
+    DEPT_GARTEN_TIEFBAU: 'Jardim & Obras', DEPT_UNTERHALT: 'Manutenção',
   },
 };
 
-const statusColor = (s: string) => {
-  const map: Record<string, string> = { AVAILABLE: '#4caf50', IN_USE: '#C8A96E', MAINTENANCE: '#ff9800', OUT_OF_SERVICE: '#f44336' };
-  return map[s] || '#888';
+/* ────────────────── constants ────────────────── */
+const STATUS_COLORS: Record<string, string> = {
+  AVAILABLE: '#4ecdc4', IN_USE: '#f39c12', MAINTENANCE: '#e67e22', OUT_OF_SERVICE: '#e74c3c',
 };
 
-const CATEGORIES = ['Bagger', 'Dumper', 'Rasenmäher', 'Kettensäge', 'Heckenschere', 'Laubbläser', 'Transporter', 'Sonstiges'];
+const STATUS_ICONS: Record<string, string> = {
+  AVAILABLE: '🟢', IN_USE: '🔵', MAINTENANCE: '🟠', OUT_OF_SERVICE: '🔴',
+};
 
-/* ─── CSV column definitions ─── */
-const csvMachineColumns = (L: Record<string, string>) => [
-  { key: 'name', label: L.name },
-  { key: 'category', label: L.category },
-  { key: 'status', label: L.status },
-  { key: 'notes', label: L.notes },
+const STATUSES = ['AVAILABLE', 'IN_USE', 'MAINTENANCE', 'OUT_OF_SERVICE'];
+
+const CATEGORIES = [
+  'EXCAVATOR', 'DUMPER', 'ROLLER', 'LOADER', 'CRANE', 'TRUCK',
+  'VAN', 'CAR', 'TRAILER', 'MOWER', 'CHAINSAW', 'COMPACTOR',
+  'GENERATOR', 'PUMP', 'LIGHT_EQUIPMENT', 'OTHER',
 ];
 
-const csvAllocColumns = (L: Record<string, string>) => [
-  { key: 'machine_name', label: L.machine },
-  { key: 'employee_name', label: L.employee },
-  { key: 'task_name', label: L.task },
-  { key: 'date', label: L.date },
-  { key: 'start_time', label: L.startTime },
-  { key: 'end_time', label: L.endTime },
-  { key: 'notes', label: L.notes },
+const TYPES = ['VEHICLE', 'HEAVY', 'LIGHT', 'TOOL', 'ATTACHMENT', 'OTHER'];
+
+/* ────────────────── helpers ────────────────── */
+function translateCategory(cat: string | undefined, t: Record<string, string>): string {
+  if (!cat) return '–';
+  return t[`CAT_${cat.toUpperCase()}`] || cat;
+}
+
+function translateType(type: string | undefined, t: Record<string, string>): string {
+  if (!type) return '–';
+  return t[`TYPE_${type.toUpperCase()}`] || type;
+}
+
+function translateDept(dept: string | undefined, t: Record<string, string>): string {
+  if (!dept) return '–';
+  return t[`DEPT_${dept.toUpperCase()}`] || dept;
+}
+
+function translateStatus(status: string, t: Record<string, string>): string {
+  return t[status] || status;
+}
+
+const DATE_LOCALES: Record<string, string> = {
+  de: 'de-CH', en: 'en-GB', fr: 'fr-CH', pt: 'pt-BR',
+};
+
+function machineToForm(m: Machine): Partial<Machine> {
+  return {
+    name: m.name || '',
+    type: m.type || '',
+    category: m.category || '',
+    license_plate: m.license_plate || '',
+    status: m.status || 'AVAILABLE',
+    department: m.department || '',
+    brand: m.brand || '',
+    model: m.model || '',
+    year: m.year ?? undefined,
+    serial_number: m.serial_number || '',
+    notes: m.notes || '',
+  };
+}
+
+/* ────────────────── CSV ────────────────── */
+const csvColumns = (t: Record<string, string>) => [
+  { key: 'name', label: t.name },
+  { key: 'type', label: t.type },
+  { key: 'category', label: t.category },
+  { key: 'license_plate', label: t.licensePlate },
+  { key: 'status', label: t.status },
+  { key: 'department', label: t.department },
+  { key: 'brand', label: t.brand },
+  { key: 'model', label: t.model },
+  { key: 'year', label: t.year },
+  { key: 'serial_number', label: t.serialNumber },
+  { key: 'notes', label: t.notes },
 ];
 
-const CSV_MACHINE_EXAMPLES = [
-  { name: 'CAT 308', category: 'Bagger', status: 'AVAILABLE', notes: '8t Minibagger, GPS' },
-  { name: 'Husqvarna 550XP', category: 'Kettensäge', status: 'IN_USE', notes: 'Neuanschaffung 2025' },
-  { name: 'STIHL BR 800', category: 'Laubbläser', status: 'MAINTENANCE', notes: 'Filter wechseln' },
+const CSV_EXAMPLE_ROWS = [
+  {
+    name: 'CAT 320', type: 'HEAVY', category: 'EXCAVATOR',
+    license_plate: 'BE 12345', status: 'AVAILABLE', department: 'GARTEN_TIEFBAU',
+    brand: 'Caterpillar', model: '320 GC', year: '2022', serial_number: 'CAT320-001',
+    notes: 'Hauptbagger',
+  },
+  {
+    name: 'Mercedes Sprinter', type: 'VEHICLE', category: 'VAN',
+    license_plate: 'BE 67890', status: 'IN_USE', department: 'UNTERHALT',
+    brand: 'Mercedes', model: 'Sprinter 316', year: '2021', serial_number: 'SPR-002',
+    notes: 'Werkstattwagen',
+  },
 ];
 
-const CSV_ALLOC_EXAMPLES = [
-  { machine_name: 'CAT 308', employee_name: 'Max Müller', task_name: 'Gartenarbeit Müller', date: '2026-05-08', start_time: '07:00', end_time: '12:00', notes: 'Aushub Nordseite' },
-  { machine_name: 'Husqvarna 550XP', employee_name: 'Lena Weber', task_name: 'Unterhalt Lindenpark', date: '2026-05-08', start_time: '08:00', end_time: '16:00', notes: '' },
-];
-
+/* ────────────────── component ────────────────── */
 export function MachinesPage() {
-  const { isDark, th, lang } = useTheme();
-  const L = L_ALL[lang] || L_ALL.de;
-  const { user, token } = useAuthStore();
-  const API = import.meta.env.VITE_API_URL || '';
+  const { th, isDark, lang } = useTheme();
+  const { token, user } = useAuthStore();
+  const t = T[lang] || T.de;
+  const locale = DATE_LOCALES[lang] || 'de-CH';
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  /* ── permissions from roles system ── */
+  /* ── permissions ── */
   const { permissionMap } = useRolesStore();
   const perms = useMemo(() => {
-    const role: Role = user?.role || "EMPLOYEE";
+    const role = normalizeRole(user?.role || '');
     return resolvePermissions(role, user?.custom_permissions, permissionMap);
   }, [user, permissionMap]);
 
-  const canView = perms.has('machines.view');
-  const canEdit = perms.has('machines.edit');
-  const canDelete = perms.has('machines.delete');
+  const canView = perms.has('machines.view' as Permission);
+  const canEdit = perms.has('machines.edit' as Permission);
+  const canDelete = perms.has('machines.delete' as Permission);
 
-  const statusLabel = (s: string) => {
-    const map: Record<string, string> = {
-      AVAILABLE: L.available,
-      IN_USE: L.inUse,
-      MAINTENANCE: L.maintenance,
-      OUT_OF_SERVICE: L.outOfService,
-    };
-    return map[s] || s;
-  };
-
-  /* state */
-  const [tab, setTab] = useState<'machines' | 'allocations'>('machines');
+  /* ── state ── */
   const [machines, setMachines] = useState<Machine[]>([]);
-  const [allocs, setAllocs] = useState<MachineAllocation[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [allMachines, setAllMachines] = useState<Machine[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
   const [search, setSearch] = useState('');
-  const [filterCat, setFilterCat] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [machineModal, setMachineModal] = useState(false);
-  const [allocModal, setAllocModal] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [mForm, setMForm] = useState<MachineForm>({ ...emptyMachine });
-  const [aForm, setAForm] = useState<AllocForm>({ ...emptyAlloc });
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const [selected, setSelected] = useState<Machine | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Partial<Machine>>({});
+  const [tab, setTab] = useState<'general' | 'allocations' | 'notes'>('general');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const [allocations, setAllocations] = useState<MachineAllocation[]>([]);
+
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
-  const [confirmDel, setConfirmDel] = useState<string | null>(null);
-  const [allocDate, setAllocDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>();
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const hdrs = useCallback(() => ({
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  }), [token]);
-
-  const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
+  function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }
+
+  function closeDetail() {
+    setSelected(null);
+    setEditing(false);
+    setConfirmDelete(false);
+    setAllocations([]);
+  }
+
+  const panelOpen = selected !== null || editing;
+
+  /* ── theme-aware styles ── */
+  const dimText = isDark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.4)';
+  const inputBg = isDark ? '#1a1a3e' : '#faf7f2';
+  const panelBg = isDark ? '#1e1e3a' : '#fff';
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 12px', borderRadius: 8,
+    border: `1px solid ${th.border}`, background: inputBg,
+    color: th.text, fontSize: 14, outline: 'none',
   };
 
-  /* fetch */
+  const selectStyle: React.CSSProperties = { ...inputStyle, appearance: 'auto' as const };
+
+  const btnPrimary: React.CSSProperties = {
+    padding: '8px 18px', borderRadius: 8, border: 'none',
+    background: th.gold, color: '#000',
+    fontWeight: 600, cursor: 'pointer', fontSize: 14, transition: 'opacity .15s',
+  };
+
+  const btnDanger: React.CSSProperties = { ...btnPrimary, background: '#e74c3c', color: '#fff' };
+
+  const btnSecondary: React.CSSProperties = {
+    padding: '8px 18px', borderRadius: 8,
+    border: `1px solid ${th.border}`,
+    background: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)',
+    color: th.text, fontWeight: 600, cursor: 'pointer', fontSize: 14, transition: 'opacity .15s',
+  };
+
+  const btnBack: React.CSSProperties = {
+    padding: '6px 14px', borderRadius: 8, border: 'none',
+    background: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)',
+    color: th.text, fontWeight: 600, cursor: 'pointer', fontSize: 13,
+    transition: 'opacity .15s', marginBottom: 16,
+  };
+
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    padding: '8px 16px', borderRadius: '8px 8px 0 0', border: 'none',
+    background: active ? (isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.04)') : 'transparent',
+    color: active ? th.text : dimText,
+    fontWeight: active ? 700 : 500, cursor: 'pointer',
+    borderBottom: active ? `2px solid ${th.gold}` : '2px solid transparent',
+    transition: 'all .15s',
+  });
+
+  const paginationBtn = (disabled: boolean): React.CSSProperties => ({
+    padding: '8px 16px', borderRadius: 8, border: 'none',
+    background: disabled ? (isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.04)') : th.gold,
+    color: disabled ? (isDark ? 'rgba(255,255,255,.25)' : 'rgba(0,0,0,.25)') : '#000',
+    fontWeight: 600, fontSize: 14,
+    cursor: disabled ? 'default' : 'pointer',
+    opacity: disabled ? 0.6 : 1, transition: 'all .15s',
+  });
+
+  const thStyle: React.CSSProperties = {
+    textAlign: 'left' as const, padding: '10px 12px',
+    borderBottom: `2px solid ${th.border}`,
+    color: dimText, fontWeight: 600, fontSize: 12,
+    textTransform: 'uppercase' as const, letterSpacing: '0.5px',
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: '10px 12px', borderBottom: `1px solid ${th.border}`, color: dimText,
+  };
+
+  const labelStyle: React.CSSProperties = { fontSize: 12, color: dimText, fontWeight: 600 };
+
+  const statCard: React.CSSProperties = {
+    padding: '10px 16px', borderRadius: 10,
+    background: isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)',
+    textAlign: 'center' as const, minWidth: 100,
+  };
+
+  /* ── data fetching ── */
   const fetchMachines = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/machines`, { headers: hdrs() });
-      const { data } = await res.json();
-      setMachines(data || []);
-    } catch { /* ignore */ }
-  }, [API, hdrs]);
-
-  const fetchAllocs = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/api/v1/machines/allocations?date=${allocDate}`, { headers: hdrs() });
-      const { data } = await res.json();
-      setAllocs(data || []);
-    } catch { /* ignore */ }
-  }, [API, hdrs, allocDate]);
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/api/v1/users`, { headers: hdrs() });
-      const { data } = await res.json();
-      setUsers(data || []);
-    } catch { /* ignore */ }
-  }, [API, hdrs]);
-
-  const fetchTasks = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/api/v1/tasks`, { headers: hdrs() });
-      const { data } = await res.json();
-      setTasks(data || []);
-    } catch { /* ignore */ }
-  }, [API, hdrs]);
-
-  useEffect(() => { fetchMachines(); fetchUsers(); fetchTasks(); }, [fetchMachines, fetchUsers, fetchTasks]);
-  useEffect(() => { fetchAllocs(); }, [fetchAllocs]);
-
-  /* machines CRUD */
-  const openNewMachine = () => { setEditId(null); setMForm({ ...emptyMachine }); setMachineModal(true); };
-  const openEditMachine = (m: Machine) => {
-    setEditId(m.id);
-    setMForm({ name: m.name, category: m.category, status: m.status, notes: m.notes || '' });
-    setMachineModal(true);
-  };
-
-  const saveMachine = async () => {
-    setSaving(true);
-    try {
-      const url = editId ? `${API}/api/v1/machines/${editId}` : `${API}/api/v1/machines`;
-      const method = editId ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: hdrs(), body: JSON.stringify(mForm) });
+      const res = await fetch(`${API}/api/v1/machines`, { headers });
       if (!res.ok) throw new Error();
-      showToast(L.saved);
-      setMachineModal(false);
+      const json = await res.json();
+      const raw = json.data ?? json;
+      let list: Machine[] = Array.isArray(raw) ? raw : [];
+
+      // client-side filter & search
+      if (search) {
+        const q = search.toLowerCase();
+        list = list.filter(m =>
+          (m.name || '').toLowerCase().includes(q) ||
+          (m.license_plate || '').toLowerCase().includes(q) ||
+          (m.brand || '').toLowerCase().includes(q) ||
+          (m.model || '').toLowerCase().includes(q)
+        );
+      }
+      if (filterCategory) list = list.filter(m => m.category === filterCategory);
+      if (filterStatus) list = list.filter(m => m.status === filterStatus);
+
+      setAllMachines(Array.isArray(json.data ?? json) ? (json.data ?? json) : []);
+      setTotal(list.length);
+
+      // client-side pagination
+      const start = (page - 1) * pageSize;
+      setMachines(list.slice(start, start + pageSize));
+    } catch {
+      showToast(t.error, 'err');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, search, filterCategory, filterStatus, token]);
+
+  const fetchAllocations = useCallback(async (machineId: string) => {
+    try {
+      const res = await fetch(`${API}/api/v1/machines/${machineId}/allocations`, { headers });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setAllocations(Array.isArray(json.data ?? json) ? (json.data ?? json) : []);
+    } catch {
+      setAllocations([]);
+    }
+  }, [token]);
+
+  const fetchDetail = useCallback(async (m: Machine) => {
+    setSelected(m);
+    setForm(machineToForm(m));
+    setEditing(false);
+    setTab('general');
+    setConfirmDelete(false);
+    fetchAllocations(m.id);
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, [fetchAllocations]);
+
+  useEffect(() => { fetchMachines(); }, [fetchMachines]);
+
+  /* ── CRUD ── */
+  async function saveMachine() {
+    try {
+      const method = selected ? 'PUT' : 'POST';
+      const url = selected
+        ? `${API}/api/v1/machines/${selected.id}`
+        : `${API}/api/v1/machines`;
+      const res = await fetch(url, { method, headers, body: JSON.stringify(form) });
+      if (!res.ok) throw new Error();
+      showToast(t.saved);
+      closeDetail();
       fetchMachines();
-    } catch { showToast(L.error, 'err'); }
-    setSaving(false);
-  };
+    } catch {
+      showToast(t.error, 'err');
+    }
+  }
 
-  const deleteMachine = async (id: string) => {
+  async function deleteMachine() {
+    if (!selected) return;
     try {
-      const res = await fetch(`${API}/api/v1/machines/${id}`, { method: 'DELETE', headers: hdrs() });
+      const res = await fetch(`${API}/api/v1/machines/${selected.id}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error();
-      showToast(L.deleted);
-      setConfirmDel(null);
+      showToast(t.deleted);
+      closeDetail();
       fetchMachines();
-    } catch { showToast(L.error, 'err'); }
-  };
+    } catch {
+      showToast(t.error, 'err');
+    }
+  }
 
-  /* alloc CRUD */
-  const openNewAlloc = () => {
-    setAForm({ ...emptyAlloc, date: allocDate });
-    setAllocModal(true);
-  };
-
-  const saveAlloc = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`${API}/api/v1/machines/allocations`, {
-        method: 'POST', headers: hdrs(), body: JSON.stringify(aForm),
-      });
-      if (!res.ok) throw new Error();
-      showToast(L.saved);
-      setAllocModal(false);
-      fetchAllocs();
-    } catch { showToast(L.error, 'err'); }
-    setSaving(false);
-  };
-
-  const deleteAlloc = async (id: string) => {
-    try {
-      const res = await fetch(`${API}/api/v1/machines/allocations/${id}`, { method: 'DELETE', headers: hdrs() });
-      if (!res.ok) throw new Error();
-      showToast(L.deleted);
-      fetchAllocs();
-    } catch { showToast(L.error, 'err'); }
-  };
-
-  /* ─── CSV import handler (machines) ─── */
-  async function handleMachineCsvImport(rows: Record<string, string>[]) {
+  /* ── CSV import ── */
+  async function handleCsvImport(rows: Record<string, string>[]) {
     let ok = 0, fail = 0;
     for (const row of rows) {
       try {
-        const payload: Record<string, string> = {
-          name: row.name,
-          category: row.category || 'Sonstiges',
-          status: STATUS_OPTIONS.includes(row.status as Machine['status'])
-            ? row.status
-            : 'AVAILABLE',
-          notes: row.notes || '',
-        };
         const res = await fetch(`${API}/api/v1/machines`, {
-          method: 'POST', headers: hdrs(), body: JSON.stringify(payload),
+          method: 'POST', headers,
+          body: JSON.stringify({
+            name: row.name,
+            type: row.type || undefined,
+            category: row.category || undefined,
+            license_plate: row.license_plate || undefined,
+            status: row.status || 'AVAILABLE',
+            department: row.department || undefined,
+            brand: row.brand || undefined,
+            model: row.model || undefined,
+            year: row.year ? parseInt(row.year, 10) : undefined,
+            serial_number: row.serial_number || undefined,
+            notes: row.notes || undefined,
+          }),
         });
         res.ok ? ok++ : fail++;
       } catch { fail++; }
     }
     await fetchMachines();
-    showToast(
-      `${ok} ${L.imported}${fail > 0 ? ` (${fail} failed)` : ''}`,
-      fail > 0 ? 'err' : 'ok',
-    );
+    showToast(`${ok} ${t.imported}${fail > 0 ? ` (${fail} failed)` : ''}`, fail > 0 ? 'err' : 'ok');
   }
 
-  /* filters */
-  const filteredMachines = machines.filter(m => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || m.name.toLowerCase().includes(q) || (m.category || '').toLowerCase().includes(q);
-    const matchCat = !filterCat || m.category === filterCat;
-    const matchStatus = !filterStatus || m.status === filterStatus;
-    return matchSearch && matchCat && matchStatus;
-  });
+  /* ── derived ── */
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const availableCount = useMemo(
+    () => allMachines.filter(m => m.status === 'AVAILABLE').length,
+    [allMachines],
+  );
 
-  const categories = [...new Set(machines.map(m => m.category).filter(Boolean))];
+  // unique categories from actual data (for filter dropdown)
+  const usedCategories = useMemo(() => {
+    const cats = new Set(allMachines.map(m => m.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [allMachines]);
 
-  /* helpers */
-  const userName = (id: string) => { const u = users.find(u => u.id === id); return u ? `${u.first_name} ${u.last_name}` : id.slice(0, 8); };
-  const machineName = (id: string) => machines.find(m => m.id === id)?.name || id.slice(0, 8);
-  const taskName = (id: string) => { const tk = tasks.find(tk => tk.id === id); return tk ? (tk.short_code || tk.name) : ''; };
-
-  /* ─── CSV export data (machines) ─── */
-  const csvMachineData = useMemo(() =>
-    filteredMachines.map(m => ({
+  const csvData = useMemo(
+    () => allMachines.map(m => ({
       name: m.name,
+      type: m.type || '',
       category: m.category || '',
+      license_plate: m.license_plate || '',
       status: m.status,
+      department: m.department || '',
+      brand: m.brand || '',
+      model: m.model || '',
+      year: m.year != null ? String(m.year) : '',
+      serial_number: m.serial_number || '',
       notes: m.notes || '',
     })),
-  [filteredMachines]);
+    [allMachines],
+  );
 
-  /* ─── CSV export data (allocations) ─── */
-  const csvAllocData = useMemo(() =>
-    allocs.map(a => ({
-      machine_name: machineName(a.machine_id),
-      employee_name: userName(a.user_id),
-      task_name: a.task_id ? taskName(a.task_id) : '',
-      date: a.date,
-      start_time: a.start_time || '',
-      end_time: a.end_time || '',
-      notes: a.notes || '',
-    })),
-  [allocs, machines, users, tasks]);
-
-  /* ─── derived colours ─── */
-  const gold = th.gold;
-  const inputBg = isDark ? '#1a1a3e' : '#faf7f2';
-
-  const modalOverlay: React.CSSProperties = {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 1000,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  };
-  const modalBox: React.CSSProperties = {
-    background: th.bgCard, borderRadius: 16, padding: 32, width: 500,
-    maxHeight: '85vh', overflowY: 'auto', border: `1px solid ${th.border}`,
-    boxShadow: '0 20px 60px rgba(0,0,0,.4)',
-  };
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '10px 14px', borderRadius: 8,
-    border: `1px solid ${th.border}`, background: inputBg, color: th.text,
-    fontSize: 14, outline: 'none', boxSizing: 'border-box',
-  };
-  const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: th.textDim, marginBottom: 4, display: 'block' };
-
-  /* stats */
-  const statAvail = machines.filter(m => m.status === 'AVAILABLE').length;
-  const statInUse = machines.filter(m => m.status === 'IN_USE').length;
-  const statMaint = machines.filter(m => m.status === 'MAINTENANCE').length;
-
-  /* ── if user has no view permission, render nothing ── */
   if (!canView) return null;
 
+  /* ────────────────── render ────────────────── */
   return (
-    <div style={{ background: th.bg, minHeight: '100vh', padding: '24px 32px', color: th.text, fontFamily: "'Inter','Segoe UI',sans-serif" }}>
-      {/* toast */}
+    <div style={{ padding: '24px 16px', maxWidth: 1400, margin: '0 auto', color: th.text }}>
+
+      {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', top: 20, right: 20, zIndex: 2000,
-          background: toast.type === 'err' ? '#6B3A3A' : (isDark ? '#2a4a2a' : '#e8f5e9'),
-          color: toast.type === 'err' ? '#fff' : th.text,
-          padding: '12px 24px', borderRadius: 10, fontWeight: 600,
-          boxShadow: '0 4px 20px rgba(0,0,0,.3)',
-        }}>{toast.msg}</div>
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          padding: '12px 24px', borderRadius: 10,
+          background: toast.type === 'err' ? '#e74c3c' : '#4ecdc4',
+          color: '#fff', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.25)',
+        }}>
+          {toast.msg}
+        </div>
       )}
 
-      {/* header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 12, marginBottom: 20,
+      }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{L.title}</h1>
-          <p style={{ margin: '4px 0 0', color: th.textDim, fontSize: 14 }}>
-            {L.total}: {machines.length} · {L.available}: {statAvail} · {L.inUse}: {statInUse} · {L.maintenance}: {statMaint}
+          <h1 style={{ margin: 0, fontSize: 26, color: th.text }}>{t.title}</h1>
+          <p style={{ margin: '4px 0 0', color: dimText, fontSize: 14 }}>
+            {t.total}: {allMachines.length} · {t.available}: {availableCount}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {tab === 'machines' && (
+        {!panelOpen && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <CsvToolbar
-              columns={csvMachineColumns(L)}
-              data={csvMachineData}
+              columns={csvColumns(t)}
+              data={csvData}
               filename={`machines_${new Date().toISOString().split('T')[0]}`}
-              exampleRows={CSV_MACHINE_EXAMPLES}
-              formatters={{
-                status: (v: string) => STATUS_OPTIONS.includes(v as Machine['status']) ? v : 'AVAILABLE',
-              }}
-              validators={{
-                name: (v: string) => (v ? null : 'Name is required'),
-              }}
+              exampleRows={CSV_EXAMPLE_ROWS}
+              validators={{ name: (v: string) => (v ? null : 'Name is required') }}
               canImport={canEdit}
-              onImport={handleMachineCsvImport}
+              onImport={handleCsvImport}
             />
-          )}
-          {tab === 'allocations' && (
-            <CsvToolbar
-              columns={csvAllocColumns(L)}
-              data={csvAllocData}
-              filename={`allocations_${allocDate}`}
-              exampleRows={CSV_ALLOC_EXAMPLES}
-              canImport={false}
-              onImport={async () => {}}
-            />
-          )}
-          {canEdit && tab === 'machines' && (
-            <button onClick={openNewMachine} style={{
-              background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
-              border: 'none', borderRadius: 10, padding: '12px 24px', fontWeight: 700,
-              cursor: 'pointer', fontSize: 15, boxShadow: '0 4px 15px rgba(200,169,110,.4)',
-            }}>+ {L.addMachine}</button>
-          )}
-          {canEdit && tab === 'allocations' && (
-            <button onClick={openNewAlloc} style={{
-              background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
-              border: 'none', borderRadius: 10, padding: '12px 24px', fontWeight: 700,
-              cursor: 'pointer', fontSize: 15, boxShadow: '0 4px 15px rgba(200,169,110,.4)',
-            }}>+ {L.addAlloc}</button>
-          )}
-        </div>
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setSelected(null);
+                  setForm(machineToForm({
+                    id: '', name: '', status: 'AVAILABLE', created_at: '',
+                  }));
+                  setEditing(true);
+                  setTab('general');
+                }}
+                style={btnPrimary}
+              >
+                {t.add}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {(['machines', 'allocations'] as const).map(tb => (
-          <button key={tb} onClick={() => setTab(tb)}
-            style={{
-              padding: '10px 22px', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer',
-              border: 'none', transition: 'all .15s',
-              background: tab === tb ? `linear-gradient(135deg, ${gold}, #b8956a)` : (isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)'),
-              color: tab === tb ? '#fff' : th.textDim,
-            }}
-          >{tb === 'machines' ? L.machines : L.allocations}</button>
-        ))}
-      </div>
-
-      {/* ─── MACHINES TAB ─── */}
-      {tab === 'machines' && (
+      {/* ═══════════════ LIST VIEW ═══════════════ */}
+      {!panelOpen && (
         <>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-            <input placeholder={L.search} value={search} onChange={e => setSearch(e.target.value)}
-              style={{ flex: 1, minWidth: 200, padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14, outline: 'none' }} />
-            <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">{L.allCategories}</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+            <input
+              placeholder={t.search}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              style={{ ...inputStyle, maxWidth: 260 }}
+            />
+            <select
+              value={filterCategory}
+              onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}
+              style={{ ...selectStyle, maxWidth: 200 }}
+            >
+              <option value="">{t.allCategories}</option>
+              {usedCategories.map(cat => (
+                <option key={cat} value={cat}>{translateCategory(cat, t)}</option>
+              ))}
             </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${th.border}`, background: inputBg, color: th.text, fontSize: 14 }}>
-              <option value="">{L.allStatuses}</option>
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+            <select
+              value={filterStatus}
+              onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+              style={{ ...selectStyle, maxWidth: 180 }}
+            >
+              <option value="">{t.allStatuses}</option>
+              {STATUSES.map(s => (
+                <option key={s} value={s}>{translateStatus(s, t)}</option>
+              ))}
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {filteredMachines.length === 0 && (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 40, color: th.textDim }}>{L.noMachines}</div>
-            )}
-            {filteredMachines.map(m => (
-              <div key={m.id}
-                onClick={() => canEdit && openEditMachine(m)}
-                style={{
-                  background: th.bgCard, borderRadius: 14, padding: 20,
-                  border: `1px solid ${th.border}`, cursor: canEdit ? 'pointer' : 'default',
-                  transition: 'all .15s', position: 'relative', overflow: 'hidden',
-                }}
-                onMouseEnter={e => { if (canEdit) e.currentTarget.style.borderColor = gold; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = th.border; }}
-              >
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: statusColor(m.status) }} />
+          {loading && (
+            <div style={{ textAlign: 'center', padding: 40, color: dimText }}>⏳ {t.loading}</div>
+          )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 4 }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{m.name}</h3>
-                    {m.category && <p style={{ margin: '4px 0 0', fontSize: 12, color: th.textDim }}>{m.category}</p>}
-                  </div>
-                  <span style={{
-                    padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-                    background: `${statusColor(m.status)}22`, color: statusColor(m.status),
-                  }}>{statusLabel(m.status)}</span>
-                </div>
-
-                {m.notes && <p style={{ margin: '12px 0 0', fontSize: 13, color: th.textDim, lineHeight: 1.4 }}>{m.notes}</p>}
-
-                {(() => {
-                  const todayAllocs = allocs.filter(a => a.machine_id === m.id);
-                  if (todayAllocs.length === 0) return null;
-                  return (
-                    <div style={{ marginTop: 12, borderTop: `1px solid ${th.border}`, paddingTop: 10 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: gold }}>{L.today}:</span>
-                      {todayAllocs.map(a => (
-                        <div key={a.id} style={{ fontSize: 12, color: th.textDim, marginTop: 4 }}>
-                          {userName(a.user_id)} {a.start_time && a.end_time ? `${a.start_time}–${a.end_time}` : ''}
-                          {a.task_id ? ` · ${taskName(a.task_id)}` : ''}
-                        </div>
+          {!loading && (
+            <>
+              {machines.length === 0 ? (
+                <p style={{ color: dimText, textAlign: 'center', padding: 40 }}>{t.noMachines}</p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                      <tr>
+                        {[t.name, t.category, t.type, t.licensePlate, t.department, t.status].map(h => (
+                          <th key={h} style={thStyle}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {machines.map(m => (
+                        <tr
+                          key={m.id}
+                          onClick={() => fetchDetail(m)}
+                          style={{ cursor: 'pointer', transition: 'background .15s' }}
+                          onMouseEnter={(e) =>
+                            ((e.currentTarget as HTMLElement).style.background = isDark
+                              ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.02)')
+                          }
+                          onMouseLeave={(e) =>
+                            ((e.currentTarget as HTMLElement).style.background = 'transparent')
+                          }
+                        >
+                          <td style={{ ...tdStyle, color: th.text, fontWeight: 600 }}>
+                            {m.name}
+                            {m.brand || m.model ? (
+                              <div style={{ fontSize: 12, color: dimText, fontWeight: 400 }}>
+                                {[m.brand, m.model].filter(Boolean).join(' ')}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={tdStyle}>{translateCategory(m.category, t)}</td>
+                          <td style={tdStyle}>{translateType(m.type, t)}</td>
+                          <td style={tdStyle}>{m.license_plate || '–'}</td>
+                          <td style={tdStyle}>{translateDept(m.department, t)}</td>
+                          <td style={{ padding: '10px 12px', borderBottom: `1px solid ${th.border}` }}>
+                            <span style={{
+                              display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+                              fontSize: 12, fontWeight: 600,
+                              background: `${STATUS_COLORS[m.status] || '#95a5a6'}22`,
+                              color: STATUS_COLORS[m.status] || '#95a5a6',
+                            }}>
+                              {STATUS_ICONS[m.status] || ''} {translateStatus(m.status, t)}                            
+                            </span>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  );
-                })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-                {canDelete && (
-                  <div style={{ marginTop: 12, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                    {confirmDel === m.id ? (
-                      <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
-                        <button onClick={() => deleteMachine(m.id)}
-                          style={{ background: '#6B3A3A', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                          ✓ {L.delete}</button>
-                        <button onClick={() => setConfirmDel(null)}
-                          style={{ background: 'transparent', color: th.textDim, border: `1px solid ${th.border}`, borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontSize: 11 }}>
-                          {L.cancel}</button>
-                      </span>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div style={{
+                  display: 'flex', justifyContent: 'center', alignItems: 'center',
+                  gap: 12, marginTop: 16,
+                }}>
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => p - 1)}
+                    style={paginationBtn(page <= 1)}
+                  >
+                    {t.prev}
+                  </button>
+                  <span style={{ color: dimText, fontSize: 14 }}>
+                    {t.page} {page} {t.of} {totalPages}
+                  </span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    style={paginationBtn(page >= totalPages)}
+                  >
+                    {t.next}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* ═══════════════ DETAIL / EDIT PANEL ═══════════════ */}
+      {panelOpen && (
+        <div ref={panelRef}>
+          <button onClick={closeDetail} style={btnBack}>{t.back}</button>
+
+          <div style={{
+            padding: 24, borderRadius: 14,
+            background: panelBg, border: `1px solid ${th.border}`,
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: 16, flexWrap: 'wrap', gap: 8,
+            }}>
+              <h2 style={{ margin: 0, color: th.text }}>
+                {editing
+                  ? (form.name || (selected ? selected.name : t.add))
+                  : (selected?.name || '')}
+              </h2>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {selected && !editing && canEdit && (
+                  <>
+                    <button
+                      onClick={() => { setForm(machineToForm(selected)); setEditing(true); }}
+                      style={btnPrimary}
+                    >
+                      {t.edit}
+                    </button>
+                    {canDelete && (
+                      confirmDelete ? (
+                        <>
+                          <span style={{ color: th.text, alignSelf: 'center', fontSize: 13 }}>
+                            {t.confirmDelete}
+                          </span>
+                          <button onClick={deleteMachine} style={btnDanger}>{t.yes}</button>
+                          <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>{t.no}</button>
+                        </>
+                      ) : (
+                        <button onClick={() => setConfirmDelete(true)} style={btnDanger}>{t.delete}</button>
+                      )
+                    )}
+                  </>
+                )}
+                {editing && (
+                  <>
+                    <button onClick={saveMachine} style={btnPrimary}>{t.save}</button>
+                    <button
+                      onClick={() => {
+                        if (selected) { setForm(machineToForm(selected)); setEditing(false); }
+                        else { closeDetail(); }
+                      }}
+                      style={btnSecondary}
+                    >
+                      {t.cancel}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Status + category badge (view mode) */}
+            {selected && !editing && (
+              <div style={{ marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{
+                  display: 'inline-block', padding: '4px 12px', borderRadius: 20,
+                  fontSize: 12, fontWeight: 600,
+                  background: `${STATUS_COLORS[selected.status] || '#95a5a6'}22`,
+                  color: STATUS_COLORS[selected.status] || '#95a5a6',
+                }}>
+                  {STATUS_ICONS[selected.status] || ''} {translateStatus(selected.status, t)}
+                </span>
+                {selected.category && (
+                  <span style={{
+                    display: 'inline-block', padding: '4px 12px', borderRadius: 20,
+                    fontSize: 12, fontWeight: 600,
+                    background: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)',
+                    color: dimText,
+                  }}>
+                    {translateCategory(selected.category, t)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Stats row (view mode) */}
+            {selected && !editing && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                {[
+                  { label: t.type, value: translateType(selected.type, t) },
+                  { label: t.department, value: translateDept(selected.department, t) },
+                  { label: t.licensePlate, value: selected.license_plate || '–' },
+                  {
+                    label: t.year,
+                    value: selected.year ? String(selected.year) : '–',
+                  },
+                ].map(s => (
+                  <div key={s.label} style={statCard}>
+                    <div style={{ fontSize: 12, color: dimText }}>{s.label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: th.text }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${th.border}` }}>
+              {(['general', 'allocations', 'notes'] as const).map(tb => (
+                <button key={tb} onClick={() => setTab(tb)} style={tabBtnStyle(tab === tb)}>
+                  {t[tb === 'notes' ? 'notesTab' : tb]}
+                </button>
+              ))}
+            </div>
+
+            {/* ── General Tab ── */}
+            {tab === 'general' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {([
+                  ['name', t.name, 'text'],
+                  ['type', t.type, 'select-type'],
+                  ['category', t.category, 'select-category'],
+                  ['brand', t.brand, 'text'],
+                  ['model', t.model, 'text'],
+                  ['year', t.year, 'number'],
+                  ['serial_number', t.serialNumber, 'text'],
+                  ['license_plate', t.licensePlate, 'text'],
+                  ['department', t.department, 'select-dept'],
+                  ['status', t.status, 'select-status'],
+                ] as [string, string, string][]).map(([key, label, inputType]) => (
+                  <div key={key}>
+                    <label style={labelStyle}>{label}</label>
+                    {editing ? (
+                      inputType === 'select-status' ? (
+                        <select
+                          value={(form as any)[key] || ''}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          {STATUSES.map(s => (
+                            <option key={s} value={s}>{translateStatus(s, t)}</option>
+                          ))}
+                        </select>
+                      ) : inputType === 'select-category' ? (
+                        <select
+                          value={(form as any)[key] || ''}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          <option value="">–</option>
+                          {CATEGORIES.map(c => (
+                            <option key={c} value={c}>{translateCategory(c, t)}</option>
+                          ))}
+                        </select>
+                      ) : inputType === 'select-type' ? (
+                        <select
+                          value={(form as any)[key] || ''}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          <option value="">–</option>
+                          {TYPES.map(tp => (
+                            <option key={tp} value={tp}>{translateType(tp, t)}</option>
+                          ))}
+                        </select>
+                      ) : inputType === 'select-dept' ? (
+                        <select
+                          value={(form as any)[key] || ''}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })}
+                          style={selectStyle}
+                        >
+                          <option value="">–</option>
+                          <option value="GARTEN_TIEFBAU">{translateDept('GARTEN_TIEFBAU', t)}</option>
+                          <option value="UNTERHALT">{translateDept('UNTERHALT', t)}</option>
+                        </select>
+                      ) : inputType === 'number' ? (
+                        <input
+                          type="number"
+                          value={(form as any)[key] ?? ''}
+                          onChange={e => setForm({ ...form, [key]: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                          style={inputStyle}
+                        />
+                      ) : (
+                        <input
+                          value={(form as any)[key] || ''}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })}
+                          style={inputStyle}
+                        />
+                      )
                     ) : (
-                      <button onClick={() => setConfirmDel(m.id)}
-                        style={{ background: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑</button>
+                      <p style={{ margin: '4px 0 0', color: th.text, fontSize: 14 }}>
+                        {key === 'status' ? translateStatus((selected as any)?.[key] || '', t)
+                          : key === 'category' ? translateCategory((selected as any)?.[key], t)
+                          : key === 'type' ? translateType((selected as any)?.[key], t)
+                          : key === 'department' ? translateDept((selected as any)?.[key], t)
+                          : (selected as any)?.[key] || '–'}
+                      </p>
                     )}
                   </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Allocations Tab ── */}
+            {tab === 'allocations' && (
+              <div>
+                {allocations.length === 0 ? (
+                  <p style={{ color: dimText, textAlign: 'center', padding: 20 }}>–</p>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                      <thead>
+                        <tr>
+                          {[t.date, t.task, t.user, t.startTime, t.endTime].map(h => (
+                            <th key={h} style={thStyle}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allocations.map(a => (
+                          <tr key={a.id}>
+                            <td style={tdStyle}>
+                              {new Date(a.date).toLocaleDateString(locale)}
+                            </td>
+                            <td style={{ ...tdStyle, color: th.text, fontWeight: 600 }}>
+                              {a.task ? `${a.task.code || ''} ${a.task.name || ''}`.trim() : '–'}
+                            </td>
+                            <td style={tdStyle}>
+                              {a.user ? `${a.user.first_name} ${a.user.last_name}` : '–'}
+                            </td>
+                            <td style={tdStyle}>{a.start_time || '–'}</td>
+                            <td style={tdStyle}>{a.end_time || '–'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-        </>
-      )}
+            )}
 
-      {/* ─── ALLOCATIONS TAB ─── */}
-      {tab === 'allocations' && (
-        <>
-          <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={() => { const d = new Date(allocDate); d.setDate(d.getDate() - 1); setAllocDate(d.toISOString().split('T')[0]); }}
-              style={{ background: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', color: th.text, fontSize: 18 }}>‹</button>
-            <input type="date" value={allocDate} onChange={e => setAllocDate(e.target.value)}
-              style={{ ...inputStyle, width: 'auto' }} />
-            <button onClick={() => { const d = new Date(allocDate); d.setDate(d.getDate() + 1); setAllocDate(d.toISOString().split('T')[0]); }}
-              style={{ background: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', color: th.text, fontSize: 18 }}>›</button>
-            <button onClick={() => setAllocDate(new Date().toISOString().split('T')[0])}
-              style={{ background: 'transparent', border: `1px solid ${th.border}`, borderRadius: 8, padding: '8px 14px', cursor: 'pointer', color: gold, fontWeight: 600, fontSize: 13 }}>{L.today}</button>
-          </div>
-
-          <div style={{ background: th.bgCard, borderRadius: 14, border: `1px solid ${th.border}`, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: th.bgHeader, color: '#fff' }}>
-                  {[L.machine, L.employee, L.task, L.startTime, L.endTime, L.notes, ''].map((h, i) => (
-                    <th key={i} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, fontSize: 13 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {allocs.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: th.textDim }}>{L.noAllocs}</td></tr>
+            {/* ── Notes Tab ── */}
+            {tab === 'notes' && (
+              <div>
+                {editing ? (
+                  <textarea
+                    value={form.notes || ''}
+                    onChange={e => setForm({ ...form, notes: e.target.value })}
+                    rows={8}
+                    style={{ ...inputStyle, resize: 'vertical' }}
+                  />
+                ) : (
+                  <p style={{ color: th.text, fontSize: 14, whiteSpace: 'pre-wrap' }}>
+                    {selected?.notes || '–'}
+                  </p>
                 )}
-                {allocs.map((a, i) => (
-                  <tr key={a.id} style={{ background: i % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)') }}>
-                    <td style={{ padding: '10px 16px', fontWeight: 600 }}>{machineName(a.machine_id)}</td>
-                    <td style={{ padding: '10px 16px' }}>{userName(a.user_id)}</td>
-                    <td style={{ padding: '10px 16px', color: gold, fontWeight: 600 }}>{a.task_id ? taskName(a.task_id) : '–'}</td>
-                    <td style={{ padding: '10px 16px' }}>{a.start_time || '–'}</td>
-                    <td style={{ padding: '10px 16px' }}>{a.end_time || '–'}</td>
-                    <td style={{ padding: '10px 16px', color: th.textDim, fontSize: 13 }}>{a.notes || '–'}</td>
-                    <td style={{ padding: '10px 16px' }}>
-                      {canDelete && (
-                        <button onClick={() => deleteAlloc(a.id)}
-                          style={{ background: 'transparent', color: '#f44336', border: 'none', cursor: 'pointer', fontSize: 14 }}>🗑</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {/* ─── MACHINE MODAL ─── */}
-      {machineModal && (
-        <div style={modalOverlay} onClick={() => setMachineModal(false)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: gold }}>
-              {editId ? L.editMachine : L.addMachine}
-            </h2>
-            <div>
-              <label style={labelStyle}>{L.name}</label>
-              <input value={mForm.name} onChange={e => setMForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} />
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.category}</label>
-              <select value={mForm.category} onChange={e => setMForm(f => ({ ...f, category: e.target.value }))}
-                style={inputStyle}>
-                <option value="">–</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.status}</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {STATUS_OPTIONS.map(s => (
-                  <button key={s} onClick={() => setMForm(f => ({ ...f, status: s }))}
-                    style={{
-                      flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 12,
-                      border: mForm.status === s ? `2px solid ${statusColor(s)}` : `1px solid ${th.border}`,
-                      background: mForm.status === s ? `${statusColor(s)}22` : 'transparent',
-                      color: mForm.status === s ? statusColor(s) : th.text, transition: 'all .15s', minWidth: 90,
-                    }}>{statusLabel(s)}</button>
-                ))}
               </div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.notes}</label>
-              <textarea value={mForm.notes} onChange={e => setMForm(f => ({ ...f, notes: e.target.value }))}
-                rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28 }}>
-              <button onClick={() => setMachineModal(false)}
-                style={{ padding: '10px 24px', borderRadius: 8, border: `1px solid ${th.border}`, background: 'transparent', color: th.text, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                {L.cancel}</button>
-              <button onClick={saveMachine} disabled={saving}
-                style={{
-                  padding: '10px 24px', borderRadius: 8, border: 'none',
-                  background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
-                  cursor: saving ? 'wait' : 'pointer', fontWeight: 700, fontSize: 14,
-                  opacity: saving ? .7 : 1, boxShadow: '0 4px 15px rgba(200,169,110,.4)',
-                }}>{saving ? '...' : L.save}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── ALLOCATION MODAL ─── */}
-      {allocModal && (
-        <div style={modalOverlay} onClick={() => setAllocModal(false)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: gold }}>{L.addAlloc}</h2>
-            <div>
-              <label style={labelStyle}>{L.machine}</label>
-              <select value={aForm.machine_id} onChange={e => setAForm(f => ({ ...f, machine_id: e.target.value }))} style={inputStyle}>
-                <option value="">–</option>
-                {machines.filter(m => m.status !== 'OUT_OF_SERVICE').map(m => (
-                  <option key={m.id} value={m.id}>{m.name} ({m.category})</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.employee}</label>
-              <select value={aForm.user_id} onChange={e => setAForm(f => ({ ...f, user_id: e.target.value }))} style={inputStyle}>
-                <option value="">–</option>
-                {users.map(u => (
-                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.task} (optional)</label>
-              <select value={aForm.task_id} onChange={e => setAForm(f => ({ ...f, task_id: e.target.value }))} style={inputStyle}>
-                <option value="">–</option>
-                {tasks.map(tk => (
-                  <option key={tk.id} value={tk.id}>{tk.short_code || tk.name}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.date}</label>
-              <input type="date" value={aForm.date} onChange={e => setAForm(f => ({ ...f, date: e.target.value }))} style={inputStyle} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
-              <div>
-                <label style={labelStyle}>{L.startTime}</label>
-                <input type="time" value={aForm.start_time} onChange={e => setAForm(f => ({ ...f, start_time: e.target.value }))} style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>{L.endTime}</label>
-                <input type="time" value={aForm.end_time} onChange={e => setAForm(f => ({ ...f, end_time: e.target.value }))} style={inputStyle} />
-              </div>
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <label style={labelStyle}>{L.notes}</label>
-              <textarea value={aForm.notes} onChange={e => setAForm(f => ({ ...f, notes: e.target.value }))} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 28 }}>
-              <button onClick={() => setAllocModal(false)}
-                style={{ padding: '10px 24px', borderRadius: 8, border: `1px solid ${th.border}`, background: 'transparent', color: th.text, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                {L.cancel}</button>
-              <button onClick={saveAlloc} disabled={saving || !aForm.machine_id || !aForm.user_id}
-                style={{
-                  padding: '10px 24px', borderRadius: 8, border: 'none',
-                  background: `linear-gradient(135deg, ${gold}, #b8956a)`, color: '#fff',
-                  cursor: (saving || !aForm.machine_id || !aForm.user_id) ? 'not-allowed' : 'pointer',
-                  fontWeight: 700, fontSize: 14,
-                  opacity: (saving || !aForm.machine_id || !aForm.user_id) ? .5 : 1,
-                  boxShadow: '0 4px 15px rgba(200,169,110,.4)',
-                }}>{saving ? '...' : L.save}</button>
-            </div>
+            )}
           </div>
         </div>
       )}

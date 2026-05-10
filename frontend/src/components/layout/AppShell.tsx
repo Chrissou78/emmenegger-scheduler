@@ -35,8 +35,10 @@ const NAV_ITEMS: NavItem[] = [
   // ─ HR & Admin
   { path: '/hr',         labelKey: 'navHR',         icon: '🏥', permissions: ['hr.view'],           section: 'admin' },
   { path: '/admin',      labelKey: 'navAdmin',      icon: '👥', permissions: ['admin.users'],       section: 'admin' },
+  { path: '/settings', labelKey: 'navSettings', icon: '⚙️', permissions: ['admin.roles'], section: 'admin' },
   // ─ Always visible
   { path: '/profile',    labelKey: 'navProfile',    icon: '👤' },
+  
 ];
 
 /* ────────────────────── section labels ────────────────────── */

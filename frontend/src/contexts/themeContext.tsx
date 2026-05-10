@@ -74,8 +74,8 @@ export const translations: Record<Lang, Record<string, any>> = {
     darkMode: 'Dunkelmodus', lightMode: 'Hellmodus', language: 'Sprache',
     navSchedule: 'Disposition', navMachines: 'Maschinen', navTasks: 'Aufträge',
     navCustomers: 'Kunden', navQuotations: 'Offerten', navInvoices: 'Rechnungen',
-    navReports: 'Meine Woche', navStats: 'Statistiken', navAdmin: 'Benutzerverwaltung',
-    navHR: 'Personal', navProfile: 'Profil',
+    navReports: 'Meine Woche', navStats: 'Statistiken', navAdmin: 'Administration',
+    navSettings: 'Einstellungen', navHR: 'Personal', navProfile: 'Profil',
   },
   en: {
     brand: 'Emmenegger', sub: 'Scheduling & Planning',
@@ -93,8 +93,8 @@ export const translations: Record<Lang, Record<string, any>> = {
     darkMode: 'Dark mode', lightMode: 'Light mode', language: 'Language',
     navSchedule: 'Schedule', navMachines: 'Machines', navTasks: 'Tasks',
     navCustomers: 'Customers', navQuotations: 'Quotations', navInvoices: 'Invoices',
-    navReports: 'My Week', navStats: 'Statistics', navAdmin: 'User Management',
-    navHR: 'HR', navProfile: 'Profile',
+    navReports: 'My Week', navStats: 'Statistics', navAdmin: 'Administration',
+    navSettings: 'Settings', navHR: 'HR', navProfile: 'Profile',
   },
   fr: {
     brand: 'Emmenegger', sub: 'Disposition & Planification',
@@ -112,8 +112,8 @@ export const translations: Record<Lang, Record<string, any>> = {
     darkMode: 'Mode sombre', lightMode: 'Mode clair', language: 'Langue',
     navSchedule: 'Disposition', navMachines: 'Machines', navTasks: 'Tâches',
     navCustomers: 'Clients', navQuotations: 'Devis', navInvoices: 'Factures',
-    navReports: 'Ma Semaine', navStats: 'Statistiques', navAdmin: 'Gestion des utilisateurs',
-    navHR: 'RH', navProfile: 'Profil',
+    navReports: 'Ma Semaine', navStats: 'Statistiques', navAdmin: 'Administration',
+    navSettings: 'Paramètres', navHR: 'RH', navProfile: 'Profil',
   },
   pt: {
     brand: 'Emmenegger', sub: 'Disposição & Planejamento',
@@ -131,8 +131,8 @@ export const translations: Record<Lang, Record<string, any>> = {
     darkMode: 'Modo escuro', lightMode: 'Modo claro', language: 'Idioma',
     navSchedule: 'Disposição', navMachines: 'Máquinas', navTasks: 'Tarefas',
     navCustomers: 'Clientes', navQuotations: 'Orçamentos', navInvoices: 'Faturas',
-    navReports: 'Minha Semana', navStats: 'Estatísticas', navAdmin: 'Gestão de utilizadores',
-    navHR: 'RH', navProfile: 'Perfil',
+    navReports: 'Minha Semana', navStats: 'Estatísticas', navAdmin: 'Administration',
+    navSettings: 'Configurações', navHR: 'RH', navProfile: 'Perfil',
   },
 };
 

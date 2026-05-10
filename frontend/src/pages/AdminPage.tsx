@@ -14,6 +14,15 @@ import {
 import { RolePermissionMatrix } from "../components/RolePermissionMatrix";
 import { useRolesStore } from "../store/rolesStore";
 
+function normalizeRole(raw: string): Role {
+  const upper = (raw || '').toUpperCase();
+  switch (upper) {
+    case 'GLOBAL_MANAGER': return 'ADMIN';
+    case 'LOCAL_MANAGER':  return 'MANAGER';
+    case 'ARBEITER':       return 'EMPLOYEE';
+    default:               return (upper as Role) || 'EMPLOYEE';
+  }
+}
 /* ───────────────────── API ───────────────────── */
 const API = import.meta.env.VITE_API_URL ?? "";
 
@@ -131,7 +140,7 @@ interface MachineForm {
   notes: string;
 }
 interface TaskForm {
-  title: string;
+  name: string;
   description: string;
   status: string;
   priority: string;
@@ -162,7 +171,7 @@ const EMPTY_MACHINE: MachineForm = {
   status: "AVAILABLE", department: "", notes: "",
 };
 const EMPTY_TASK: TaskForm = {
-  title: "", description: "", status: "OPEN", priority: "MEDIUM",
+  name: "", description: "", status: "OPEN", priority: "MEDIUM",
   department: "", assigned_to: "", customer_id: "", start_date: "", end_date: "", notes: "",
 };
 
@@ -360,7 +369,7 @@ export default function AdminPage() {
 
   /* ── Permissions ── */
   const perms = useMemo(() => {
-    const role: Role = user?.role || "EMPLOYEE";
+    const role = normalizeRole(user?.role || '');
     return resolvePermissions(role, user?.custom_permissions, permissionMap);
   }, [user, permissionMap]);
 
@@ -635,7 +644,7 @@ export default function AdminPage() {
   const openCreateTask = () => { setTaskForm({ ...EMPTY_TASK }); setEditId(null); setModal("task"); };
   const openEditTask = (tk: Task) => {
     setTaskForm({
-      title: tk.title, description: tk.description ?? "", status: tk.status ?? "OPEN",
+      name: tk.title, description: tk.description ?? "", status: tk.status ?? "OPEN",
       priority: tk.priority ?? "MEDIUM", department: tk.department ?? "",
       assigned_to: tk.assigned_to ?? "", customer_id: tk.customer_id ?? "",
       start_date: tk.start_date ?? "", end_date: tk.end_date ?? "", notes: tk.notes ?? "",
@@ -1428,7 +1437,7 @@ export default function AdminPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={sLabel}>{t.title} *</label>
-                <input style={sInput} value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} />
+                <input style={sInput} value={taskForm.name} onChange={(e) => setTaskForm({ ...taskForm, name: e.target.value })} />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={sLabel}>{t.description}</label>

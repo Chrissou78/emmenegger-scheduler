@@ -11,6 +11,16 @@ import {
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
+function normalizeRole(raw: string): Role {
+  const upper = (raw || '').toUpperCase();
+  switch (upper) {
+    case 'GLOBAL_MANAGER': return 'ADMIN';
+    case 'LOCAL_MANAGER':  return 'MANAGER';
+    case 'ARBEITER':       return 'EMPLOYEE';
+    default:               return (upper as Role) || 'EMPLOYEE';
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -402,7 +412,7 @@ export default function HRPage() {
   /* ---- permissions ---- */
   const { permissionMap } = useRolesStore();
   const perms = useMemo(() => {
-    const role: Role = user?.role || "EMPLOYEE";
+    const role = normalizeRole(user?.role || '');
     return resolvePermissions(role, user?.custom_permissions, permissionMap);
   }, [user, permissionMap]);
 
@@ -478,7 +488,7 @@ export default function HRPage() {
       if (search) params.append("search", search);
       if (filterDept) params.append("department", filterDept);
       if (filterContract) params.append("contract_type", filterContract);
-      const res = await fetch(`${API}/api/v1/hr/profiles?${params}`, {
+      const res = await fetch(`${API}/api/v1/users?${params}`, {
         headers: headers(),
       });
       const json = await res.json();
@@ -494,7 +504,7 @@ export default function HRPage() {
 
   const fetchDetail = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/hr/profiles/${id}`, {
+      const res = await fetch(`${API}/api/v1/users/${id}`, {
         headers: headers(),
       });
       const json = await res.json();
@@ -511,7 +521,7 @@ export default function HRPage() {
     if (!form) return;
     setSaving(true);
     try {
-      const url = `${API}/api/v1/hr/profiles/${form.id}`;
+      const url = `${API}/api/v1/users/${form.id}`;
       const res = await fetch(url, {
         method: "PUT",
         headers: headers(),
