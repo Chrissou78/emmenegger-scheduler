@@ -307,5 +307,17 @@
   "subject": "Oggetto",
   "completed": "Completato",
   "editActivity": "Modifica attività",
-  "editOpportunity": "Modifica opportunità"
+  "editOpportunity": "Modifica opportunità",
+  "exportCsv": "Esporta CSV",
+  "importCsv": "Importa CSV",
+  "csvExample": "Esempio CSV",
+  "imported": "Importato",
+  "items": "elementi",
+  "macroView": "Vista macro",
+  "detailView": "Vista dettagliata",
+  "expandAll": "Espandi tutto",
+  "collapseAll": "Comprimi tutto",
+  "teamOf": "Squadra di",
+  "allRoles": "Tutti i ruoli",
+  "navCRM": "CRM"
 }

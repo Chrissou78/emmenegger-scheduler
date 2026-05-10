@@ -307,5 +307,17 @@
   "subject": "Onderwerp",
   "completed": "Voltooid",
   "editActivity": "Activiteit bewerken",
-  "editOpportunity": "Kans bewerken"
+  "editOpportunity": "Kans bewerken",
+  "exportCsv": "CSV exporteren",
+  "importCsv": "CSV importeren",
+  "csvExample": "CSV voorbeeld",
+  "imported": "Geïmporteerd",
+  "items": "items",
+  "macroView": "Macroweergave",
+  "detailView": "Detailweergave",
+  "expandAll": "Alles uitklappen",
+  "collapseAll": "Alles inklappen",
+  "teamOf": "Team van",
+  "allRoles": "Alle rollen",
+  "navCRM": "CRM"
 }

@@ -25,19 +25,19 @@ export const ROLE_HIERARCHY: Record<string, number> = {
 
 export function getHierarchyField(role: string): string | null {
   const r = (role || '').toUpperCase();
-  if (r === 'CEO') return null;                    // CEO has no superior
-  if (r === 'ADMIN') return 'ceo_id';              // Executive → CEO
-  if (r === 'MANAGER') return 'executive_id';      // Team Leader → Executive
-  return 'team_leader_id';                          // Employee → Team Leader
+  if (r === 'CEO') return null;
+  if (r === 'ADMIN') return 'ceo_id';
+  if (r === 'MANAGER') return 'executive_id';
+  return 'team_leader_id';
 }
 
 export function getRoleTier(role: string): number {
   switch (role) {
     case 'CEO': return 4;
-    case 'ADMIN': case 'GLOBAL_MANAGER': return 3;   // executives
-    case 'HR': case 'FINANCE': case 'SALES': return 3; // non-operational executives
-    case 'MANAGER': case 'LOCAL_MANAGER': return 2;    // team leaders
-    default: return 1;                                  // employees
+    case 'ADMIN': case 'GLOBAL_MANAGER': return 3;
+    case 'HR': case 'FINANCE': case 'SALES': return 3;
+    case 'MANAGER': case 'LOCAL_MANAGER': return 2;
+    default: return 1;
   }
 }
 
@@ -53,6 +53,7 @@ export function getViewTier(role: string): 'ceo' | 'executive' | 'teamleader' | 
   }
 }
 
+/* ★ FIX: Added 'crm' to the interface */
 export interface NavAccess {
   schedule: boolean;
   machines: boolean;
@@ -60,6 +61,7 @@ export interface NavAccess {
   customers: boolean;
   quotations: boolean;
   invoices: boolean;
+  crm: boolean;
   myWeek: boolean;
   stats: boolean;
   hr: boolean;
@@ -76,57 +78,58 @@ export function getNavAccess(
   const operational = isOperational(departments);
   const isHR = departments.includes('HR');
   const isFinance = departments.includes('FINANCE');
-  const isSales = departments.includes('SALES');
   const r = (role || '').toUpperCase();
 
   return {
-    // Schedule: CEO, operational executives, operational team leaders
     schedule:
-      tier === 'ceo' ||
-      (tier === 'executive' && operational) ||
-      (tier === 'teamleader' && operational),
+      r !== 'SALES' && r !== 'HR' && r !== 'FINANCE' && (
+        tier === 'ceo' ||
+        (tier === 'executive' && operational) ||
+        (tier === 'teamleader' && operational)
+      ),
 
-    // Machines: CEO, operational executives, operational team leaders
     machines:
-      tier === 'ceo' ||
-      (tier === 'executive' && operational) ||
-      (tier === 'teamleader' && operational),
+      r !== 'SALES' && r !== 'HR' && r !== 'FINANCE' && (
+        tier === 'ceo' ||
+        (tier === 'executive' && operational) ||
+        (tier === 'teamleader' && operational)
+      ),
 
-    // Tasks: same as machines
     tasks:
-      tier === 'ceo' ||
-      (tier === 'executive' && operational) ||
-      (tier === 'teamleader' && operational),
+      r !== 'SALES' && r !== 'HR' && r !== 'FINANCE' && (
+        tier === 'ceo' ||
+        (tier === 'executive' && operational) ||
+        (tier === 'teamleader' && operational)
+      ),
 
-    // Customers & Quotations: CEO, all executives, team leaders
     customers:
       tier === 'ceo' || tier === 'executive' || tier === 'teamleader',
 
     quotations:
-      tier === 'ceo' || tier === 'executive' || tier === 'teamleader',
+      r !== 'HR' && r !== 'FINANCE' && (
+        tier === 'ceo' || tier === 'executive' || tier === 'teamleader'
+      ),
 
-    // Invoices: CEO, finance, sales
     invoices:
-      tier === 'ceo' || isFinance || isSales,
+      r !== 'SALES' && (
+        tier === 'ceo' || isFinance || r === 'ADMIN' || r === 'GLOBAL_MANAGER'
+      ),
 
-    // My Week: employees + operational team leaders only
+    crm:
+      r === 'SALES' || r === 'CEO' || r === 'ADMIN' || r === 'GLOBAL_MANAGER',
+
     myWeek:
       tier === 'employee' ||
       (tier === 'teamleader' && operational),
 
-    // Stats: everyone (but different views per tier)
     stats: true,
 
-    // HR: CEO + HR executives
     hr: tier === 'ceo' || isHR,
 
-    // Admin & Settings: CEO + executives
     admin: tier === 'ceo' || tier === 'executive',
     settings: tier === 'ceo' || tier === 'executive',
 
-    // Profile: everyone
     profile: true,
-    crm: r === 'SALES' || r === 'CEO' || r === 'ADMIN' || r === 'GLOBAL_MANAGER',
   };
 }
 
@@ -165,72 +168,37 @@ export function isRoleAbove(a: string, b: string): boolean {
 
 export const ROLE_LABELS: Record<string, Record<string, string>> = {
   de: {
-    CEO:      "Geschäftsleitung (CEO)",
-    ADMIN:    "Geschäftsführer",
-    MANAGER:  "Teamleiter",
-    HR:       "Personal (HR)",
-    FINANCE:  "Finanzen",
-    SALES:    "Verkauf",
-    EMPLOYEE: "Mitarbeiter",
+    CEO: "Geschäftsleitung (CEO)", ADMIN: "Geschäftsführer", MANAGER: "Teamleiter",
+    HR: "Personal (HR)", FINANCE: "Finanzen", SALES: "Verkauf", EMPLOYEE: "Mitarbeiter",
   },
   en: {
-    CEO:      "Chief Executive Officer",
-    ADMIN:    "Executive",
-    MANAGER:  "Team Leader",
-    HR:       "Human Resources",
-    FINANCE:  "Finance",
-    SALES:    "Sales",
-    EMPLOYEE: "Employee",
+    CEO: "Chief Executive Officer", ADMIN: "Executive", MANAGER: "Team Leader",
+    HR: "Human Resources", FINANCE: "Finance", SALES: "Sales", EMPLOYEE: "Employee",
   },
   fr: {
-    CEO:      "Directeur Général (CEO)",
-    ADMIN:    "Direction",
-    MANAGER:  "Chef d'équipe",
-    HR:       "Ressources humaines",
-    FINANCE:  "Finances",
-    SALES:    "Ventes",
-    EMPLOYEE: "Employé",
+    CEO: "Directeur Général (CEO)", ADMIN: "Direction", MANAGER: "Chef d'équipe",
+    HR: "Ressources humaines", FINANCE: "Finances", SALES: "Ventes", EMPLOYEE: "Employé",
   },
   pt: {
-    CEO:      "Diretor Executivo (CEO)",
-    ADMIN:    "Diretor",
-    MANAGER:  "Líder de equipa",
-    HR:       "Recursos Humanos",
-    FINANCE:  "Finanças",
-    SALES:    "Vendas",
-    EMPLOYEE: "Funcionário",
+    CEO: "Diretor Executivo (CEO)", ADMIN: "Diretor", MANAGER: "Líder de equipa",
+    HR: "Recursos Humanos", FINANCE: "Finanças", SALES: "Vendas", EMPLOYEE: "Funcionário",
   },
   nl: {
-    CEO:      "Algemeen Directeur (CEO)",
-    ADMIN:    "Directeur",
-    MANAGER:  "Teamleider",
-    HR:       "Personeelszaken",
-    FINANCE:  "Financiën",
-    SALES:    "Verkoop",
-    EMPLOYEE: "Medewerker",
+    CEO: "Algemeen Directeur (CEO)", ADMIN: "Directeur", MANAGER: "Teamleider",
+    HR: "Personeelszaken", FINANCE: "Financiën", SALES: "Verkoop", EMPLOYEE: "Medewerker",
   },
   it: {
-    CEO:      "Amministratore Delegato (CEO)",
-    ADMIN:    "Dirigente",
-    MANAGER:  "Caposquadra",
-    HR:       "Risorse Umane",
-    FINANCE:  "Finanza",
-    SALES:    "Vendite",
-    EMPLOYEE: "Dipendente",
+    CEO: "Amministratore Delegato (CEO)", ADMIN: "Dirigente", MANAGER: "Caposquadra",
+    HR: "Risorse Umane", FINANCE: "Finanza", SALES: "Vendite", EMPLOYEE: "Dipendente",
   },
   es: {
-    CEO:      "Director Ejecutivo (CEO)",
-    ADMIN:    "Director",
-    MANAGER:  "Líder de Equipo",
-    HR:       "Recursos Humanos",
-    FINANCE:  "Finanzas",
-    SALES:    "Ventas",
-    EMPLOYEE: "Empleado",
+    CEO: "Director Ejecutivo (CEO)", ADMIN: "Director", MANAGER: "Líder de Equipo",
+    HR: "Recursos Humanos", FINANCE: "Finanzas", SALES: "Ventas", EMPLOYEE: "Empleado",
   },
 };
 
 /* ------------------------------------------------------------------ */
-/*  Permissions — every action in the system                           */
+/*  Permissions                                                        */
 /* ------------------------------------------------------------------ */
 export const PERMISSIONS = [
   "schedule.view", "schedule.edit",
@@ -245,47 +213,31 @@ export const PERMISSIONS = [
   "admin.customers", "admin.machines", "admin.tasks",
   "reports.own", "reports.team", "reports.all",
   "ceo.dashboard", "ceo.org", "ceo.settings",
-  'schedule.view.all',      // CEO / exec operational – full schedule
-  'schedule.view.team',     // team leader operational – own team
-  'machines.view.all',
-  'machines.view.team',
-  'tasks.view.all',
-  'tasks.view.team',
-  'customers.view.all',
-  'customers.view.team',
-  'quotations.view.all',
-  'quotations.view.team',
-  'invoices.view.all',      // CEO only
-  'invoices.view.finance',  // finance / sales exec or TL
-  'myweek.view',            // employees + operational TL
-  'stats.global',           // CEO
-  'stats.perimeter',        // executives
-  'stats.team',             // team leaders
-  'stats.individual',       // employees
-  'hr.access',              // CEO + HR exec
-  'admin.access',           // CEO + all executives
-  'profile.view',           // everyone
-  'crm.view',
-  'crm.edit',
-  'crm.delete',
-  'crm.pipeline',
-  'crm.performance',
+  "schedule.view.all", "schedule.view.team",
+  "machines.view.all", "machines.view.team",
+  "tasks.view.all", "tasks.view.team",
+  "customers.view.all", "customers.view.team",
+  "quotations.view.all", "quotations.view.team",
+  "invoices.view.all", "invoices.view.finance",
+  "myweek.view",
+  "stats.global", "stats.perimeter", "stats.team", "stats.individual",
+  "hr.access", "admin.access", "profile.view",
+  "crm.view", "crm.edit", "crm.delete", "crm.pipeline", "crm.performance",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
 export const NON_OPERATIONAL_ROLES = ['HR', 'FINANCE'] as const;
 
 export function isOperational(userDepartments: string[]): boolean {
-  // A user is "operational" if they have at least one department
-  // that is NOT purely HR or FINANCE
   const nonOp = new Set(['HR', 'FINANCE']);
   return userDepartments.some(d => !nonOp.has(d));
 }
+
 /* ------------------------------------------------------------------ */
-/*  Default permission matrix — seed values for built-in roles         */
+/*  Default permission matrix                                          */
 /* ------------------------------------------------------------------ */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
-  CEO: [...PERMISSIONS],   // CEO has every permission
+  CEO: [...PERMISSIONS],
 
   ADMIN: [
     "schedule.view", "schedule.edit",
@@ -299,7 +251,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "admin.view", "admin.users", "admin.roles",
     "admin.customers", "admin.machines", "admin.tasks",
     "reports.own", "reports.team", "reports.all",
-    // ADMIN does NOT get ceo.* permissions
+    "crm.view", "crm.edit", "crm.pipeline", "crm.performance",
   ],
 
   MANAGER: [
@@ -315,7 +267,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
 
   HR: [
-    "schedule.view",
     "customers.view",
     "hr.view", "hr.edit", "hr.payroll",
     "reports.own", "reports.team", "reports.all",
@@ -332,12 +283,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
 
   SALES: [
-    "schedule.view",
     "customers.view", "customers.edit",
-    "tasks.view",
     "quotations.view", "quotations.edit",
-    "invoices.view", "invoices.edit",
     "reports.own",
+    "crm.view", "crm.edit", "crm.pipeline", "crm.performance",
   ],
 
   EMPLOYEE: [

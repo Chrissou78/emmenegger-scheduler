@@ -283,6 +283,8 @@ export default function SettingsPage() {
   const gold = th.gold;
   const dimText = isDark ? "rgba(255,255,255,.45)" : "rgba(0,0,0,.4)";
   const inputBg = isDark ? "rgba(255,255,255,.07)" : "rgba(0,0,0,.04)";
+  const [hCollapsed, setHCollapsed] = useState<Record<string, boolean>>({});
+  const [hViewMode, setHViewMode] = useState<'macro' | 'detail'>('macro');
 
   /* ── Permissions ── */
   const { permissionMap } = useRolesStore();
@@ -2558,697 +2560,260 @@ export default function SettingsPage() {
         {/* ═══════════════════════════════════════════════════════════ */}
         {/*  HIERARCHY TAB                                             */}
         {/* ═══════════════════════════════════════════════════════════ */}
-        {mainTab === "hierarchy" && (
-          <>
-            {/* Header + Save */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 16,
-                flexWrap: "wrap",
-                gap: 10,
-              }}
-            >
-              <div>
-                <h2 style={{ margin: 0, color: gold }}>
-                  {t.hierarchy ?? "Hierarchy"}
-                </h2>
-                <p
-                  style={{
-                    margin: "6px 0 0",
-                    fontSize: 13,
-                    color: dimText,
-                  }}
-                >
-                  {t.hierarchyDesc ??
-                    "CEO → Executives → Team Leaders → Employees"}
-                </p>
+        {mainTab === 'hierarchy' && (() => {
+          // ★ State for collapsed sections (add to component state declarations above):
+          // const [hCollapsed, setHCollapsed] = useState<Record<string, boolean>>({});
+          // const [hViewMode, setHViewMode] = useState<'macro' | 'detail'>('macro');
+
+          const allDepartments = [...new Set(hUsers.flatMap(u => u.departments || []))].sort();
+
+          // Group users by department
+          const deptMap: Record<string, HierarchyUser[]> = {};
+          allDepartments.forEach(d => {
+            deptMap[d] = hUsers.filter(u => (u.departments || []).includes(d));
+          });
+
+          const toggleCollapse = (key: string) => {
+            setHCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+          };
+
+          const collapseAll = () => {
+            const map: Record<string, boolean> = {};
+            ['ceo', 'executives', ...allDepartments].forEach(k => { map[k] = true; });
+            setHCollapsed(map);
+          };
+
+          const expandAll = () => setHCollapsed({});
+
+          const userCard = (u: HierarchyUser, indent: number = 0) => (
+            <div key={u.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '8px 12px', marginLeft: indent * 24,
+              borderLeft: indent > 0 ? `2px solid ${gold}33` : 'none',
+              background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.01)',
+              borderRadius: 6, marginBottom: 4,
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: `${gold}22`, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 14, fontWeight: 700, color: gold,
+                flexShrink: 0,
+              }}>
+                {u.first_name?.[0]}{u.last_name?.[0]}
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                }}
-              >
-                {hDirty && (
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "#22c55e",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {hChangeCount} {t.changed ?? "changed"}
-                  </span>
-                )}
-                <button
-                  style={sBtn(hDirty ? "#22c55e" : gold)}
-                  disabled={!hDirty || saving}
-                  onClick={saveHierarchy}
-                >
-                  {saving ? "…" : (t.save ?? "Save")}
-                </button>
-                <button
-                  style={sBtnOutline}
-                  onClick={fetchHierarchyUsers}
-                  disabled={hLoading}
-                >
-                  ↻
-                </button>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{u.first_name} {u.last_name}</div>
+                <div style={{ fontSize: 11, color: dimText }}>{u.role} • {(u.departments || []).join(', ') || '—'}</div>
               </div>
-            </div>
-
-            {hLoading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: 40,
-                  color: dimText,
-                }}
-              >
-                {t.loading ?? "Loading..."}
-              </div>
-            )}
-
-            {!hLoading && (
-              <>
-                {/* ── Org Chart ── */}
-                <div style={sCard}>
-                  <h3 style={{ margin: "0 0 16px", color: gold }}>
-                    {t.orgChart ?? "Org Chart"}
-                  </h3>
-
-                  {hCeos.length === 0 && (
-                    <div
-                      style={{
-                        padding: 16,
-                        color: dimText,
-                        fontStyle: "italic",
-                      }}
-                    >
-                      {t.noCeo ?? "No CEO assigned"}
-                    </div>
-                  )}
-
-                  {hCeos.map((ceo) => {
-                    const execsUnder = hExecs.filter(
-                      (ex) => hEditMap[ex.id]?.ceo_id === ceo.id
-                    );
-                    return (
-                      <div key={ceo.id} style={{ marginBottom: 28 }}>
-                        {/* CEO node */}
-                        <div
-                          style={{
-                            padding: "14px 20px",
-                            borderRadius: 10,
-                            background: `linear-gradient(135deg, ${gold}33, ${gold}11)`,
-                            border: `2px solid ${gold}`,
-                            fontWeight: 700,
-                            fontSize: 16,
-                            marginBottom: 8,
-                          }}
-                        >
-                          {ceo.first_name} {ceo.last_name}
-                          <span
-                            style={{
-                              fontSize: 11,
-                              marginLeft: 10,
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              background: gold + "22",
-                              color: gold,
-                            }}
-                          >
-                            CEO
-                          </span>
-                        </div>
-
-                        {/* Executives */}
-                        <div
-                          style={{
-                            marginLeft: 30,
-                            borderLeft: `2px solid ${gold}44`,
-                            paddingLeft: 16,
-                          }}
-                        >
-                          {execsUnder.length === 0 && (
-                            <div
-                              style={{
-                                padding: "8px 0",
-                                color: dimText,
-                                fontSize: 13,
-                                fontStyle: "italic",
-                              }}
-                            >
-                              {t.noResults ?? "—"}
-                            </div>
-                          )}
-                          {execsUnder.map((exec) => {
-                            const tlsUnder = hManagers.filter(
-                              (m) =>
-                                hEditMap[m.id]?.executive_id ===
-                                exec.id
-                            );
-                            return (
-                              <div
-                                key={exec.id}
-                                style={{ marginBottom: 20 }}
-                              >
-                                <div
-                                  style={{
-                                    padding: "12px 18px",
-                                    borderRadius: 8,
-                                    background: isDark
-                                      ? "rgba(59,130,246,.1)"
-                                      : "rgba(59,130,246,.06)",
-                                    border: `1px solid rgba(59,130,246,.3)`,
-                                    fontWeight: 600,
-                                    fontSize: 14,
-                                    marginBottom: 6,
-                                  }}
-                                >
-                                  {exec.first_name}{" "}
-                                  {exec.last_name}
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      marginLeft: 10,
-                                      color: "#3b82f6",
-                                    }}
-                                  >
-                                    {exec.role}
-                                  </span>
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      marginLeft: 6,
-                                      color: dimText,
-                                    }}
-                                  >
-                                    · {tlsUnder.length}{" "}
-                                    {t.teamLeaders ?? "Team Leaders"}
-                                  </span>
-                                </div>
-
-                                {/* Team Leaders */}
-                                <div
-                                  style={{
-                                    marginLeft: 28,
-                                    borderLeft: `2px solid ${th.border}`,
-                                    paddingLeft: 14,
-                                  }}
-                                >
-                                  {tlsUnder.length === 0 && (
-                                    <div
-                                      style={{
-                                        padding: "6px 0",
-                                        color: dimText,
-                                        fontSize: 12,
-                                        fontStyle: "italic",
-                                      }}
-                                    >
-                                      —
-                                    </div>
-                                  )}
-                                  {tlsUnder.map((tl) => {
-                                    const empsUnder =
-                                      hEmployees.filter(
-                                        (e) =>
-                                          hEditMap[e.id]
-                                            ?.team_leader_id ===
-                                          tl.id
-                                      );
-                                    return (
-                                      <div
-                                        key={tl.id}
-                                        style={{
-                                          marginBottom: 14,
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            padding: "10px 14px",
-                                            borderRadius: 6,
-                                            background: isDark
-                                              ? "rgba(34,197,94,.08)"
-                                              : "rgba(34,197,94,.05)",
-                                            border: `1px solid rgba(34,197,94,.25)`,
-                                            fontWeight: 600,
-                                            fontSize: 13,
-                                            marginBottom: 4,
-                                          }}
-                                        >
-                                          {tl.first_name}{" "}
-                                          {tl.last_name}
-                                          <span
-                                            style={{
-                                              fontSize: 11,
-                                              marginLeft: 10,
-                                              color: "#22c55e",
-                                            }}
-                                          >
-                                            {tl.role}
-                                          </span>
-                                          <span
-                                            style={{
-                                              fontSize: 11,
-                                              marginLeft: 6,
-                                              color: dimText,
-                                            }}
-                                          >
-                                            · {empsUnder.length}{" "}
-                                            {t.employees ??
-                                              "Employees"}
-                                          </span>
-                                        </div>
-
-                                        {/* Employees */}
-                                        <div
-                                          style={{
-                                            marginLeft: 22,
-                                            borderLeft: `1px dashed ${th.border}`,
-                                            paddingLeft: 10,
-                                          }}
-                                        >
-                                          {empsUnder.map((emp) => (
-                                            <div
-                                              key={emp.id}
-                                              style={{
-                                                padding: "5px 10px",
-                                                borderRadius: 4,
-                                                fontSize: 12,
-                                                color: th.text,
-                                                background: isDark
-                                                  ? "rgba(255,255,255,.03)"
-                                                  : "rgba(0,0,0,.02)",
-                                                marginBottom: 3,
-                                              }}
-                                            >
-                                              {emp.first_name}{" "}
-                                              {emp.last_name}
-                                              <span
-                                                style={{
-                                                  fontSize: 10,
-                                                  marginLeft: 8,
-                                                  color: dimText,
-                                                }}
-                                              >
-                                                {emp.role}
-                                              </span>
-                                            </div>
-                                          ))}
-                                          {empsUnder.length ===
-                                            0 && (
-                                            <div
-                                              style={{
-                                                fontSize: 11,
-                                                color: dimText,
-                                                fontStyle:
-                                                  "italic",
-                                                padding: "3px 0",
-                                              }}
-                                            >
-                                              —
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Unassigned warnings */}
-                  {(() => {
-                    const unassignedExecs = hExecs.filter(
-                      (ex) => !hEditMap[ex.id]?.ceo_id
-                    );
-                    const unassignedTLs = hManagers.filter(
-                      (m) => !hEditMap[m.id]?.executive_id
-                    );
-                    const unassignedEmps = hEmployees.filter(
-                      (e) => !hEditMap[e.id]?.team_leader_id
-                    );
-                    if (
-                      unassignedExecs.length === 0 &&
-                      unassignedTLs.length === 0 &&
-                      unassignedEmps.length === 0
-                    )
-                      return null;
-                    return (
-                      <div
-                        style={{
-                          marginTop: 20,
-                          padding: 16,
-                          borderRadius: 10,
-                          background: "#ef444422",
-                          border: "1px dashed #ef4444",
-                        }}
-                      >
-                        <h4
-                          style={{
-                            margin: "0 0 10px",
-                            color: "#ef4444",
-                          }}
-                        >
-                          {t.unassigned ?? "Unassigned"}
-                        </h4>
-                        {unassignedExecs.length > 0 && (
-                          <div style={{ marginBottom: 8 }}>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#ef4444",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {t.executives ?? "Executives"}:
-                            </span>
-                            {unassignedExecs.map((ex) => (
-                              <span
-                                key={ex.id}
-                                style={{
-                                  marginLeft: 8,
-                                  fontSize: 13,
-                                }}
-                              >
-                                {ex.first_name} {ex.last_name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {unassignedTLs.length > 0 && (
-                          <div style={{ marginBottom: 8 }}>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#ef4444",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {t.teamLeaders ?? "Team Leaders"}:
-                            </span>
-                            {unassignedTLs.map((tl) => (
-                              <span
-                                key={tl.id}
-                                style={{
-                                  marginLeft: 8,
-                                  fontSize: 13,
-                                }}
-                              >
-                                {tl.first_name} {tl.last_name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {unassignedEmps.length > 0 && (
-                          <div>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#ef4444",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {t.employees ?? "Employees"} (
-                              {unassignedEmps.length}):
-                            </span>
-                            {unassignedEmps
-                              .slice(0, 10)
-                              .map((e) => (
-                                <span
-                                  key={e.id}
-                                  style={{
-                                    marginLeft: 8,
-                                    fontSize: 13,
-                                  }}
-                                >
-                                  {e.first_name} {e.last_name}
-                                </span>
-                              ))}
-                            {unassignedEmps.length > 10 && (
-                              <span
-                                style={{
-                                  marginLeft: 8,
-                                  fontSize: 12,
-                                  color: dimText,
-                                }}
-                              >
-                                +{unassignedEmps.length - 10}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* ── Assignment Table ── */}
-                <div style={sCard}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 16,
-                      flexWrap: "wrap",
-                      gap: 10,
-                    }}
-                  >
-                    <h3 style={{ margin: 0, color: gold }}>
-                      {t.bulkAssign ?? "Bulk Assign"}
-                    </h3>
+              {/* Hierarchy selectors — only in detail mode */}
+              {hViewMode === 'detail' && (
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {/* Team Leader */}
+                  {!isCeoRole(u.role) && !isExecRole(u.role) && (
                     <select
-                      style={{ ...sSelect, maxWidth: 200 }}
-                      value={hRoleFilter}
-                      onChange={(e) =>
-                        setHRoleFilter(e.target.value)
-                      }
+                      style={{ ...sInput, width: 150, fontSize: 11, padding: '4px 6px' }}
+                      value={hEditMap[u.id]?.team_leader_id || ''}
+                      onChange={e => setHierarchyField(u.id, 'team_leader_id', e.target.value || null)}
                     >
-                      <option value="">{t.all ?? "All"}</option>
-                      {hAllRoles.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
+                      <option value="">— TL —</option>
+                      {hManagers.map(m => (
+                        <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>
                       ))}
                     </select>
-                  </div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table
-                      style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                      }}
+                  )}
+                  {/* Executive */}
+                  {isManagerRole(u.role) && (
+                    <select
+                      style={{ ...sInput, width: 150, fontSize: 11, padding: '4px 6px' }}
+                      value={hEditMap[u.id]?.executive_id || ''}
+                      onChange={e => setHierarchyField(u.id, 'executive_id', e.target.value || null)}
                     >
-                      <thead>
-                        <tr>
-                          <th style={sTh}>{t.name ?? "Name"}</th>
-                          <th style={sTh}>{t.role ?? "Role"}</th>
-                          <th style={sTh}>
-                            {t.attachedTo ?? "Attached To"}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hUsers
-                          .filter(
-                            (u) =>
-                              !hRoleFilter || u.role === hRoleFilter
-                          )
-                          .sort(
-                            (a, b) =>
-                              getTier(b.role) - getTier(a.role)
-                          )
-                          .map((u) => {
-                            const tier = getTier(u.role);
-                            const edit = hEditMap[u.id] || {
-                              team_leader_id: null,
-                              executive_id: null,
-                              ceo_id: null,
-                            };
-                            const changed =
-                              edit.team_leader_id !==
-                                u.team_leader_id ||
-                              edit.executive_id !==
-                                u.executive_id ||
-                              edit.ceo_id !== u.ceo_id;
-
-                            let superiorField:
-                              | "ceo_id"
-                              | "executive_id"
-                              | "team_leader_id"
-                              | null = null;
-                            let superiorOptions: HierarchyUser[] =
-                              [];
-                            let superiorLabel = "";
-
-                            if (tier === 3) {
-                              superiorField = "ceo_id";
-                              superiorOptions = hCeos;
-                              superiorLabel =
-                                t.ceoRole ?? "CEO";
-                            } else if (tier === 2) {
-                              superiorField = "executive_id";
-                              superiorOptions = hExecs;
-                              superiorLabel =
-                                t.executive ?? "Executive";
-                            } else if (tier === 1) {
-                              superiorField = "team_leader_id";
-                              superiorOptions = hManagers;
-                              superiorLabel =
-                                t.teamLeader ?? "Team Leader";
-                            }
-
-                            return (
-                              <tr
-                                key={u.id}
-                                style={{
-                                  background: changed
-                                    ? isDark
-                                      ? "rgba(34,197,94,.08)"
-                                      : "rgba(34,197,94,.05)"
-                                    : "transparent",
-                                }}
-                              >
-                                <td
-                                  style={{
-                                    ...sTd,
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  {u.first_name} {u.last_name}
-                                  {changed && (
-                                    <span
-                                      style={{
-                                        marginLeft: 6,
-                                        color: "#22c55e",
-                                        fontSize: 11,
-                                      }}
-                                    >
-                                      ●
-                                    </span>
-                                  )}
-                                </td>
-                                <td style={sTd}>
-                                  <span
-                                    style={{
-                                      padding: "2px 8px",
-                                      borderRadius: 4,
-                                      fontSize: 11,
-                                      fontWeight: 600,
-                                      background:
-                                        tier === 4
-                                          ? gold + "22"
-                                          : tier === 3
-                                            ? "#3b82f622"
-                                            : tier === 2
-                                              ? "#22c55e22"
-                                              : "transparent",
-                                      color:
-                                        tier === 4
-                                          ? gold
-                                          : tier === 3
-                                            ? "#3b82f6"
-                                            : tier === 2
-                                              ? "#22c55e"
-                                              : th.text,
-                                    }}
-                                  >
-                                    {u.role}
-                                  </span>
-                                </td>
-
-                                <td style={sTd}>
-                                  {superiorField === null ? (
-                                    <span
-                                      style={{
-                                        fontSize: 12,
-                                        color: gold,
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      — {t.tier4 ?? "Top Level"}
-                                    </span>
-                                  ) : (
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 6,
-                                      }}
-                                    >
-                                      <span
-                                        style={{
-                                          fontSize: 10,
-                                          color: dimText,
-                                          whiteSpace: "nowrap",
-                                        }}
-                                      >
-                                        {superiorLabel}:
-                                      </span>
-                                      <select
-                                        style={{
-                                          ...sSelect,
-                                          padding: "4px 8px",
-                                          fontSize: 12,
-                                          flex: 1,
-                                        }}
-                                        value={
-                                          (edit as any)[
-                                            superiorField
-                                          ] ?? ""
-                                        }
-                                        onChange={(e) =>
-                                          setHierarchyField(
-                                            u.id,
-                                            superiorField!,
-                                            e.target.value || null
-                                          )
-                                        }
-                                      >
-                                        <option value="">
-                                          —{" "}
-                                          {t.unassigned ??
-                                            "Unassigned"}
-                                        </option>
-                                        {superiorOptions
-                                          .filter(
-                                            (s) => s.id !== u.id
-                                          )
-                                          .map((s) => (
-                                            <option
-                                              key={s.id}
-                                              value={s.id}
-                                            >
-                                              {s.first_name}{" "}
-                                              {s.last_name}
-                                            </option>
-                                          ))}
-                                      </select>
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
+                      <option value="">— Exec —</option>
+                      {hExecs.map(ex => (
+                        <option key={ex.id} value={ex.id}>{ex.first_name} {ex.last_name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {/* CEO */}
+                  {isExecRole(u.role) && (
+                    <select
+                      style={{ ...sInput, width: 150, fontSize: 11, padding: '4px 6px' }}
+                      value={hEditMap[u.id]?.ceo_id || ''}
+                      onChange={e => setHierarchyField(u.id, 'ceo_id', e.target.value || null)}
+                    >
+                      <option value="">— CEO —</option>
+                      {hCeos.map(c => (
+                        <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
-              </>
-            )}
-          </>
-        )}
+              )}
+            </div>
+          );
+
+          const sectionHeader = (key: string, label: string, count: number, color: string) => (
+            <div
+              onClick={() => toggleCollapse(key)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                background: isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)',
+                borderRadius: 8, cursor: 'pointer', marginBottom: 6,
+                border: `1px solid ${th.border}`, userSelect: 'none',
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700, color: dimText, transition: 'transform .2s',
+                transform: hCollapsed[key] ? 'rotate(-90deg)' : 'rotate(0deg)',
+              }}>▼</span>
+              <span style={{
+                padding: '2px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                background: color + '22', color,
+              }}>{label}</span>
+              <span style={{ fontSize: 12, color: dimText }}>{count} {count === 1 ? 'person' : 'people'}</span>
+            </div>
+          );
+
+          return (
+            <>
+              {/* Controls */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: 16, flexWrap: 'wrap', gap: 10,
+              }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <h2 style={{ margin: 0, color: gold }}>{t.hierarchy ?? 'Hierarchy'}</h2>
+                  {hLoading && <span style={{ fontSize: 12, color: dimText }}>Loading...</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {/* View mode toggle */}
+                  <button
+                    style={hViewMode === 'macro' ? sBtn(gold) : sBtnOutline}
+                    onClick={() => setHViewMode('macro')}
+                  >
+                    {t.macroView ?? 'Macro View'}
+                  </button>
+                  <button
+                    style={hViewMode === 'detail' ? sBtn(gold) : sBtnOutline}
+                    onClick={() => setHViewMode('detail')}
+                  >
+                    {t.detailView ?? 'Detail View'}
+                  </button>
+                  <span style={{ width: 1, background: th.border, margin: '0 4px' }} />
+                  <button style={sBtnOutline} onClick={expandAll}>
+                    {t.expandAll ?? 'Expand All'}
+                  </button>
+                  <button style={sBtnOutline} onClick={collapseAll}>
+                    {t.collapseAll ?? 'Collapse All'}
+                  </button>
+                  {hDirty && (
+                    <button style={sBtn('#22c55e')} onClick={saveHierarchy} disabled={saving}>
+                      {saving ? '...' : `${t.save ?? 'Save'} (${hChangeCount})`}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Role filter */}
+              {hViewMode === 'detail' && (
+                <div style={{ marginBottom: 12 }}>
+                  <select style={{ ...sInput, maxWidth: 200 }} value={hRoleFilter} onChange={e => setHRoleFilter(e.target.value)}>
+                    <option value="">{t.allRoles ?? 'All Roles'}</option>
+                    {hAllRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* ── CEO Level ── */}
+              {hCeos.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  {sectionHeader('ceo', 'CEO', hCeos.length, '#f59e0b')}
+                  {!hCollapsed['ceo'] && hCeos.map(u => userCard(u, 0))}
+                </div>
+              )}
+
+              {/* ── Executives Level ── */}
+              {hExecs.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  {sectionHeader('executives', t.executives ?? 'Executives', hExecs.length, '#8b5cf6')}
+                  {!hCollapsed['executives'] && hExecs.map(u => userCard(u, 1))}
+                </div>
+              )}
+
+              {/* ── Departments (macro = collapsible groups) ── */}
+              {allDepartments.map(dept => {
+                const deptUsers = deptMap[dept] || [];
+                const deptManagers = deptUsers.filter(u => isManagerRole(u.role));
+                const deptEmployees = deptUsers.filter(u => isEmployeeRole(u.role));
+
+                return (
+                  <div key={dept} style={{ marginBottom: 12 }}>
+                    {sectionHeader(dept, dept, deptUsers.length, '#3b82f6')}
+                    {!hCollapsed[dept] && (
+                      <div style={{ paddingLeft: 12 }}>
+                        {/* Team Leaders in this department */}
+                        {deptManagers.length > 0 && (
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{
+                              fontSize: 10, fontWeight: 700, color: dimText, letterSpacing: 1,
+                              textTransform: 'uppercase', padding: '4px 0', marginLeft: 24,
+                            }}>{t.teamLeaders ?? 'Team Leaders'}</div>
+                            {deptManagers.map(u => userCard(u, 1))}
+                          </div>
+                        )}
+
+                        {/* Employees grouped by TL (detail mode) or flat (macro mode) */}
+                        {hViewMode === 'detail' ? (
+                          <>
+                            {deptManagers.map(mgr => {
+                              const mgrEmployees = deptEmployees.filter(
+                                e => hEditMap[e.id]?.team_leader_id === mgr.id
+                              );
+                              if (mgrEmployees.length === 0) return null;
+                              return (
+                                <div key={mgr.id} style={{ marginBottom: 8 }}>
+                                  <div style={{
+                                    fontSize: 10, color: dimText, marginLeft: 48, padding: '2px 0',
+                                  }}>↳ {t.teamOf ?? 'Team of'} {mgr.first_name} {mgr.last_name} ({mgrEmployees.length})</div>
+                                  {mgrEmployees
+                                    .filter(u => !hRoleFilter || u.role === hRoleFilter)
+                                    .map(u => userCard(u, 2))}
+                                </div>
+                              );
+                            })}
+                            {/* Unassigned employees */}
+                            {(() => {
+                              const unassigned = deptEmployees.filter(
+                                e => !hEditMap[e.id]?.team_leader_id || !deptManagers.some(m => m.id === hEditMap[e.id]?.team_leader_id)
+                              );
+                              if (unassigned.length === 0) return null;
+                              return (
+                                <div>
+                                  <div style={{
+                                    fontSize: 10, color: '#ef4444', marginLeft: 48, padding: '2px 0', fontWeight: 600,
+                                  }}>⚠ {t.unassigned ?? 'Unassigned'} ({unassigned.length})</div>
+                                  {unassigned
+                                    .filter(u => !hRoleFilter || u.role === hRoleFilter)
+                                    .map(u => userCard(u, 2))}
+                                </div>
+                              );
+                            })()}
+                          </>
+                        ) : (
+                          /* Macro mode: just show count */
+                          <div style={{
+                            padding: '6px 12px', marginLeft: 24, fontSize: 13, color: dimText,
+                          }}>
+                            {deptManagers.length} {t.teamLeaders ?? 'Team Leaders'} • {deptEmployees.length} {t.employees ?? 'Employees'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}

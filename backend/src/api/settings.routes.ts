@@ -467,3 +467,138 @@ settingsRouter.delete('/config/:category/:id', requireRole('GLOBAL_MANAGER'), as
     res.status(500).json({ error: err.message });
   }
 });
+
+/* ------------------------------------------------------------------ */
+/*  CSV EXPORT — GET /api/v1/settings/config/:category/export          */
+/* ------------------------------------------------------------------ */
+settingsRouter.get('/config/:category/export', async (req, res) => {
+  try {
+    const { category } = req.params;
+
+    const { data, error } = await supabase
+      .from('config_items')
+      .select('key, label, sort_order, is_active, meta')
+      .eq('category', category)
+      .order('sort_order');
+
+    if (error) throw error;
+
+    // Build CSV
+    const header = 'key;label;sort_order;is_active;meta';
+    const rows = (data || []).map(r =>
+      `${r.key};${r.label};${r.sort_order};${r.is_active};${JSON.stringify(r.meta || {}).replace(/;/g, ',')}`
+    );
+    const csv = [header, ...rows].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${category}.csv"`);
+    res.send('\uFEFF' + csv); // BOM for Excel UTF-8
+  } catch (err: any) {
+    console.error(`GET /settings/config/${req.params.category}/export error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  CSV IMPORT — POST /api/v1/settings/config/:category/import         */
+/* ------------------------------------------------------------------ */
+settingsRouter.post('/config/:category/import', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const { category } = req.params;
+    const { csv } = req.body; // raw CSV string from frontend
+
+    if (!csv || typeof csv !== 'string') {
+      return res.status(400).json({ error: 'CSV string required in body.csv' });
+    }
+
+    const lines = csv
+      .replace(/^\uFEFF/, '') // strip BOM
+      .split(/\r?\n/)
+      .filter(l => l.trim());
+
+    if (lines.length < 2) {
+      return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+    }
+
+    // Parse header
+    const headerLine = lines[0].toLowerCase();
+    const sep = headerLine.includes(';') ? ';' : ',';
+    const headers = headerLine.split(sep).map(h => h.trim());
+    const keyIdx = headers.indexOf('key');
+    const labelIdx = headers.indexOf('label');
+    const sortIdx = headers.indexOf('sort_order');
+    const activeIdx = headers.indexOf('is_active');
+    const metaIdx = headers.indexOf('meta');
+
+    if (keyIdx === -1 || labelIdx === -1) {
+      return res.status(400).json({
+        error: 'CSV must contain at least "key" and "label" columns',
+        example: 'key;label;sort_order;is_active;meta',
+      });
+    }
+
+    const items = [];
+    const errors: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(sep).map(c => c.trim());
+      const key = cols[keyIdx];
+      const label = cols[labelIdx];
+
+      if (!key || !label) {
+        errors.push(`Row ${i + 1}: missing key or label`);
+        continue;
+      }
+
+      let meta = {};
+      if (metaIdx !== -1 && cols[metaIdx]) {
+        try { meta = JSON.parse(cols[metaIdx]); } catch { /* keep empty */ }
+      }
+
+      items.push({
+        category,
+        key: key.toUpperCase().replace(/\s+/g, '_'),
+        label,
+        sort_order: sortIdx !== -1 ? parseInt(cols[sortIdx]) || 0 : i,
+        is_active: activeIdx !== -1 ? cols[activeIdx]?.toLowerCase() !== 'false' : true,
+        meta,
+      });
+    }
+
+    if (items.length === 0) {
+      return res.status(400).json({ error: 'No valid rows found', details: errors });
+    }
+
+    // Upsert all items
+    const { data, error } = await supabase
+      .from('config_items')
+      .upsert(items, { onConflict: 'category,key' })
+      .select();
+
+    if (error) throw error;
+
+    res.json({
+      imported: (data || []).length,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (err: any) {
+    console.error(`POST /settings/config/${req.params.category}/import error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  CSV EXAMPLE — GET /api/v1/settings/config/:category/example        */
+/* ------------------------------------------------------------------ */
+settingsRouter.get('/config/:category/example', (_req, res) => {
+  const csv = [
+    'key;label;sort_order;is_active;meta',
+    'PERMANENT;Festanstellung;1;true;{}',
+    'TEMPORARY;Temporär;2;true;{}',
+    'SEASONAL;Saisonal;3;true;{"max_months":6}',
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="example.csv"');
+  res.send('\uFEFF' + csv);
+});
