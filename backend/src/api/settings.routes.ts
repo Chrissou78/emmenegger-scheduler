@@ -110,7 +110,6 @@ settingsRouter.put('/roles/:id', requireRole('GLOBAL_MANAGER'), async (req: any,
 // ─── DELETE /roles/:id — only non-system roles (GLOBAL_MANAGER only) ───
 settingsRouter.delete('/roles/:id', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
   try {
-    // Check if system role
     const { data: role } = await supabase
       .from('roles')
       .select('is_system, name')
@@ -121,7 +120,6 @@ settingsRouter.delete('/roles/:id', requireRole('GLOBAL_MANAGER'), async (req: a
       return res.status(403).json({ error: 'Cannot delete system roles' });
     }
 
-    // Check if any users still have this role
     const { data: users } = await supabase
       .from('users')
       .select('id')
@@ -152,7 +150,6 @@ settingsRouter.delete('/roles/:id', requireRole('GLOBAL_MANAGER'), async (req: a
 /*  Language Settings                                                   */
 /* ------------------------------------------------------------------ */
 
-// GET /api/v1/settings/languages
 settingsRouter.get('/languages', async (_req, res) => {
   const { data, error } = await supabase
     .from('app_settings')
@@ -164,7 +161,6 @@ settingsRouter.get('/languages', async (_req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
-  // Return defaults if no setting exists yet
   const config = data?.value ?? {
     enabled_languages: ['de', 'en', 'fr', 'pt'],
     default_language: 'de',
@@ -173,7 +169,6 @@ settingsRouter.get('/languages', async (_req, res) => {
   res.json(config);
 });
 
-// PUT /api/v1/settings/languages
 settingsRouter.put('/languages', async (req, res) => {
   const { enabled_languages, default_language } = req.body;
 
@@ -199,4 +194,160 @@ settingsRouter.put('/languages', async (req, res) => {
   }
 
   res.json({ success: true, ...value });
+});
+
+/* ------------------------------------------------------------------ */
+/*  VAT Rates                                                          */
+/* ------------------------------------------------------------------ */
+
+settingsRouter.get('/vat-rates', async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('vat_rates')
+      .select('*')
+      .order('rate', { ascending: true });
+
+    if (error) {
+      // Table may not exist yet — return Swiss defaults
+      return res.json([
+        { id: 1, label: 'Normal', rate: 8.1 },
+        { id: 2, label: 'Reduziert', rate: 2.6 },
+        { id: 3, label: 'Sonder', rate: 3.8 },
+      ]);
+    }
+
+    res.json(data || []);
+  } catch (err: any) {
+    console.error('GET /settings/vat-rates error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+settingsRouter.put('/vat-rates', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const rates = req.body; // array of { id?, label, rate }
+
+    if (!Array.isArray(rates)) {
+      return res.status(400).json({ error: 'Body must be an array of VAT rates' });
+    }
+
+    const { data, error } = await supabase
+      .from('vat_rates')
+      .upsert(rates, { onConflict: 'id' })
+      .select();
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err: any) {
+    console.error('PUT /settings/vat-rates error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  Company Settings                                                    */
+/* ------------------------------------------------------------------ */
+
+settingsRouter.get('/company', async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('company_settings')
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      // Return sensible defaults
+      return res.json({
+        name: 'Emmenegger AG',
+        address: '',
+        zip: '',
+        city: '',
+        country: 'CH',
+        phone: '',
+        email: '',
+        website: '',
+        uid: '',
+        iban: '',
+        bic: '',
+        logo_url: '',
+      });
+    }
+
+    res.json(data);
+  } catch (err: any) {
+    console.error('GET /settings/company error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+settingsRouter.put('/company', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const settings = req.body;
+
+    const { data, error } = await supabase
+      .from('company_settings')
+      .upsert(
+        { id: 1, ...settings, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err: any) {
+    console.error('PUT /settings/company error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  Cross-Border Settings                                               */
+/* ------------------------------------------------------------------ */
+
+settingsRouter.get('/cross-border', async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('cross_border_settings')
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      return res.json({
+        enabled: false,
+        default_country: 'CH',
+        countries: ['CH', 'DE', 'FR', 'IT', 'AT'],
+        tax_rules: [],
+      });
+    }
+
+    res.json(data);
+  } catch (err: any) {
+    console.error('GET /settings/cross-border error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+settingsRouter.put('/cross-border', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const settings = req.body;
+
+    const { data, error } = await supabase
+      .from('cross_border_settings')
+      .upsert(
+        { id: 1, ...settings, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json(data);
+  } catch (err: any) {
+    console.error('PUT /settings/cross-border error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
