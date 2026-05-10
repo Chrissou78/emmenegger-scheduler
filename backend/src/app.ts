@@ -73,7 +73,7 @@ app.use('/api/v1/quotations', authMiddleware, quotationsRouter);
 app.use('/api/v1/invoices', authMiddleware, invoicesRouter);
 app.use('/api/v1/stats', authMiddleware, statsRouter);
 app.use('/api/v1/settings', authMiddleware, settingsRouter);
-app.use('/api/v1/crm', crmRouter);
+app.use('/api/v1/crm', authMiddleware, crmRouter);
 
 // ─── ERROR HANDLER ───
 app.use(errorHandler);

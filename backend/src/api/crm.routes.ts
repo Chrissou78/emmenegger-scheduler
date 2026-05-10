@@ -5,67 +5,82 @@ import { requireRole } from '../middleware/auth';
 export const crmRouter = Router();
 
 /* ================================================================== */
-/*  DASHBOARD — Sales KPIs                                             */
+/*  DASHBOARD                                                          */
 /* ================================================================== */
 
 crmRouter.get('/dashboard', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const userId = req.user.id;
     const role = (req.user.role || '').toUpperCase();
     const isSales = role === 'SALES';
 
     // My customers count
-    const customerFilter = isSales
-      ? supabase.from('customers').select('id', { count: 'exact' }).eq('sales_id', userId)
-      : supabase.from('customers').select('id', { count: 'exact' });
-    const { count: customerCount } = await customerFilter;
+    let customerQuery = supabase.from('customers').select('id', { count: 'exact', head: true });
+    if (isSales) customerQuery = customerQuery.eq('sales_id', userId);
+    const { count: customerCount } = await customerQuery;
 
-    // Open opportunities
-    const oppFilter = isSales
-      ? supabase.from('crm_opportunities').select('*').eq('sales_id', userId).not('stage', 'in', '(WON,LOST)')
-      : supabase.from('crm_opportunities').select('*').not('stage', 'in', '(WON,LOST)');
-    const { data: openOpps } = await oppFilter;
+    // Open opportunities — wrap in try/catch in case table doesn't exist
+    let openOpps: any[] = [];
+    try {
+      let oppQuery = supabase
+        .from('crm_opportunities')
+        .select('*')
+        .not('stage', 'in', '(WON,LOST)');
+      if (isSales) oppQuery = oppQuery.eq('sales_id', userId);
+      const { data } = await oppQuery;
+      openOpps = data || [];
+    } catch { /* table may not exist yet */ }
 
-    const pipelineValue = (openOpps || []).reduce((sum, o) => sum + Number(o.estimated_value || 0), 0);
-    const weightedValue = (openOpps || []).reduce(
+    const pipelineValue = openOpps.reduce((sum, o) => sum + Number(o.estimated_value || 0), 0);
+    const weightedValue = openOpps.reduce(
       (sum, o) => sum + Number(o.estimated_value || 0) * (Number(o.probability || 0) / 100), 0
     );
 
     // Upcoming follow-ups (next 7 days)
-    const now = new Date();
-    const in7 = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10);
-    const todayStr = now.toISOString().slice(0, 10);
+    let followUps: any[] = [];
+    try {
+      const now = new Date();
+      const in7 = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+      const todayStr = now.toISOString().slice(0, 10);
 
-    const followUpFilter = isSales
-      ? supabase.from('crm_activities').select('*, customers(name)')
-          .eq('user_id', userId).eq('is_completed', false)
-          .not('next_action_date', 'is', null)
-          .lte('next_action_date', in7).gte('next_action_date', todayStr)
-          .order('next_action_date')
-      : supabase.from('crm_activities').select('*, customers(name)')
-          .eq('is_completed', false)
-          .not('next_action_date', 'is', null)
-          .lte('next_action_date', in7).gte('next_action_date', todayStr)
-          .order('next_action_date');
-    const { data: followUps } = await followUpFilter;
+      let fuQuery = supabase
+        .from('crm_activities')
+        .select('*, customers(name)')
+        .eq('is_completed', false)
+        .not('next_action_date', 'is', null)
+        .lte('next_action_date', in7)
+        .gte('next_action_date', todayStr)
+        .order('next_action_date');
+      if (isSales) fuQuery = fuQuery.eq('user_id', userId);
+      const { data } = await fuQuery;
+      followUps = data || [];
+    } catch { /* table may not exist yet */ }
 
     // Won this month
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const wonFilter = isSales
-      ? supabase.from('crm_opportunities').select('estimated_value').eq('sales_id', userId)
-          .eq('stage', 'WON').gte('actual_close_date', monthStart)
-      : supabase.from('crm_opportunities').select('estimated_value')
-          .eq('stage', 'WON').gte('actual_close_date', monthStart);
-    const { data: wonThisMonth } = await wonFilter;
-    const wonValue = (wonThisMonth || []).reduce((s, o) => s + Number(o.estimated_value || 0), 0);
+    let wonValue = 0;
+    try {
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      let wonQuery = supabase
+        .from('crm_opportunities')
+        .select('estimated_value')
+        .eq('stage', 'WON')
+        .gte('actual_close_date', monthStart);
+      if (isSales) wonQuery = wonQuery.eq('sales_id', userId);
+      const { data } = await wonQuery;
+      wonValue = (data || []).reduce((s, o) => s + Number(o.estimated_value || 0), 0);
+    } catch { /* */ }
 
     res.json({
       customerCount: customerCount || 0,
-      openOpportunities: (openOpps || []).length,
+      openOpportunities: openOpps.length,
       pipelineValue,
       weightedValue,
       wonThisMonth: wonValue,
-      upcomingFollowUps: followUps || [],
+      upcomingFollowUps: followUps,
     });
   } catch (err: any) {
     console.error('GET /crm/dashboard error:', err);
@@ -74,55 +89,73 @@ crmRouter.get('/dashboard', async (req: any, res) => {
 });
 
 /* ================================================================== */
-/*  MY CUSTOMERS (sales-scoped)                                        */
+/*  CUSTOMERS                                                          */
 /* ================================================================== */
 
 crmRouter.get('/customers', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const userId = req.user.id;
     const role = (req.user.role || '').toUpperCase();
     const { search, sort, order } = req.query;
 
-    let query = supabase
-      .from('customers')
-      .select(`
-        *,
-        sales:users!customers_sales_id_fkey(id, first_name, last_name),
-        team_leader:users!customers_team_leader_id_fkey(id, first_name, last_name)
-      `);
+    // Simple query first — avoid foreign key joins that may not exist yet
+    let query = supabase.from('customers').select('*');
 
-    // Sales sees only their own customers
+    // Sales sees only their customers
     if (role === 'SALES') {
       query = query.eq('sales_id', userId);
     }
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,city.ilike.%${search}%,email.ilike.%${search}%`);
+      query = query.or(`name.ilike.%${search}%,city.ilike.%${search}%`);
     }
 
-    if (sort) {
-      query = query.order(sort as string, { ascending: order !== 'desc' });
-    } else {
-      query = query.order('name');
-    }
+    query = query.order(sort as string || 'name', { ascending: order !== 'desc' });
 
     const { data, error } = await query;
     if (error) throw error;
 
-    res.json({ data: data || [] });
+    // Enrich with sales/TL names if columns exist
+    const userIds = new Set<string>();
+    (data || []).forEach((c: any) => {
+      if (c.sales_id) userIds.add(c.sales_id);
+      if (c.team_leader_id) userIds.add(c.team_leader_id);
+    });
+
+    let userMap: Record<string, any> = {};
+    if (userIds.size > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, first_name, last_name')
+        .in('id', [...userIds]);
+      (users || []).forEach(u => { userMap[u.id] = u; });
+    }
+
+    const enriched = (data || []).map((c: any) => ({
+      ...c,
+      sales: c.sales_id ? userMap[c.sales_id] || null : null,
+      team_leader: c.team_leader_id ? userMap[c.team_leader_id] || null : null,
+    }));
+
+    res.json({ data: enriched });
   } catch (err: any) {
     console.error('GET /crm/customers error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Assign sales + team_leader to a customer
 crmRouter.put('/customers/:id/assign', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const { id } = req.params;
     const { sales_id, team_leader_id } = req.body;
 
-    const updates: any = { updated_at: new Date().toISOString() };
+    const updates: any = {};
     if (sales_id !== undefined) updates.sales_id = sales_id || null;
     if (team_leader_id !== undefined) updates.team_leader_id = team_leader_id || null;
 
@@ -147,24 +180,32 @@ crmRouter.put('/customers/:id/assign', async (req: any, res) => {
 
 crmRouter.get('/activities', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const userId = req.user.id;
     const role = (req.user.role || '').toUpperCase();
     const { customer_id, type, limit: lim } = req.query;
 
     let query = supabase
       .from('crm_activities')
-      .select('*, customers(id, name), users(id, first_name, last_name)')
+      .select('*, customers(id, name)')
       .order('activity_date', { ascending: false });
 
-    if (role === 'SALES') {
-      query = query.eq('user_id', userId);
-    }
+    if (role === 'SALES') query = query.eq('user_id', userId);
     if (customer_id) query = query.eq('customer_id', customer_id);
     if (type) query = query.eq('type', type);
     if (lim) query = query.limit(Number(lim));
 
     const { data, error } = await query;
-    if (error) throw error;
+
+    if (error) {
+      // Table may not exist — return empty
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        return res.json({ data: [] });
+      }
+      throw error;
+    }
 
     res.json({ data: data || [] });
   } catch (err: any) {
@@ -175,6 +216,9 @@ crmRouter.get('/activities', async (req: any, res) => {
 
 crmRouter.post('/activities', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const userId = req.user.id;
     const {
       customer_id, type, subject, description,
@@ -214,9 +258,12 @@ crmRouter.post('/activities', async (req: any, res) => {
 
 crmRouter.put('/activities/:id', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const { id } = req.params;
     const updates: any = { updated_at: new Date().toISOString() };
-    
+
     const fields = [
       'subject', 'description', 'type', 'activity_date',
       'duration_minutes', 'outcome', 'next_action', 'next_action_date', 'is_completed',
@@ -255,18 +302,21 @@ crmRouter.delete('/activities/:id', async (req: any, res) => {
 });
 
 /* ================================================================== */
-/*  OPPORTUNITIES / PIPELINE                                           */
+/*  OPPORTUNITIES                                                      */
 /* ================================================================== */
 
 crmRouter.get('/opportunities', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const userId = req.user.id;
     const role = (req.user.role || '').toUpperCase();
     const { customer_id, stage } = req.query;
 
     let query = supabase
       .from('crm_opportunities')
-      .select('*, customers(id, name), sales:users!crm_opportunities_sales_id_fkey(id, first_name, last_name)')
+      .select('*, customers(id, name)')
       .order('created_at', { ascending: false });
 
     if (role === 'SALES') query = query.eq('sales_id', userId);
@@ -274,7 +324,13 @@ crmRouter.get('/opportunities', async (req: any, res) => {
     if (stage) query = query.eq('stage', stage);
 
     const { data, error } = await query;
-    if (error) throw error;
+
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        return res.json({ data: [] });
+      }
+      throw error;
+    }
 
     res.json({ data: data || [] });
   } catch (err: any) {
@@ -285,6 +341,9 @@ crmRouter.get('/opportunities', async (req: any, res) => {
 
 crmRouter.post('/opportunities', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const userId = req.user.id;
     const {
       customer_id, title, description, stage,
@@ -320,6 +379,9 @@ crmRouter.post('/opportunities', async (req: any, res) => {
 
 crmRouter.put('/opportunities/:id', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const { id } = req.params;
     const updates: any = { updated_at: new Date().toISOString() };
 
@@ -331,7 +393,6 @@ crmRouter.put('/opportunities/:id', async (req: any, res) => {
       if (req.body[f] !== undefined) updates[f] = req.body[f];
     });
 
-    // Auto-set actual_close_date when won/lost
     if (updates.stage === 'WON' || updates.stage === 'LOST') {
       updates.actual_close_date = updates.actual_close_date || new Date().toISOString().slice(0, 10);
     }
@@ -366,47 +427,51 @@ crmRouter.delete('/opportunities/:id', async (req: any, res) => {
 });
 
 /* ================================================================== */
-/*  CUSTOMER PERFORMANCE                                               */
+/*  PERFORMANCE                                                        */
 /* ================================================================== */
 
 crmRouter.get('/performance/:customerId', async (req: any, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const { customerId } = req.params;
-    const { months } = req.query; // default last 12 months
+    const { months } = req.query;
 
     const monthsBack = Number(months) || 12;
     const from = new Date();
     from.setMonth(from.getMonth() - monthsBack);
     const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`;
 
-    const { data, error } = await supabase
-      .from('crm_customer_performance')
-      .select('*')
-      .eq('customer_id', customerId)
-      .gte('period_month', fromStr)
-      .order('period_month', { ascending: true });
+    let performance: any[] = [];
+    try {
+      const { data } = await supabase
+        .from('crm_customer_performance')
+        .select('*')
+        .eq('customer_id', customerId)
+        .gte('period_month', fromStr)
+        .order('period_month', { ascending: true });
+      performance = data || [];
+    } catch { /* table may not exist */ }
 
-    if (error) throw error;
+    let oppSummary = { total: 0, won: 0, lost: 0, open: 0, totalValue: 0, wonValue: 0 };
+    try {
+      const { data: opps } = await supabase
+        .from('crm_opportunities')
+        .select('stage, estimated_value')
+        .eq('customer_id', customerId);
+      const list = opps || [];
+      oppSummary = {
+        total: list.length,
+        won: list.filter(o => o.stage === 'WON').length,
+        lost: list.filter(o => o.stage === 'LOST').length,
+        open: list.filter(o => !['WON', 'LOST'].includes(o.stage)).length,
+        totalValue: list.reduce((s, o) => s + Number(o.estimated_value || 0), 0),
+        wonValue: list.filter(o => o.stage === 'WON').reduce((s, o) => s + Number(o.estimated_value || 0), 0),
+      };
+    } catch { /* */ }
 
-    // Also get opportunity summary for this customer
-    const { data: opps } = await supabase
-      .from('crm_opportunities')
-      .select('stage, estimated_value')
-      .eq('customer_id', customerId);
-
-    const oppSummary = {
-      total: (opps || []).length,
-      won: (opps || []).filter(o => o.stage === 'WON').length,
-      lost: (opps || []).filter(o => o.stage === 'LOST').length,
-      open: (opps || []).filter(o => !['WON', 'LOST'].includes(o.stage)).length,
-      totalValue: (opps || []).reduce((s, o) => s + Number(o.estimated_value || 0), 0),
-      wonValue: (opps || []).filter(o => o.stage === 'WON').reduce((s, o) => s + Number(o.estimated_value || 0), 0),
-    };
-
-    res.json({
-      performance: data || [],
-      opportunities: oppSummary,
-    });
+    res.json({ performance, opportunities: oppSummary });
   } catch (err: any) {
     console.error('GET /crm/performance/:customerId error:', err);
     res.status(500).json({ error: err.message });
