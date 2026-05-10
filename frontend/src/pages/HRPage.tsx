@@ -12,12 +12,12 @@ import {
 const API = import.meta.env.VITE_API_URL ?? "";
 
 function normalizeRole(raw: string): Role {
-  const upper = (raw || '').toUpperCase();
+  const upper = (raw || "").toUpperCase();
   switch (upper) {
-    case 'GLOBAL_MANAGER': return 'ADMIN';
-    case 'LOCAL_MANAGER':  return 'MANAGER';
-    case 'ARBEITER':       return 'EMPLOYEE';
-    default:               return (upper as Role) || 'EMPLOYEE';
+    case "GLOBAL_MANAGER": return "ADMIN";
+    case "LOCAL_MANAGER":  return "MANAGER";
+    case "ARBEITER":       return "EMPLOYEE";
+    default:               return (upper as Role) || "EMPLOYEE";
   }
 }
 
@@ -48,12 +48,23 @@ interface HRProfile {
   canton: string;
   bvg_code: string;
   notes: string;
+  /* ── Hierarchy ── */
+  team_leader_id: string | null;
+  executive_id: string | null;
 }
 
 interface PayslipLine {
   label: string;
   employer: number;
   employee: number;
+}
+
+/* helper: minimal user record for dropdowns */
+interface UserSummary {
+  id: string;
+  first_name: string;
+  last_name: string;
+  role: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,6 +142,15 @@ const L_ALL: Record<string, Record<string, string>> = {
     overtime: "Überstunden",
     totalGross: "Bruttolohn total",
     netPayout: "Netto-Auszahlung",
+    /* Hierarchy */
+    teamLeader: "Teamleiter",
+    executive: "Geschäftsleitung",
+    hierarchy: "Hierarchie",
+    noTeamLeader: "Kein Teamleiter zugewiesen",
+    noExecutive: "Keine Geschäftsleitung zugewiesen",
+    selectTeamLeader: "Teamleiter auswählen…",
+    selectExecutive: "Geschäftsleitung auswählen…",
+    none: "— Keine —",
   },
   en: {
     title: "Human Resources",
@@ -203,6 +223,14 @@ const L_ALL: Record<string, Record<string, string>> = {
     overtime: "Overtime",
     totalGross: "Total Gross",
     netPayout: "Net Payout",
+    teamLeader: "Team Leader",
+    executive: "Executive",
+    hierarchy: "Hierarchy",
+    noTeamLeader: "No team leader assigned",
+    noExecutive: "No executive assigned",
+    selectTeamLeader: "Select team leader…",
+    selectExecutive: "Select executive…",
+    none: "— None —",
   },
   fr: {
     title: "Ressources humaines",
@@ -275,6 +303,14 @@ const L_ALL: Record<string, Record<string, string>> = {
     overtime: "Heures supplémentaires",
     totalGross: "Salaire brut total",
     netPayout: "Versement net",
+    teamLeader: "Chef d'équipe",
+    executive: "Direction",
+    hierarchy: "Hiérarchie",
+    noTeamLeader: "Aucun chef d'équipe",
+    noExecutive: "Aucune direction assignée",
+    selectTeamLeader: "Sélectionner chef d'équipe…",
+    selectExecutive: "Sélectionner direction…",
+    none: "— Aucun —",
   },
   pt: {
     title: "Recursos Humanos",
@@ -347,6 +383,14 @@ const L_ALL: Record<string, Record<string, string>> = {
     overtime: "Horas extras",
     totalGross: "Salário bruto total",
     netPayout: "Pagamento líquido",
+    teamLeader: "Líder de equipa",
+    executive: "Direção",
+    hierarchy: "Hierarquia",
+    noTeamLeader: "Sem líder de equipa",
+    noExecutive: "Sem direção atribuída",
+    selectTeamLeader: "Selecionar líder de equipa…",
+    selectExecutive: "Selecionar direção…",
+    none: "— Nenhum —",
   },
 };
 
@@ -456,7 +500,7 @@ export default function HRPage() {
   /* ---- permissions ---- */
   const { permissionMap } = useRolesStore();
   const perms = useMemo(() => {
-    const role = normalizeRole(user?.role || '');
+    const role = normalizeRole(user?.role || "");
     return resolvePermissions(role, user?.custom_permissions, permissionMap);
   }, [user, permissionMap]);
 
@@ -499,6 +543,7 @@ export default function HRPage() {
 
   /* ---- state ---- */
   const [profiles, setProfiles] = useState<HRProfile[]>([]);
+  const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filterDept, setFilterDept] = useState("");
@@ -553,18 +598,33 @@ export default function HRPage() {
     }
   }, [search, filterDept, filterContract, headers]);
 
+  /* Fetch all users (lightweight) for hierarchy dropdowns */
+  const fetchAllUsers = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/users?limit=500`, { headers: headers() });
+      const json = await res.json();
+      const list: UserSummary[] = (json.data ?? json.items ?? json ?? []).map(
+        (u: Record<string, unknown>) => ({
+          id: u.id as string,
+          first_name: u.first_name as string,
+          last_name: u.last_name as string,
+          role: u.role as string,
+        })
+      );
+      setAllUsers(list);
+    } catch { /* ignore */ }
+  }, [headers]);
+
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
+  useEffect(() => { fetchAllUsers(); }, [fetchAllUsers]);
 
   const fetchDetail = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/v1/users/${id}`, {
-        headers: headers(),
-      });
+      const res = await fetch(`${API}/api/v1/users/${id}`, { headers: headers() });
       const json = await res.json();
       const p = json.data ?? json;
       setSelected(p);
       setTab("general");
-      // Reset payroll inputs when selecting a new employee
       setActualHours(0);
       setOvertimeHours(0);
     } catch {
@@ -607,19 +667,16 @@ export default function HRPage() {
     setForm(null);
     setTab("general");
   };
-
   const startEdit = () => {
     if (!selected) return;
     setForm({ ...selected });
     setEditing(true);
   };
-
   const cancelEdit = () => {
     setEditing(false);
     setForm(null);
   };
-
-  const setField = (key: keyof HRProfile, value: string | number) =>
+  const setField = (key: keyof HRProfile, value: string | number | null) =>
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
 
   const fmtCHF = (v: number) =>
@@ -631,6 +688,28 @@ export default function HRPage() {
     () => [...new Set(profiles.map((p) => p.department).filter(Boolean))].sort(),
     [profiles]
   );
+
+  /* ---- hierarchy helpers ---- */
+  const teamLeaders = useMemo(
+    () => allUsers.filter((u) => {
+      const r = u.role?.toUpperCase();
+      return r === "MANAGER" || r === "LOCAL_MANAGER" || r === "ADMIN" || r === "GLOBAL_MANAGER";
+    }),
+    [allUsers]
+  );
+  const executives = useMemo(
+    () => allUsers.filter((u) => {
+      const r = u.role?.toUpperCase();
+      return r === "ADMIN" || r === "GLOBAL_MANAGER";
+    }),
+    [allUsers]
+  );
+
+  const getUserName = (id: string | null): string => {
+    if (!id) return "—";
+    const u = allUsers.find((u) => u.id === id);
+    return u ? `${u.first_name} ${u.last_name}` : id;
+  };
 
   /* ---- monthly payslip computation ---- */
   const payslipMonthly = useMemo(() => {
@@ -682,7 +761,6 @@ export default function HRPage() {
   const salaryLabel = (s: string) =>
     s === "HOURLY" ? L.HOURLY_PAY : L.MONTHLY;
 
-  /* ---- available tabs based on permissions ---- */
   const availableTabs: ("general" | "contract" | "social")[] = useMemo(() => {
     const tabs: ("general" | "contract" | "social")[] = ["general", "contract"];
     if (canPayroll) tabs.push("social");
@@ -780,6 +858,7 @@ export default function HRPage() {
                     <th style={thStyle}>{L.name}</th>
                     <th style={thStyle}>{L.role}</th>
                     <th style={thStyle}>{L.department}</th>
+                    <th style={thStyle}>{L.teamLeader}</th>
                     <th style={thStyle}>{L.contractType}</th>
                     <th style={thStyle}>{L.salary}</th>
                     <th style={thStyle}>{L.workPensum}</th>
@@ -789,7 +868,7 @@ export default function HRPage() {
                 <tbody>
                   {profiles.length === 0 && (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: 30, color: dimText }}>
+                      <td colSpan={8} style={{ textAlign: "center", padding: 30, color: dimText }}>
                         {L.noResults}
                       </td>
                     </tr>
@@ -810,6 +889,11 @@ export default function HRPage() {
                       <td style={tdStyle}>{p.first_name} {p.last_name}</td>
                       <td style={tdStyle}>{p.role}</td>
                       <td style={tdStyle}>{p.department}</td>
+                      <td style={tdStyle}>
+                        <span style={{ fontSize: 12, color: p.team_leader_id ? th.text : dimText }}>
+                          {getUserName(p.team_leader_id)}
+                        </span>
+                      </td>
                       <td style={tdStyle}>{contractLabel(p.contract_type)}</td>
                       <td style={tdStyle}>
                         {fmtCHF(p.salary_amount)}{" "}
@@ -888,84 +972,164 @@ export default function HRPage() {
 
             {/* ============ GENERAL TAB ============ */}
             {tab === "general" && !editing && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                {([
-                  ["first_name", L.name],
-                  ["last_name", L.name + " (2)"],
-                  ["email", "Email"],
-                  ["role", L.role],
-                  ["department", L.department],
-                  ["nationality", L.nationality],
-                  ["permit_type", L.permitType],
-                  ["marital_status", L.maritalStatus],
-                  ["children_count", L.children],
-                  ["canton", L.canton],
-                  ["ahv_number", L.ahvNumber],
-                  ["iban", L.iban],
-                ] as [keyof HRProfile, string][]).map(([key, label]) => (
-                  <div key={key}>
-                    <div style={{ fontSize: 11, color: dimText }}>{label}</div>
-                    <div style={{ fontSize: 14, marginTop: 2 }}>
-                      {String(selected[key] ?? "") || "—"}
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  {([
+                    ["first_name", L.name],
+                    ["last_name", L.name + " (2)"],
+                    ["email", "Email"],
+                    ["role", L.role],
+                    ["department", L.department],
+                    ["nationality", L.nationality],
+                    ["permit_type", L.permitType],
+                    ["marital_status", L.maritalStatus],
+                    ["children_count", L.children],
+                    ["canton", L.canton],
+                    ["ahv_number", L.ahvNumber],
+                    ["iban", L.iban],
+                  ] as [keyof HRProfile, string][]).map(([key, label]) => (
+                    <div key={key}>
+                      <div style={{ fontSize: 11, color: dimText }}>{label}</div>
+                      <div style={{ fontSize: 14, marginTop: 2 }}>
+                        {String(selected[key] ?? "") || "—"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ── Hierarchy section (read-only) ── */}
+                <div style={{
+                  marginTop: 24, padding: 16, borderRadius: 10,
+                  background: isDark ? "rgba(255,255,255,.04)" : "rgba(0,0,0,.02)",
+                  border: `1px solid ${th.border}`,
+                }}>
+                  <h4 style={{ margin: "0 0 12px", color: gold, fontSize: 14 }}>
+                    🏗️ {L.hierarchy}
+                  </h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: dimText }}>{L.teamLeader}</div>
+                      <div style={{ fontSize: 14, marginTop: 2 }}>
+                        {selected.team_leader_id
+                          ? getUserName(selected.team_leader_id)
+                          : <span style={{ color: dimText, fontStyle: "italic" }}>{L.noTeamLeader}</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: dimText }}>{L.executive}</div>
+                      <div style={{ fontSize: 14, marginTop: 2 }}>
+                        {selected.executive_id
+                          ? getUserName(selected.executive_id)
+                          : <span style={{ color: dimText, fontStyle: "italic" }}>{L.noExecutive}</span>}
+                      </div>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
             )}
 
             {tab === "general" && editing && form && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div>
-                  <label style={labelStyle}>{L.name}</label>
-                  <input style={inputStyle} value={form.first_name}
-                    onChange={(e) => setField("first_name", e.target.value)} />
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <div>
+                    <label style={labelStyle}>{L.name}</label>
+                    <input style={inputStyle} value={form.first_name}
+                      onChange={(e) => setField("first_name", e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.name} (2)</label>
+                    <input style={inputStyle} value={form.last_name}
+                      onChange={(e) => setField("last_name", e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.nationality}</label>
+                    <input style={inputStyle} value={form.nationality}
+                      onChange={(e) => setField("nationality", e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.permitType}</label>
+                    <select style={selectStyle} value={form.permit_type}
+                      onChange={(e) => setField("permit_type", e.target.value)}>
+                      <option value="">—</option>
+                      <option value="CH">CH</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
+                      <option value="G">G (Grenzgänger)</option>
+                      <option value="L">L</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.maritalStatus}</label>
+                    <input style={inputStyle} value={form.marital_status}
+                      onChange={(e) => setField("marital_status", e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.children}</label>
+                    <input style={inputStyle} type="number" min={0} value={form.children_count}
+                      onChange={(e) => setField("children_count", Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.canton}</label>
+                    <input style={inputStyle} value={form.canton}
+                      onChange={(e) => setField("canton", e.target.value.toUpperCase())} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.ahvNumber}</label>
+                    <input style={inputStyle} value={form.ahv_number}
+                      onChange={(e) => setField("ahv_number", e.target.value)} />
+                  </div>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={labelStyle}>{L.iban}</label>
+                    <input style={inputStyle} value={form.iban}
+                      onChange={(e) => setField("iban", e.target.value)} />
+                  </div>
                 </div>
-                <div>
-                  <label style={labelStyle}>{L.name} (2)</label>
-                  <input style={inputStyle} value={form.last_name}
-                    onChange={(e) => setField("last_name", e.target.value)} />
-                </div>
-                <div>
-                  <label style={labelStyle}>{L.nationality}</label>
-                  <input style={inputStyle} value={form.nationality}
-                    onChange={(e) => setField("nationality", e.target.value)} />
-                </div>
-                <div>
-                  <label style={labelStyle}>{L.permitType}</label>
-                  <select style={selectStyle} value={form.permit_type}
-                    onChange={(e) => setField("permit_type", e.target.value)}>
-                    <option value="">—</option>
-                    <option value="CH">CH</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                    <option value="G">G (Grenzgänger)</option>
-                    <option value="L">L</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>{L.maritalStatus}</label>
-                  <input style={inputStyle} value={form.marital_status}
-                    onChange={(e) => setField("marital_status", e.target.value)} />
-                </div>
-                <div>
-                  <label style={labelStyle}>{L.children}</label>
-                  <input style={inputStyle} type="number" min={0} value={form.children_count}
-                    onChange={(e) => setField("children_count", Number(e.target.value))} />
-                </div>
-                <div>
-                  <label style={labelStyle}>{L.canton}</label>
-                  <input style={inputStyle} value={form.canton}
-                    onChange={(e) => setField("canton", e.target.value.toUpperCase())} />
-                </div>
-                <div>
-                  <label style={labelStyle}>{L.ahvNumber}</label>
-                  <input style={inputStyle} value={form.ahv_number}
-                    onChange={(e) => setField("ahv_number", e.target.value)} />
-                </div>
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <label style={labelStyle}>{L.iban}</label>
-                  <input style={inputStyle} value={form.iban}
-                    onChange={(e) => setField("iban", e.target.value)} />
+
+                {/* ── Hierarchy section (edit mode) ── */}
+                <div style={{
+                  marginTop: 24, padding: 16, borderRadius: 10,
+                  background: isDark ? "rgba(255,255,255,.04)" : "rgba(0,0,0,.02)",
+                  border: `1px solid ${th.border}`,
+                }}>
+                  <h4 style={{ margin: "0 0 12px", color: gold, fontSize: 14 }}>
+                    🏗️ {L.hierarchy}
+                  </h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div>
+                      <label style={labelStyle}>{L.teamLeader}</label>
+                      <select
+                        style={selectStyle}
+                        value={form.team_leader_id ?? ""}
+                        onChange={(e) => setField("team_leader_id", e.target.value || null)}
+                      >
+                        <option value="">{L.none}</option>
+                        {teamLeaders
+                          .filter((tl) => tl.id !== form.id)
+                          .map((tl) => (
+                            <option key={tl.id} value={tl.id}>
+                              {tl.first_name} {tl.last_name} ({tl.role})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>{L.executive}</label>
+                      <select
+                        style={selectStyle}
+                        value={form.executive_id ?? ""}
+                        onChange={(e) => setField("executive_id", e.target.value || null)}
+                      >
+                        <option value="">{L.none}</option>
+                        {executives
+                          .filter((ex) => ex.id !== form.id)
+                          .map((ex) => (
+                            <option key={ex.id} value={ex.id}>
+                              {ex.first_name} {ex.last_name} ({ex.role})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

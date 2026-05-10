@@ -41,7 +41,7 @@ interface VatRate {
   id: string;
   country_code: string;
   country_name: string;
-  rate_type: string;       // STANDARD | REDUCED | SPECIAL | ZERO
+  rate_type: string;
   rate_percent: number;
   description: string;
   is_active: boolean;
@@ -62,8 +62,8 @@ interface CrossBorderCountry {
 interface CompanyInfo {
   company_name: string;
   legal_form: string;
-  uid_number: string;           // CHE-xxx.xxx.xxx
-  vat_number: string;           // CHE-xxx.xxx.xxx MWST
+  uid_number: string;
+  vat_number: string;
   commercial_register: string;
   street: string;
   postal_code: string;
@@ -76,13 +76,25 @@ interface CompanyInfo {
   bank_name: string;
   bank_iban: string;
   bank_bic: string;
-  vat_method: string;           // EFFECTIVE | NET_RATE | FLAT_RATE
-  vat_period: string;           // QUARTERLY | SEMI_ANNUAL | ANNUAL
-  vat_standard_rate: number;    // 8.1
-  vat_reduced_rate: number;     // 2.6
-  vat_special_rate: number;     // 3.8
-  fiscal_year_start: string;    // MM-DD
+  vat_method: string;
+  vat_period: string;
+  vat_standard_rate: number;
+  vat_reduced_rate: number;
+  vat_special_rate: number;
+  fiscal_year_start: string;
   logo_url: string;
+}
+
+/* ── Hierarchy ── */
+interface HierarchyUser {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: string;
+  department: string;
+  team_leader_id: string | null;
+  executive_id: string | null;
 }
 
 type ConfigCategory =
@@ -98,7 +110,7 @@ interface ConfigForm {
   key: string;
   label: string;
   sort_order: number;
-  meta: string; // JSON string
+  meta: string;
 }
 
 /* ================================================================== */
@@ -112,13 +124,11 @@ const L_ALL: Record<string, Record<string, string>> = {
     configLists: "Konfigurationslisten",
     company: "Unternehmen",
     vatCrossBorder: "MwSt & Grenzüberschreitend",
-    // Roles
     roleName: "Rollenname",
     permissions: "Berechtigungen",
     systemRole: "Systemrolle",
     newRole: "Neue Rolle",
     editRole: "Rolle bearbeiten",
-    // Config lists
     contractTypes: "Vertragsarten",
     salaryTypes: "Lohnarten",
     scheduleTypes: "Einsatzarten",
@@ -131,7 +141,6 @@ const L_ALL: Record<string, Record<string, string>> = {
     sortOrder: "Reihenfolge",
     metadata: "Metadaten (JSON)",
     newItem: "Neuer Eintrag",
-    // Company
     companyName: "Firmenname",
     legalForm: "Rechtsform",
     uidNumber: "UID-Nummer",
@@ -161,7 +170,6 @@ const L_ALL: Record<string, Record<string, string>> = {
     quarterly: "Vierteljährlich",
     semiAnnual: "Halbjährlich",
     annual: "Jährlich",
-    // VAT / Cross-border
     vatRates: "MwSt-Sätze",
     crossBorderCountries: "Länder (grenzüberschreitend)",
     countryCode: "Ländercode",
@@ -175,7 +183,6 @@ const L_ALL: Record<string, Record<string, string>> = {
     notes: "Notizen",
     newVatRate: "Neuer MwSt-Satz",
     newCountry: "Neues Land",
-    // General
     save: "Speichern",
     cancel: "Abbrechen",
     delete: "Löschen",
@@ -191,6 +198,25 @@ const L_ALL: Record<string, Record<string, string>> = {
     accessDenied: "Zugriff verweigert",
     loading: "Laden…",
     noResults: "Keine Einträge",
+    // Hierarchy
+    hierarchy: "Hierarchie",
+    hierarchyDesc: "Mitarbeiter → Teamleiter → Geschäftsleitung zuweisen",
+    teamLeader: "Teamleiter",
+    executive: "Geschäftsleitung",
+    employees: "Mitarbeiter",
+    unassigned: "Nicht zugewiesen",
+    assignTeamLeader: "Teamleiter zuweisen",
+    assignExecutive: "GL zuweisen",
+    team: "Team",
+    directReports: "Direkt unterstellt",
+    bulkAssign: "Zuweisungen",
+    orgChart: "Organigramm",
+    role: "Rolle",
+    changed: "geändert",
+    noLeader: "Kein Teamleiter",
+    noExec: "Keine GL",
+    filterByRole: "Nach Rolle filtern",
+    allRoles: "Alle Rollen",
   },
   en: {
     settings: "Settings",
@@ -272,6 +298,24 @@ const L_ALL: Record<string, Record<string, string>> = {
     accessDenied: "Access Denied",
     loading: "Loading…",
     noResults: "No entries",
+    hierarchy: "Hierarchy",
+    hierarchyDesc: "Assign employees → team leaders → executives",
+    teamLeader: "Team Leader",
+    executive: "Executive",
+    employees: "Employees",
+    unassigned: "Unassigned",
+    assignTeamLeader: "Assign Team Leader",
+    assignExecutive: "Assign Executive",
+    team: "Team",
+    directReports: "Direct Reports",
+    bulkAssign: "Assignments",
+    orgChart: "Org Chart",
+    role: "Role",
+    changed: "changed",
+    noLeader: "No team leader",
+    noExec: "No executive",
+    filterByRole: "Filter by role",
+    allRoles: "All roles",
   },
   fr: {
     settings: "Paramètres",
@@ -353,6 +397,24 @@ const L_ALL: Record<string, Record<string, string>> = {
     accessDenied: "Accès refusé",
     loading: "Chargement…",
     noResults: "Aucune entrée",
+    hierarchy: "Hiérarchie",
+    hierarchyDesc: "Affecter employés → chefs d'équipe → direction",
+    teamLeader: "Chef d'équipe",
+    executive: "Direction",
+    employees: "Employés",
+    unassigned: "Non attribué",
+    assignTeamLeader: "Attribuer chef d'équipe",
+    assignExecutive: "Attribuer direction",
+    team: "Équipe",
+    directReports: "Subordonnés directs",
+    bulkAssign: "Attributions",
+    orgChart: "Organigramme",
+    role: "Rôle",
+    changed: "modifié",
+    noLeader: "Aucun chef d'équipe",
+    noExec: "Aucune direction",
+    filterByRole: "Filtrer par rôle",
+    allRoles: "Tous les rôles",
   },
   pt: {
     settings: "Configurações",
@@ -434,6 +496,24 @@ const L_ALL: Record<string, Record<string, string>> = {
     accessDenied: "Acesso Negado",
     loading: "A carregar…",
     noResults: "Sem entradas",
+    hierarchy: "Hierarquia",
+    hierarchyDesc: "Atribuir funcionários → líderes → direção",
+    teamLeader: "Líder de equipa",
+    executive: "Direção",
+    employees: "Funcionários",
+    unassigned: "Não atribuído",
+    assignTeamLeader: "Atribuir líder",
+    assignExecutive: "Atribuir direção",
+    team: "Equipa",
+    directReports: "Subordinados diretos",
+    bulkAssign: "Atribuições",
+    orgChart: "Organograma",
+    role: "Função",
+    changed: "alterado",
+    noLeader: "Sem líder",
+    noExec: "Sem direção",
+    filterByRole: "Filtrar por função",
+    allRoles: "Todas as funções",
   },
 };
 
@@ -509,10 +589,25 @@ const LEGAL_FORMS = [
 ];
 
 /* ================================================================== */
+/*  Helper – normalise role strings                                    */
+/* ================================================================== */
+function isExecRole(role: string): boolean {
+  const r = (role || "").toUpperCase();
+  return r === "ADMIN" || r === "GLOBAL_MANAGER";
+}
+function isManagerRole(role: string): boolean {
+  const r = (role || "").toUpperCase();
+  return r === "MANAGER" || r === "LOCAL_MANAGER";
+}
+function isLeaderOrAbove(role: string): boolean {
+  return isExecRole(role) || isManagerRole(role);
+}
+
+/* ================================================================== */
 /*  Component                                                          */
 /* ================================================================== */
 
-type MainTab = "roles" | "config" | "company" | "vat";
+type MainTab = "roles" | "config" | "company" | "vat" | "hierarchy";
 
 export default function SettingsPage() {
   const { th, isDark, lang } = useTheme();
@@ -615,13 +710,20 @@ export default function SettingsPage() {
 
   const [vatSubTab, setVatSubTab] = useState<"rates" | "countries">("rates");
 
+  // Hierarchy
+  const [hUsers, setHUsers] = useState<HierarchyUser[]>([]);
+  const [hLoading, setHLoading] = useState(false);
+  const [hEditMap, setHEditMap] = useState<Record<string, { team_leader_id: string | null; executive_id: string | null }>>({});
+  const [hDirty, setHDirty] = useState(false);
+  const [hRoleFilter, setHRoleFilter] = useState("");
+
   /* ── Helpers ── */
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const headers = useCallback(
+  const hdrs = useCallback(
     (): HeadersInit => ({
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -635,52 +737,81 @@ export default function SettingsPage() {
 
   const fetchRoles = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/v1/settings/roles`, { headers: headers() });
+      const r = await fetch(`${API}/api/v1/settings/roles`, { headers: hdrs() });
       const j = await r.json();
       setRoles(j.data ?? j ?? []);
     } catch { /* ignore */ }
-  }, [headers]);
+  }, [hdrs]);
 
   const fetchConfigItems = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/v1/settings/config/${configCategory}`, { headers: headers() });
+      const r = await fetch(`${API}/api/v1/settings/config/${configCategory}`, { headers: hdrs() });
       const j = await r.json();
       setConfigItems(j.data ?? j ?? []);
     } catch { /* ignore */ }
-  }, [headers, configCategory]);
+  }, [hdrs, configCategory]);
 
   const fetchCompanyInfo = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/v1/settings/company`, { headers: headers() });
+      const r = await fetch(`${API}/api/v1/settings/company`, { headers: hdrs() });
       const j = await r.json();
       const data = j.data ?? j;
       setCompanyInfo(data);
       setCompanyForm(data);
     } catch { /* ignore */ }
-  }, [headers]);
+  }, [hdrs]);
 
   const fetchVatRates = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/v1/settings/vat-rates`, { headers: headers() });
+      const r = await fetch(`${API}/api/v1/settings/vat-rates`, { headers: hdrs() });
       const j = await r.json();
       setVatRates(j.data ?? j ?? []);
     } catch { /* ignore */ }
-  }, [headers]);
+  }, [hdrs]);
 
   const fetchCrossBorderCountries = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/v1/settings/cross-border`, { headers: headers() });
+      const r = await fetch(`${API}/api/v1/settings/cross-border`, { headers: hdrs() });
       const j = await r.json();
       setCrossBorderCountries(j.data ?? j ?? []);
     } catch { /* ignore */ }
-  }, [headers]);
+  }, [hdrs]);
+
+  const fetchHierarchyUsers = useCallback(async () => {
+    setHLoading(true);
+    try {
+      const r = await fetch(`${API}/api/v1/users?limit=500`, { headers: hdrs() });
+      const j = await r.json();
+      const list: HierarchyUser[] = (j.data ?? j.items ?? j ?? []).map(
+        (u: Record<string, unknown>) => ({
+          id: u.id as string,
+          first_name: u.first_name as string,
+          last_name: u.last_name as string,
+          email: u.email as string,
+          role: u.role as string,
+          department: (u.department as string) ?? "",
+          team_leader_id: (u.team_leader_id as string | null) ?? null,
+          executive_id: (u.executive_id as string | null) ?? null,
+        })
+      );
+      setHUsers(list);
+      const map: Record<string, { team_leader_id: string | null; executive_id: string | null }> = {};
+      list.forEach((u) => {
+        map[u.id] = { team_leader_id: u.team_leader_id, executive_id: u.executive_id };
+      });
+      setHEditMap(map);
+      setHDirty(false);
+    } catch { /* ignore */ }
+    finally { setHLoading(false); }
+  }, [hdrs]);
 
   useEffect(() => {
     fetchRoles();
     fetchCompanyInfo();
     fetchVatRates();
     fetchCrossBorderCountries();
-  }, [fetchRoles, fetchCompanyInfo, fetchVatRates, fetchCrossBorderCountries]);
+    fetchHierarchyUsers();
+  }, [fetchRoles, fetchCompanyInfo, fetchVatRates, fetchCrossBorderCountries, fetchHierarchyUsers]);
 
   useEffect(() => {
     fetchConfigItems();
@@ -691,11 +822,7 @@ export default function SettingsPage() {
   /* ================================================================ */
 
   // ── Roles ──
-  const openCreateRole = () => {
-    setRoleForm({ ...EMPTY_ROLE });
-    setRoleEditId(null);
-    setRoleModal(true);
-  };
+  const openCreateRole = () => { setRoleForm({ ...EMPTY_ROLE }); setRoleEditId(null); setRoleModal(true); };
   const openEditRole = (r: RoleConfig) => {
     setRoleForm({
       name: r.name, label_de: r.label_de, label_en: r.label_en,
@@ -708,196 +835,149 @@ export default function SettingsPage() {
   const saveRole = async () => {
     setSaving(true);
     try {
-      const url = roleEditId
-        ? `${API}/api/v1/settings/roles/${roleEditId}`
-        : `${API}/api/v1/settings/roles`;
-      const r = await fetch(url, {
-        method: roleEditId ? "PUT" : "POST",
-        headers: headers(),
-        body: JSON.stringify(roleForm),
-      });
+      const url = roleEditId ? `${API}/api/v1/settings/roles/${roleEditId}` : `${API}/api/v1/settings/roles`;
+      const r = await fetch(url, { method: roleEditId ? "PUT" : "POST", headers: hdrs(), body: JSON.stringify(roleForm) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      showToast(t.saved);
-      setRoleModal(false);
-      fetchRoles();
-    } catch (e) {
-      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
-    } finally {
-      setSaving(false);
-    }
+      showToast(t.saved); setRoleModal(false); fetchRoles();
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setSaving(false); }
   };
   const toggleRolePerm = (perm: Permission) => {
     setRoleForm((prev) => ({
       ...prev,
       permissions: prev.permissions.includes(perm)
-        ? prev.permissions.filter((p) => p !== perm)
-        : [...prev.permissions, perm],
+        ? prev.permissions.filter((p) => p !== perm) : [...prev.permissions, perm],
     }));
   };
 
   // ── Config lists ──
-  const openCreateConfig = () => {
-    setConfigForm({ ...EMPTY_CONFIG_FORM });
-    setConfigEditId(null);
-    setConfigModal(true);
-  };
+  const openCreateConfig = () => { setConfigForm({ ...EMPTY_CONFIG_FORM }); setConfigEditId(null); setConfigModal(true); };
   const openEditConfig = (item: ConfigItem) => {
-    setConfigForm({
-      key: item.key, label: item.label,
-      sort_order: item.sort_order,
-      meta: item.meta ? JSON.stringify(item.meta) : "{}",
-    });
-    setConfigEditId(item.id);
-    setConfigModal(true);
+    setConfigForm({ key: item.key, label: item.label, sort_order: item.sort_order, meta: item.meta ? JSON.stringify(item.meta) : "{}" });
+    setConfigEditId(item.id); setConfigModal(true);
   };
   const saveConfigItem = async () => {
     setSaving(true);
     try {
       let metaParsed = {};
       try { metaParsed = JSON.parse(configForm.meta); } catch { /* keep empty */ }
-      const body = {
-        category: configCategory,
-        key: configForm.key,
-        label: configForm.label,
-        sort_order: configForm.sort_order,
-        meta: metaParsed,
-      };
-      const url = configEditId
-        ? `${API}/api/v1/settings/config/${configCategory}/${configEditId}`
-        : `${API}/api/v1/settings/config/${configCategory}`;
-      const r = await fetch(url, {
-        method: configEditId ? "PUT" : "POST",
-        headers: headers(),
-        body: JSON.stringify(body),
-      });
+      const body = { category: configCategory, key: configForm.key, label: configForm.label, sort_order: configForm.sort_order, meta: metaParsed };
+      const url = configEditId ? `${API}/api/v1/settings/config/${configCategory}/${configEditId}` : `${API}/api/v1/settings/config/${configCategory}`;
+      const r = await fetch(url, { method: configEditId ? "PUT" : "POST", headers: hdrs(), body: JSON.stringify(body) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      showToast(t.saved);
-      setConfigModal(false);
-      fetchConfigItems();
-    } catch (e) {
-      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
-    } finally {
-      setSaving(false);
-    }
+      showToast(t.saved); setConfigModal(false); fetchConfigItems();
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setSaving(false); }
   };
 
   // ── Company ──
   const saveCompanyInfo = async () => {
     setSaving(true);
     try {
-      const r = await fetch(`${API}/api/v1/settings/company`, {
-        method: "PUT",
-        headers: headers(),
-        body: JSON.stringify(companyForm),
-      });
+      const r = await fetch(`${API}/api/v1/settings/company`, { method: "PUT", headers: hdrs(), body: JSON.stringify(companyForm) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
-      const saved = j.data ?? j;
-      setCompanyInfo(saved);
-      setCompanyForm(saved);
-      setCompanyEditing(false);
-      showToast(t.saved);
-    } catch (e) {
-      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
-    } finally {
-      setSaving(false);
-    }
+      const j = await r.json(); const saved = j.data ?? j;
+      setCompanyInfo(saved); setCompanyForm(saved); setCompanyEditing(false); showToast(t.saved);
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setSaving(false); }
   };
 
   // ── VAT Rates ──
-  const openCreateVat = () => {
-    setVatForm({ ...EMPTY_VAT_RATE });
-    setVatEditId(null);
-    setVatModal(true);
-  };
+  const openCreateVat = () => { setVatForm({ ...EMPTY_VAT_RATE }); setVatEditId(null); setVatModal(true); };
   const openEditVat = (v: VatRate) => {
-    setVatForm({
-      country_code: v.country_code, country_name: v.country_name,
-      rate_type: v.rate_type, rate_percent: v.rate_percent,
-      description: v.description, is_active: v.is_active,
-    });
-    setVatEditId(v.id);
-    setVatModal(true);
+    setVatForm({ country_code: v.country_code, country_name: v.country_name, rate_type: v.rate_type, rate_percent: v.rate_percent, description: v.description, is_active: v.is_active });
+    setVatEditId(v.id); setVatModal(true);
   };
   const saveVatRate = async () => {
     setSaving(true);
     try {
-      const url = vatEditId
-        ? `${API}/api/v1/settings/vat-rates/${vatEditId}`
-        : `${API}/api/v1/settings/vat-rates`;
-      const r = await fetch(url, {
-        method: vatEditId ? "PUT" : "POST",
-        headers: headers(),
-        body: JSON.stringify(vatForm),
-      });
+      const url = vatEditId ? `${API}/api/v1/settings/vat-rates/${vatEditId}` : `${API}/api/v1/settings/vat-rates`;
+      const r = await fetch(url, { method: vatEditId ? "PUT" : "POST", headers: hdrs(), body: JSON.stringify(vatForm) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      showToast(t.saved);
-      setVatModal(false);
-      fetchVatRates();
-    } catch (e) {
-      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
-    } finally {
-      setSaving(false);
-    }
+      showToast(t.saved); setVatModal(false); fetchVatRates();
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setSaving(false); }
   };
 
   // ── Cross-Border Countries ──
-  const openCreateCB = () => {
-    setCbForm({ ...EMPTY_CROSS_BORDER });
-    setCbEditId(null);
-    setCbModal(true);
-  };
+  const openCreateCB = () => { setCbForm({ ...EMPTY_CROSS_BORDER }); setCbEditId(null); setCbModal(true); };
   const openEditCB = (c: CrossBorderCountry) => {
-    setCbForm({
-      country_code: c.country_code, country_name: c.country_name,
-      currency: c.currency, vat_registered: c.vat_registered,
-      vat_number: c.vat_number, reverse_charge: c.reverse_charge,
-      notes: c.notes, is_active: c.is_active,
-    });
-    setCbEditId(c.id);
-    setCbModal(true);
+    setCbForm({ country_code: c.country_code, country_name: c.country_name, currency: c.currency, vat_registered: c.vat_registered, vat_number: c.vat_number, reverse_charge: c.reverse_charge, notes: c.notes, is_active: c.is_active });
+    setCbEditId(c.id); setCbModal(true);
   };
   const saveCrossBorder = async () => {
     setSaving(true);
     try {
-      const url = cbEditId
-        ? `${API}/api/v1/settings/cross-border/${cbEditId}`
-        : `${API}/api/v1/settings/cross-border`;
-      const r = await fetch(url, {
-        method: cbEditId ? "PUT" : "POST",
-        headers: headers(),
-        body: JSON.stringify(cbForm),
-      });
+      const url = cbEditId ? `${API}/api/v1/settings/cross-border/${cbEditId}` : `${API}/api/v1/settings/cross-border`;
+      const r = await fetch(url, { method: cbEditId ? "PUT" : "POST", headers: hdrs(), body: JSON.stringify(cbForm) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      showToast(t.saved);
-      setCbModal(false);
-      fetchCrossBorderCountries();
-    } catch (e) {
-      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
-    } finally {
-      setSaving(false);
-    }
+      showToast(t.saved); setCbModal(false); fetchCrossBorderCountries();
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setSaving(false); }
   };
 
   // ── Generic delete ──
   const deleteItem = async () => {
     if (!confirmDel) return;
     try {
-      const r = await fetch(`${API}/api/v1/settings/${confirmDel.type}/${confirmDel.id}`, {
-        method: "DELETE", headers: headers(),
-      });
+      const r = await fetch(`${API}/api/v1/settings/${confirmDel.type}/${confirmDel.id}`, { method: "DELETE", headers: hdrs() });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       showToast(t.deleted);
       if (confirmDel.type.startsWith("roles")) fetchRoles();
       else if (confirmDel.type.startsWith("config")) fetchConfigItems();
       else if (confirmDel.type.startsWith("vat")) fetchVatRates();
       else if (confirmDel.type.startsWith("cross")) fetchCrossBorderCountries();
-    } catch (e) {
-      showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false);
-    } finally {
-      setConfirmDel(null);
-    }
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setConfirmDel(null); }
   };
+
+  // ── Hierarchy save ──
+  const saveHierarchy = async () => {
+    setSaving(true);
+    try {
+      const updates = hUsers
+        .filter((u) => {
+          const e = hEditMap[u.id];
+          return e && (e.team_leader_id !== u.team_leader_id || e.executive_id !== u.executive_id);
+        })
+        .map((u) => ({ id: u.id, team_leader_id: hEditMap[u.id].team_leader_id, executive_id: hEditMap[u.id].executive_id }));
+
+      for (const upd of updates) {
+        const r = await fetch(`${API}/api/v1/users/${upd.id}`, {
+          method: "PUT", headers: hdrs(),
+          body: JSON.stringify({ team_leader_id: upd.team_leader_id, executive_id: upd.executive_id }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status} for user ${upd.id}`);
+      }
+      showToast(`${t.saved} (${updates.length})`);
+      fetchHierarchyUsers();
+    } catch (e) { showToast(t.error + ": " + (e instanceof Error ? e.message : ""), false); }
+    finally { setSaving(false); }
+  };
+
+  const setHierarchyField = (userId: string, field: "team_leader_id" | "executive_id", value: string | null) => {
+    setHEditMap((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }));
+    setHDirty(true);
+  };
+
+  /* ── Hierarchy computed data ── */
+  const hExecs = useMemo(() => hUsers.filter((u) => isExecRole(u.role)), [hUsers]);
+  const hManagers = useMemo(() => hUsers.filter((u) => isManagerRole(u.role)), [hUsers]);
+  const hEmployees = useMemo(() => hUsers.filter((u) => !isExecRole(u.role) && !isManagerRole(u.role)), [hUsers]);
+  const hAllRoles = useMemo(() => [...new Set(hUsers.map((u) => u.role).filter(Boolean))].sort(), [hUsers]);
+
+  const hChangeCount = useMemo(() =>
+    hUsers.filter((u) => {
+      const e = hEditMap[u.id];
+      return e && (e.team_leader_id !== u.team_leader_id || e.executive_id !== u.executive_id);
+    }).length,
+  [hUsers, hEditMap]);
+
+  const getUserName = useCallback((id: string | null): string => {
+    if (!id) return "—";
+    const u = hUsers.find((x) => x.id === id);
+    return u ? `${u.first_name} ${u.last_name}` : id;
+  }, [hUsers]);
 
   /* ================================================================ */
   /*  ACCESS GUARD                                                     */
@@ -932,12 +1012,13 @@ export default function SettingsPage() {
       <h1 style={{ margin: "0 0 20px", color: gold }}>{t.settings}</h1>
 
       {/* Main Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 0 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 0, flexWrap: "wrap" }}>
         {([
           ["roles", t.roles],
           ["config", t.configLists],
           ["company", t.company],
           ["vat", t.vatCrossBorder],
+          ["hierarchy", t.hierarchy],
         ] as [MainTab, string][]).map(([key, label]) => (
           <button key={key} style={sTab(mainTab === key)} onClick={() => setMainTab(key)}>
             {label}
@@ -955,7 +1036,6 @@ export default function SettingsPage() {
               <h2 style={{ margin: 0, color: gold }}>{t.roles}</h2>
               <button style={sBtn(gold)} onClick={openCreateRole}>+ {t.newRole}</button>
             </div>
-
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
@@ -977,15 +1057,11 @@ export default function SettingsPage() {
                     <td style={{ ...sTd, fontWeight: 700 }}>{r.name}</td>
                     <td style={sTd}>{r.label_de}</td>
                     <td style={sTd}>{r.label_en}</td>
-                    <td style={sTd}>
-                      <span style={{ fontSize: 12, color: dimText }}>{r.permissions.length} permissions</span>
-                    </td>
+                    <td style={sTd}><span style={{ fontSize: 12, color: dimText }}>{r.permissions.length} permissions</span></td>
                     <td style={sTd}>
                       {r.is_system && <span style={{ padding: "2px 8px", borderRadius: 4, background: gold + "22", color: gold, fontSize: 11, fontWeight: 600 }}>System</span>}
                     </td>
-                    <td style={sTd}>
-                      <span style={{ color: r.is_active ? "#22c55e" : "#6b7280" }}>●</span>
-                    </td>
+                    <td style={sTd}><span style={{ color: r.is_active ? "#22c55e" : "#6b7280" }}>●</span></td>
                     <td style={sTd}>
                       {!r.is_system && (
                         <button style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
@@ -1009,23 +1085,19 @@ export default function SettingsPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {CONFIG_CATEGORIES.map((cat) => (
-                  <button
-                    key={cat.key}
-                    onClick={() => setConfigCategory(cat.key)}
+                  <button key={cat.key} onClick={() => setConfigCategory(cat.key)}
                     style={{
                       padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600,
                       cursor: "pointer", border: "none",
                       background: configCategory === cat.key ? gold + "22" : "transparent",
                       color: configCategory === cat.key ? gold : th.text,
-                    }}
-                  >
+                    }}>
                     {t[cat.labelKey]}
                   </button>
                 ))}
               </div>
               <button style={sBtn(gold)} onClick={openCreateConfig}>+ {t.newItem}</button>
             </div>
-
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
@@ -1045,9 +1117,7 @@ export default function SettingsPage() {
                     <td style={{ ...sTd, fontFamily: "monospace", fontWeight: 600 }}>{item.key}</td>
                     <td style={sTd}>{item.label}</td>
                     <td style={sTd}>{item.sort_order}</td>
-                    <td style={sTd}>
-                      <span style={{ color: item.is_active ? "#22c55e" : "#6b7280" }}>●</span>
-                    </td>
+                    <td style={sTd}><span style={{ color: item.is_active ? "#22c55e" : "#6b7280" }}>●</span></td>
                     <td style={sTd}>
                       <button style={{ ...sBtn("#ef4444"), padding: "4px 10px", fontSize: 12 }}
                         onClick={(e) => { e.stopPropagation(); setConfirmDel({ type: `config/${configCategory}`, id: item.id }); }}>
@@ -1060,7 +1130,6 @@ export default function SettingsPage() {
             </table>
           </>
         )}
-
         {/* ═══════════════════════════════════════════════════════════ */}
         {/*  COMPANY TAB                                               */}
         {/* ═══════════════════════════════════════════════════════════ */}
@@ -1457,6 +1526,266 @@ export default function SettingsPage() {
           </>
         )}
 
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {/*  HIERARCHY TAB                                             */}
+        {/* ═══════════════════════════════════════════════════════════ */}
+        {mainTab === "hierarchy" && (
+          <>
+            {/* Header + Save */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <div>
+                <h2 style={{ margin: 0, color: gold }}>{t.hierarchy}</h2>
+                <p style={{ margin: "6px 0 0", fontSize: 13, color: dimText }}>{t.hierarchyDesc}</p>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {hDirty && (
+                  <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>
+                    {hChangeCount} {t.changed}
+                  </span>
+                )}
+                <button
+                  style={sBtn(hDirty ? "#22c55e" : gold)}
+                  disabled={!hDirty || saving}
+                  onClick={saveHierarchy}
+                >
+                  {saving ? "…" : t.save}
+                </button>
+                <button style={sBtnOutline} onClick={fetchHierarchyUsers} disabled={hLoading}>
+                  ↻
+                </button>
+              </div>
+            </div>
+
+            {hLoading && (
+              <div style={{ textAlign: "center", padding: 40, color: dimText }}>{t.loading}</div>
+            )}
+
+            {!hLoading && (
+              <>
+                {/* ── Org Chart ── */}
+                <div style={sCard}>
+                  <h3 style={{ margin: "0 0 16px", color: gold }}>🏗️ {t.orgChart}</h3>
+
+                  {hExecs.map((exec) => {
+                    const teamLeadersUnder = hManagers.filter(
+                      (m) => hEditMap[m.id]?.executive_id === exec.id
+                    );
+                    return (
+                      <div key={exec.id} style={{ marginBottom: 24 }}>
+                        {/* Executive node */}
+                        <div style={{
+                          padding: "12px 20px", borderRadius: 10,
+                          background: gold + "22", border: `2px solid ${gold}`,
+                          fontWeight: 700, fontSize: 15, marginBottom: 8,
+                        }}>
+                          👔 {exec.first_name} {exec.last_name}
+                          <span style={{ fontSize: 11, marginLeft: 10, color: dimText }}>{exec.role}</span>
+                        </div>
+
+                        {/* Team leaders under this exec */}
+                        <div style={{ marginLeft: 30, borderLeft: `2px solid ${th.border}`, paddingLeft: 16 }}>
+                          {teamLeadersUnder.length === 0 && (
+                            <div style={{ padding: "6px 0", color: dimText, fontSize: 13, fontStyle: "italic" }}>
+                              {t.noResults}
+                            </div>
+                          )}
+                          {teamLeadersUnder.map((tl) => {
+                            const empsUnder = hEmployees.filter(
+                              (e) => hEditMap[e.id]?.team_leader_id === tl.id
+                            );
+                            return (
+                              <div key={tl.id} style={{ marginBottom: 16 }}>
+                                <div style={{
+                                  padding: "10px 16px", borderRadius: 8,
+                                  background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                                  border: `1px solid ${th.border}`,
+                                  fontWeight: 600, fontSize: 14, marginBottom: 6,
+                                }}>
+                                  🔧 {tl.first_name} {tl.last_name}
+                                  <span style={{ fontSize: 11, marginLeft: 10, color: dimText }}>
+                                    {tl.role} · {empsUnder.length} {t.directReports}
+                                  </span>
+                                </div>
+                                <div style={{ marginLeft: 24, borderLeft: `1px dashed ${th.border}`, paddingLeft: 12 }}>
+                                  {empsUnder.map((emp) => (
+                                    <div key={emp.id} style={{
+                                      padding: "6px 12px", borderRadius: 6, fontSize: 13, color: th.text,
+                                      background: isDark ? "rgba(255,255,255,.03)" : "rgba(0,0,0,.02)",
+                                      marginBottom: 4,
+                                    }}>
+                                      👤 {emp.first_name} {emp.last_name}
+                                      <span style={{ fontSize: 11, marginLeft: 8, color: dimText }}>{emp.role}</span>
+                                    </div>
+                                  ))}
+                                  {empsUnder.length === 0 && (
+                                    <div style={{ fontSize: 12, color: dimText, fontStyle: "italic", padding: "4px 0" }}>—</div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Unassigned warning */}
+                  {(() => {
+                    const unassignedTLs = hManagers.filter((m) => !hEditMap[m.id]?.executive_id);
+                    const unassignedEmps = hEmployees.filter((e) => !hEditMap[e.id]?.team_leader_id);
+                    if (unassignedTLs.length === 0 && unassignedEmps.length === 0) return null;
+                    return (
+                      <div style={{
+                        marginTop: 20, padding: 16, borderRadius: 10,
+                        background: "#ef444422", border: "1px dashed #ef4444",
+                      }}>
+                        <h4 style={{ margin: "0 0 10px", color: "#ef4444" }}>⚠️ {t.unassigned}</h4>
+                        {unassignedTLs.length > 0 && (
+                          <div style={{ marginBottom: 8 }}>
+                            <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{t.teamLeader}:</span>
+                            {unassignedTLs.map((tl) => (
+                              <span key={tl.id} style={{ marginLeft: 8, fontSize: 13 }}>
+                                {tl.first_name} {tl.last_name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {unassignedEmps.length > 0 && (
+                          <div>
+                            <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+                              {t.employees} ({unassignedEmps.length}):
+                            </span>
+                            {unassignedEmps.slice(0, 10).map((e) => (
+                              <span key={e.id} style={{ marginLeft: 8, fontSize: 13 }}>
+                                {e.first_name} {e.last_name}
+                              </span>
+                            ))}
+                            {unassignedEmps.length > 10 && (
+                              <span style={{ marginLeft: 8, fontSize: 12, color: dimText }}>
+                                +{unassignedEmps.length - 10}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* ── Assignment Table ── */}
+                <div style={sCard}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                    <h3 style={{ margin: 0, color: gold }}>📋 {t.bulkAssign}</h3>
+                    <select
+                      style={{ ...sSelect, maxWidth: 200 }}
+                      value={hRoleFilter}
+                      onChange={(e) => setHRoleFilter(e.target.value)}
+                    >
+                      <option value="">{t.allRoles}</option>
+                      {hAllRoles.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr>
+                          <th style={sTh}>{t.label}</th>
+                          <th style={sTh}>{t.role}</th>
+                          <th style={sTh}>{t.teamLeader}</th>
+                          <th style={sTh}>{t.executive}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hUsers
+                          .filter((u) => !hRoleFilter || u.role === hRoleFilter)
+                          .map((u) => {
+                            const isExec = isExecRole(u.role);
+                            const isMgr = isManagerRole(u.role);
+                            const edit = hEditMap[u.id] || { team_leader_id: null, executive_id: null };
+                            const changed =
+                              edit.team_leader_id !== u.team_leader_id ||
+                              edit.executive_id !== u.executive_id;
+
+                            return (
+                              <tr key={u.id} style={{
+                                background: changed
+                                  ? (isDark ? "rgba(34,197,94,.08)" : "rgba(34,197,94,.05)")
+                                  : "transparent",
+                              }}>
+                                <td style={{ ...sTd, fontWeight: 600 }}>
+                                  {u.first_name} {u.last_name}
+                                  {changed && <span style={{ marginLeft: 6, color: "#22c55e", fontSize: 11 }}>●</span>}
+                                </td>
+                                <td style={{ ...sTd, fontSize: 12 }}>
+                                  <span style={{
+                                    padding: "2px 8px", borderRadius: 4,
+                                    background: isExec ? gold + "22" : isMgr ? "#3b82f622" : "transparent",
+                                    color: isExec ? gold : isMgr ? "#3b82f6" : th.text,
+                                    fontWeight: 600, fontSize: 11,
+                                  }}>
+                                    {u.role}
+                                  </span>
+                                </td>
+
+                                {/* Team leader dropdown */}
+                                <td style={sTd}>
+                                  {isExec ? (
+                                    <span style={{ fontSize: 12, color: dimText }}>—</span>
+                                  ) : (
+                                    <select
+                                      style={{ ...sSelect, padding: "4px 8px", fontSize: 12 }}
+                                      value={edit.team_leader_id ?? ""}
+                                      onChange={(e) =>
+                                        setHierarchyField(u.id, "team_leader_id", e.target.value || null)
+                                      }
+                                    >
+                                      <option value="">—</option>
+                                      {[...hManagers, ...hExecs]
+                                        .filter((m) => m.id !== u.id)
+                                        .map((m) => (
+                                          <option key={m.id} value={m.id}>
+                                            {m.first_name} {m.last_name} ({m.role})
+                                          </option>
+                                        ))}
+                                    </select>
+                                  )}
+                                </td>
+
+                                {/* Executive dropdown */}
+                                <td style={sTd}>
+                                  {isExec ? (
+                                    <span style={{ fontSize: 12, color: dimText }}>—</span>
+                                  ) : (
+                                    <select
+                                      style={{ ...sSelect, padding: "4px 8px", fontSize: 12 }}
+                                      value={edit.executive_id ?? ""}
+                                      onChange={(e) =>
+                                        setHierarchyField(u.id, "executive_id", e.target.value || null)
+                                      }
+                                    >
+                                      <option value="">—</option>
+                                      {hExecs
+                                        .filter((ex) => ex.id !== u.id)
+                                        .map((ex) => (
+                                          <option key={ex.id} value={ex.id}>
+                                            {ex.first_name} {ex.last_name}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
@@ -1508,11 +1837,11 @@ export default function SettingsPage() {
             {/* Permission matrix */}
             <h3 style={{ margin: "0 0 12px", color: gold, fontSize: 15 }}>{t.permissions}</h3>
             <div style={{ maxHeight: 400, overflowY: "auto", border: `1px solid ${th.border}`, borderRadius: 8, padding: 12 }}>
-              {Object.entries(PERM_GROUPS).map(([group, perms]) => (
+              {Object.entries(PERM_GROUPS).map(([group, permsArr]) => (
                 <div key={group} style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: gold, marginBottom: 6 }}>{group}</div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {perms.map((perm) => {
+                    {permsArr.map((perm) => {
                       const checked = roleForm.permissions.includes(perm);
                       return (
                         <label key={perm} style={{
