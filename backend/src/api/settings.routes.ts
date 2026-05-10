@@ -351,3 +351,119 @@ settingsRouter.put('/cross-border', requireRole('GLOBAL_MANAGER'), async (req: a
     res.status(500).json({ error: err.message });
   }
 });
+
+settingsRouter.get('/config/:category', async (req, res) => {
+  try {
+    const { category } = req.params;
+    
+    const validCategories = [
+      'contract_types', 'salary_types', 'schedule_types',
+      'absence_types', 'absence_codes',
+      'machine_categories', 'machine_operators',
+    ];
+    
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ error: `Invalid category: ${category}` });
+    }
+
+    const { data, error } = await supabase
+      .from('config_items')
+      .select('*')
+      .eq('category', category)
+      .order('sort_order', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ data: data || [] });
+  } catch (err: any) {
+    console.error(`GET /settings/config/${req.params.category} error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/settings/config/:category — create a new item
+settingsRouter.post('/config/:category', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const { category } = req.params;
+    const { key, label, sort_order, meta } = req.body;
+
+    if (!key || !label) {
+      return res.status(400).json({ error: 'Key and label are required' });
+    }
+
+    const { data, error } = await supabase
+      .from('config_items')
+      .insert({
+        category,
+        key: key.toUpperCase().replace(/\s+/g, '_'),
+        label,
+        sort_order: sort_order ?? 0,
+        meta: meta ?? {},
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (error.message?.includes('duplicate key') || error.code === '23505') {
+        return res.status(409).json({ error: 'An item with this key already exists in this category' });
+      }
+      throw error;
+    }
+
+    res.status(201).json({ data });
+  } catch (err: any) {
+    console.error(`POST /settings/config/${req.params.category} error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/v1/settings/config/:category/:id — update an item
+settingsRouter.put('/config/:category/:id', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const { category, id } = req.params;
+    const { key, label, sort_order, meta, is_active } = req.body;
+
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (key !== undefined) updates.key = key.toUpperCase().replace(/\s+/g, '_');
+    if (label !== undefined) updates.label = label;
+    if (sort_order !== undefined) updates.sort_order = sort_order;
+    if (meta !== undefined) updates.meta = meta;
+    if (is_active !== undefined) updates.is_active = is_active;
+
+    const { data, error } = await supabase
+      .from('config_items')
+      .update(updates)
+      .eq('id', id)
+      .eq('category', category)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({ data });
+  } catch (err: any) {
+    console.error(`PUT /settings/config/${req.params.category}/${req.params.id} error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/v1/settings/config/:category/:id
+settingsRouter.delete('/config/:category/:id', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+  try {
+    const { category, id } = req.params;
+
+    const { error } = await supabase
+      .from('config_items')
+      .delete()
+      .eq('id', id)
+      .eq('category', category);
+
+    if (error) throw error;
+
+    res.json({ message: 'Deleted' });
+  } catch (err: any) {
+    console.error(`DELETE /settings/config/${req.params.category}/${req.params.id} error:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});

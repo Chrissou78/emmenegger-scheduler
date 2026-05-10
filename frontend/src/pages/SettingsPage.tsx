@@ -668,25 +668,29 @@ export default function SettingsPage() {
     }
   }, [hdrs]);
 
+  const mounted = React.useRef(false);
+
   useEffect(() => {
+    if (mounted.current) return;
+    mounted.current = true;
+    
     fetchRoles();
     fetchCompanyInfo();
     fetchVatRates();
     fetchCrossBorderCountries();
     fetchHierarchyUsers();
-    fetchLanguageSettings(); // ★ ADDED
-  }, [
-    fetchRoles,
-    fetchCompanyInfo,
-    fetchVatRates,
-    fetchCrossBorderCountries,
-    fetchHierarchyUsers,
-    fetchLanguageSettings,
-  ]);
+    fetchLanguageSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  const prevCategory = React.useRef(configCategory);
   useEffect(() => {
-    fetchConfigItems();
-  }, [fetchConfigItems]);
+    if (prevCategory.current !== configCategory || !mounted.current) {
+      prevCategory.current = configCategory;
+      fetchConfigItems();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configCategory]);
 
   /* ================================================================ */
   /*  SAVE / DELETE FUNCTIONS                                          */
