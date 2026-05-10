@@ -86,7 +86,7 @@ export default function CrmPage() {
 
   const [tab, setTab] = useState<CrmTab>('dashboard');
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const mounted = useRef(false);
+  const hasFetched = useRef(false);
 
   // Data
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -107,9 +107,7 @@ export default function CrmPage() {
   const [assignModal, setAssignModal] = useState<string | null>(null);
   const [actForm, setActForm] = useState<any>({});
   const [oppForm, setOppForm] = useState<any>({});
-  const [assignForm, setAssignForm] = useState<{ sales_id: string; team_leader_id: string }>({
-    sales_id: '', team_leader_id: '',
-  });
+  const [assignForm, setAssignForm] = useState<{ sales_id: string; team_leader_id: string }>({ sales_id: '', team_leader_id: '',});
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -179,18 +177,20 @@ export default function CrmPage() {
 
   // Mount once
   useEffect(() => {
-    if (mounted.current) return;
-    mounted.current = true;
+    if (!token) return; 
+    if (hasFetched.current) return;
+    hasFetched.current = true;
     fetchDashboard();
     fetchCustomers();
     fetchActivities();
     fetchOpportunities();
     fetchUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token]);
 
   // Re-fetch customers on search change (debounced)
   useEffect(() => {
+    if (!token) return; 
     const t = setTimeout(() => fetchCustomers(), 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
