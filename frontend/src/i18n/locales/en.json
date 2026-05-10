@@ -245,6 +245,34 @@
   "manager": "Manager",
   "hr": "HR",
   "finance": "Finance",
-  "sales": "Sales"
+  "sales": "Sales",
+   "filterByTeamLeader": "Filter by team leader",
+  "allTeamLeaders": "All team leaders",
+  "myTeam": "My Team",
+  "noAccessSchedule": "You do not have access to the schedule",
+  "noAccessPage": "You do not have access to this page",
+  "noEmployeesForTL": "No employees for this team leader",
+
+  "statsGlobal": "Global Statistics",
+  "statsPerimeter": "Perimeter Statistics",
+  "statsTeam": "Team Statistics",
+  "statsIndividual": "Personal Statistics",
+  "myOccupation": "My Occupation",
+  "myAbsences": "My Absences",
+  "myTrend": "My Trend",
+  "dailyBreakdown": "Daily Breakdown",
+  "ranking": "Ranking",
+  "comparedToOthers": "Compared to others",
+  "aboveAverage": "Above average",
+  "pnl": "Profit & Loss",
+  "efficiency": "Efficiency",
+  "taskCompletion": "Task Completion",
+  "attendance": "Attendance",
+  "machineUtilization": "Machine Utilization",
+
+  "navMyWeek": "My Week",
+  "customerMargin": "Customer Margin",
+  "teamPerformance": "Team Performance",
+  "personalStats": "Personal Statistics"
 
 }
