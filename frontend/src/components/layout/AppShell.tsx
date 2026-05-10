@@ -15,52 +15,49 @@ interface NavItem {
   path: string;
   labelKey: string;
   icon: string;
-  /** One or more permissions — user needs at least ONE to see the item */
   permissions?: Permission[];
   section?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  // ─ Planning
   { path: '/schedule',   labelKey: 'navSchedule',   icon: '📅', permissions: ['schedule.view'],    section: 'planning' },
   { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning' },
   { path: '/tasks',      labelKey: 'navTasks',      icon: '📋', permissions: ['tasks.view'],       section: 'planning' },
-  // ─ CRM
   { path: '/customers',  labelKey: 'navCustomers',  icon: '🏢', permissions: ['customers.view'],   section: 'crm' },
   { path: '/quotations', labelKey: 'navQuotations', icon: '📄', permissions: ['quotations.view'],  section: 'crm' },
   { path: '/invoices',   labelKey: 'navInvoices',   icon: '💰', permissions: ['invoices.view'],    section: 'crm' },
-  // ─ Operations
   { path: '/reports',    labelKey: 'navReports',    icon: '📝', permissions: ['reports.own'],       section: 'ops' },
   { path: '/stats',      labelKey: 'navStats',      icon: '📊', permissions: ['reports.team'],      section: 'ops' },
-  // ─ HR & Admin
   { path: '/hr',         labelKey: 'navHR',         icon: '🏥', permissions: ['hr.view'],           section: 'admin' },
   { path: '/admin',      labelKey: 'navAdmin',      icon: '👥', permissions: ['admin.users'],       section: 'admin' },
-  { path: '/settings', labelKey: 'navSettings', icon: '⚙️', permissions: ['admin.roles'], section: 'admin' },
-  // ─ Always visible
+  { path: '/settings',   labelKey: 'navSettings',   icon: '⚙️', permissions: ['admin.roles'],      section: 'admin' },
   { path: '/profile',    labelKey: 'navProfile',    icon: '👤' },
-  
 ];
 
 /* ────────────────────── section labels ────────────────────── */
 
 const SECTION_LABELS: Record<string, Record<string, string>> = {
-  de: { planning: 'Planung', crm: 'CRM', ops: 'Betrieb', admin: 'Verwaltung' },
-  en: { planning: 'Planning', crm: 'CRM', ops: 'Operations', admin: 'Administration' },
-  fr: { planning: 'Planification', crm: 'CRM', ops: 'Opérations', admin: 'Administration' },
-  pt: { planning: 'Planejamento', crm: 'CRM', ops: 'Operações', admin: 'Administração' },
+  de: { planning: 'Planung', crm: 'CRM', ops: 'Betrieb', admin: 'Geschäftsleitung' },
+  en: { planning: 'Planning', crm: 'CRM', ops: 'Operations', admin: 'Executive' },
+  fr: { planning: 'Planification', crm: 'CRM', ops: 'Opérations', admin: 'Direction' },
+  pt: { planning: 'Planejamento', crm: 'CRM', ops: 'Operações', admin: 'Direção' },
+  nl: { planning: 'Planning', crm: 'CRM', ops: 'Operaties', admin: 'Directie' },
+  it: { planning: 'Pianificazione', crm: 'CRM', ops: 'Operazioni', admin: 'Direzione' },
+  es: { planning: 'Planificación', crm: 'CRM', ops: 'Operaciones', admin: 'Dirección' },
 };
 
-/* ────────────────────── role display labels (fallback) ────────────────────── */
-/* Uses the shared ROLE_LABELS from roles.ts, but adds a fallback
-   for legacy role names that may still exist in the DB */
+/* ────────────────────── legacy role labels (fallback) ────────────────────── */
+
 const LEGACY_ROLE_LABELS: Record<string, Record<string, string>> = {
   de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter' },
   en: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Local Manager', ARBEITER: 'Worker' },
   fr: { GLOBAL_MANAGER: 'Directeur général', LOCAL_MANAGER: 'Chef de chantier', ARBEITER: 'Ouvrier' },
   pt: { GLOBAL_MANAGER: 'Gerente Global', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabalhador' },
+  nl: { GLOBAL_MANAGER: 'Algemeen Directeur', LOCAL_MANAGER: 'Lokale Manager', ARBEITER: 'Arbeider' },
+  it: { GLOBAL_MANAGER: 'Direttore Generale', LOCAL_MANAGER: 'Responsabile Locale', ARBEITER: 'Operaio' },
+  es: { GLOBAL_MANAGER: 'Director General', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabajador' },
 };
 
-/** Map legacy role names to the new system so permissions resolve correctly */
 function normalizeRole(raw: string): Role {
   const upper = (raw || '').toUpperCase();
   switch (upper) {
@@ -74,7 +71,7 @@ function normalizeRole(raw: string): Role {
 /* ────────────────────── component ────────────────────── */
 
 export function AppShell() {
-  const { isDark, th, t, lang, toggleTheme, setLanguage } = useTheme();
+  const { isDark, th, t, lang, toggleTheme, setLanguage, enabledLangs } = useTheme();
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,7 +80,6 @@ export function AppShell() {
   const gold = th.gold;
   const sideW = collapsed ? 64 : 220;
 
-  /* ── resolve effective permissions ── */
   const perms = useMemo(() => {
     const role = normalizeRole(user?.role || '');
     return resolvePermissions(role, user?.custom_permissions);
@@ -91,7 +87,6 @@ export function AppShell() {
 
   const hasPerm = (p: Permission) => perms.has(p);
 
-  /* ── visible nav items based on permissions ── */
   const visibleItems = useMemo(() =>
     NAV_ITEMS.filter(item => {
       if (!item.permissions || item.permissions.length === 0) return true;
@@ -99,13 +94,11 @@ export function AppShell() {
     }),
   [perms]);
 
-  /* ── redirect if current path not allowed ── */
   useEffect(() => {
     const current = NAV_ITEMS.find(item => location.pathname.startsWith(item.path));
     if (!current || !current.permissions) return;
     const allowed = current.permissions.some(p => perms.has(p));
     if (!allowed) {
-      // Find the first allowed path, or fallback to /profile
       const fallback = visibleItems[0]?.path || '/profile';
       navigate(fallback, { replace: true });
     }
@@ -118,11 +111,9 @@ export function AppShell() {
 
   const getLabel = (key: string): string => (t as any)[key] || key;
 
-  /* ── role display name ── */
   const roleDisplayName = useMemo(() => {
     const rawRole = (user?.role || '').toUpperCase();
     const normalized = normalizeRole(rawRole);
-    // Try shared labels first, then legacy
     const shared = (SHARED_ROLE_LABELS[lang] || SHARED_ROLE_LABELS.en)?.[normalized];
     if (shared) return shared;
     const legacy = (LEGACY_ROLE_LABELS[lang] || LEGACY_ROLE_LABELS.de)[rawRole];
@@ -234,13 +225,14 @@ export function AppShell() {
             </div>
           )}
 
+          {/* ★ LANGUAGE BUTTONS — now driven by enabledLangs from context */}
           <div style={{
             display: 'flex', gap: 4,
             justifyContent: collapsed ? 'center' : 'flex-start',
             flexWrap: 'wrap',
             padding: collapsed ? '0 4px' : '0',
           }}>
-            {(['de', 'en', 'fr', 'pt'] as const).map(l => (
+            {enabledLangs.map(l => (
               <button key={l}
                 onClick={() => setLanguage(l)}
                 style={{
