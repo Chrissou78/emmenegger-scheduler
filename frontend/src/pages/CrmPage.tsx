@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { getTranslations, type LangCode } from '../i18n';
@@ -107,22 +107,28 @@ export default function CrmPage() {
   const [assignModal, setAssignModal] = useState<string | null>(null);
   const [actForm, setActForm] = useState<any>({});
   const [oppForm, setOppForm] = useState<any>({});
-  const [assignForm, setAssignForm] = useState<{ sales_id: string; team_leader_id: string }>({ sales_id: '', team_leader_id: '',});
+  const [assignForm, setAssignForm] = useState<{ sales_id: string; team_leader_id: string }>({
+    sales_id: '', team_leader_id: '',
+  });
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const hdrs = useCallback((): HeadersInit => ({
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }), [token]);
+  // Always read fresh token — never rely on stale closure
+  const getHeaders = (): HeadersInit => {
+    const freshToken = token || localStorage.getItem('token');
+    return {
+      'Content-Type': 'application/json',
+      ...(freshToken ? { Authorization: `Bearer ${freshToken}` } : {}),
+    };
+  };
 
   /* ── Fetchers ── */
   const fetchDashboard = async () => {
     try {
-      const r = await fetch(`${API}/api/v1/crm/dashboard`, { headers: hdrs() });
+      const r = await fetch(`${API}/api/v1/crm/dashboard`, { headers: getHeaders() });
       if (!r.ok) return;
       setDashboard(await r.json());
     } catch { /* */ }
@@ -130,7 +136,7 @@ export default function CrmPage() {
 
   const fetchCustomers = async () => {
     try {
-      const r = await fetch(`${API}/api/v1/crm/customers${search ? `?search=${search}` : ''}`, { headers: hdrs() });
+      const r = await fetch(`${API}/api/v1/crm/customers${search ? `?search=${search}` : ''}`, { headers: getHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setCustomers(j.data ?? j ?? []);
@@ -140,7 +146,7 @@ export default function CrmPage() {
   const fetchActivities = async (customerId?: string) => {
     try {
       const params = customerId ? `?customer_id=${customerId}` : '';
-      const r = await fetch(`${API}/api/v1/crm/activities${params}`, { headers: hdrs() });
+      const r = await fetch(`${API}/api/v1/crm/activities${params}`, { headers: getHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setActivities(j.data ?? j ?? []);
@@ -149,7 +155,7 @@ export default function CrmPage() {
 
   const fetchOpportunities = async () => {
     try {
-      const r = await fetch(`${API}/api/v1/crm/opportunities`, { headers: hdrs() });
+      const r = await fetch(`${API}/api/v1/crm/opportunities`, { headers: getHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setOpportunities(j.data ?? j ?? []);
@@ -158,7 +164,7 @@ export default function CrmPage() {
 
   const fetchPerformance = async (customerId: string) => {
     try {
-      const r = await fetch(`${API}/api/v1/crm/performance/${customerId}`, { headers: hdrs() });
+      const r = await fetch(`${API}/api/v1/crm/performance/${customerId}`, { headers: getHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setPerfData(j.performance ?? []);
@@ -168,18 +174,20 @@ export default function CrmPage() {
 
   const fetchUsers = async () => {
     try {
-      const r = await fetch(`${API}/api/v1/users?limit=500`, { headers: hdrs() });
+      const r = await fetch(`${API}/api/v1/users?limit=500`, { headers: getHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setAllUsers(j.data ?? j.items ?? j ?? []);
     } catch { /* */ }
   };
 
-  // Mount once
+  // Mount: wait for token, fetch once
   useEffect(() => {
-    if (!token) return; 
+    const currentToken = token || localStorage.getItem('token');
+    if (!currentToken) return;
     if (hasFetched.current) return;
     hasFetched.current = true;
+
     fetchDashboard();
     fetchCustomers();
     fetchActivities();
@@ -190,9 +198,10 @@ export default function CrmPage() {
 
   // Re-fetch customers on search change (debounced)
   useEffect(() => {
-    if (!token) return; 
-    const t = setTimeout(() => fetchCustomers(), 300);
-    return () => clearTimeout(t);
+    const currentToken = token || localStorage.getItem('token');
+    if (!currentToken) return;
+    const timer = setTimeout(() => fetchCustomers(), 300);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
@@ -213,7 +222,7 @@ export default function CrmPage() {
       const url = actForm.id
         ? `${API}/api/v1/crm/activities/${actForm.id}`
         : `${API}/api/v1/crm/activities`;
-      const r = await fetch(url, { method, headers: hdrs(), body: JSON.stringify(actForm) });
+      const r = await fetch(url, { method, headers: getHeaders(), body: JSON.stringify(actForm) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       showToast(t.saved ?? 'Saved');
       setActivityModal(false);
@@ -230,7 +239,7 @@ export default function CrmPage() {
       const url = oppForm.id
         ? `${API}/api/v1/crm/opportunities/${oppForm.id}`
         : `${API}/api/v1/crm/opportunities`;
-      const r = await fetch(url, { method, headers: hdrs(), body: JSON.stringify(oppForm) });
+      const r = await fetch(url, { method, headers: getHeaders(), body: JSON.stringify(oppForm) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       showToast(t.saved ?? 'Saved');
       setOppModal(false);
@@ -245,7 +254,7 @@ export default function CrmPage() {
     if (!assignModal) return;
     try {
       const r = await fetch(`${API}/api/v1/crm/customers/${assignModal}/assign`, {
-        method: 'PUT', headers: hdrs(), body: JSON.stringify(assignForm),
+        method: 'PUT', headers: getHeaders(), body: JSON.stringify(assignForm),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       showToast(t.saved ?? 'Saved');
@@ -326,52 +335,59 @@ export default function CrmPage() {
       <div style={{ borderTop: `2px solid ${gold}`, paddingTop: 20 }}>
 
         {/* ─── DASHBOARD ─── */}
-        {tab === 'dashboard' && dashboard && (
+        {tab === 'dashboard' && (
           <>
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-              <div style={sKpi}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: gold }}>{dashboard.customerCount}</div>
-                <div style={{ fontSize: 13, color: dimText }}>{t.crmCustomers ?? 'Customers'}</div>
-              </div>
-              <div style={sKpi}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#3b82f6' }}>{dashboard.openOpportunities}</div>
-                <div style={{ fontSize: 13, color: dimText }}>{t.crmOpenOpps ?? 'Open Opportunities'}</div>
-              </div>
-              <div style={sKpi}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#8b5cf6' }}>{fmt(dashboard.pipelineValue)}</div>
-                <div style={{ fontSize: 13, color: dimText }}>{t.crmPipelineValue ?? 'Pipeline Value'}</div>
-              </div>
-              <div style={sKpi}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{fmt(dashboard.weightedValue)}</div>
-                <div style={{ fontSize: 13, color: dimText }}>{t.crmWeighted ?? 'Weighted Value'}</div>
-              </div>
-              <div style={sKpi}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: '#22c55e' }}>{fmt(dashboard.wonThisMonth)}</div>
-                <div style={{ fontSize: 13, color: dimText }}>{t.crmWonThisMonth ?? 'Won This Month'}</div>
-              </div>
-            </div>
-
-            {/* Follow-ups */}
-            <div style={sCard}>
-              <h3 style={{ margin: '0 0 12px', color: gold }}>{t.crmUpcomingFollowUps ?? 'Upcoming Follow-Ups'}</h3>
-              {dashboard.upcomingFollowUps.length === 0 && (
-                <p style={{ color: dimText }}>{t.crmNoFollowUps ?? 'No upcoming follow-ups'}</p>
-              )}
-              {dashboard.upcomingFollowUps.map(a => (
-                <div key={a.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 0', borderBottom: `1px solid ${th.border}`,
-                }}>
-                  <div>
-                    <strong>{a.customers?.name}</strong> — {a.subject}
-                    {a.next_action && <span style={{ color: dimText, marginLeft: 8 }}>→ {a.next_action}</span>}
+            {!dashboard && (
+              <p style={{ color: dimText }}>{t.loading ?? 'Loading...'}</p>
+            )}
+            {dashboard && (
+              <>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+                  <div style={sKpi}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: gold }}>{dashboard.customerCount}</div>
+                    <div style={{ fontSize: 13, color: dimText }}>{t.crmCustomers ?? 'Customers'}</div>
                   </div>
-                  <div style={{ fontSize: 13, color: dimText, whiteSpace: 'nowrap' }}>
-                    {a.next_action_date}
+                  <div style={sKpi}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#3b82f6' }}>{dashboard.openOpportunities}</div>
+                    <div style={{ fontSize: 13, color: dimText }}>{t.crmOpenOpps ?? 'Open Opportunities'}</div>
+                  </div>
+                  <div style={sKpi}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#8b5cf6' }}>{fmt(dashboard.pipelineValue)}</div>
+                    <div style={{ fontSize: 13, color: dimText }}>{t.crmPipelineValue ?? 'Pipeline Value'}</div>
+                  </div>
+                  <div style={sKpi}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{fmt(dashboard.weightedValue)}</div>
+                    <div style={{ fontSize: 13, color: dimText }}>{t.crmWeighted ?? 'Weighted Value'}</div>
+                  </div>
+                  <div style={sKpi}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#22c55e' }}>{fmt(dashboard.wonThisMonth)}</div>
+                    <div style={{ fontSize: 13, color: dimText }}>{t.crmWonThisMonth ?? 'Won This Month'}</div>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Follow-ups */}
+                <div style={sCard}>
+                  <h3 style={{ margin: '0 0 12px', color: gold }}>{t.crmUpcomingFollowUps ?? 'Upcoming Follow-Ups'}</h3>
+                  {dashboard.upcomingFollowUps.length === 0 && (
+                    <p style={{ color: dimText }}>{t.crmNoFollowUps ?? 'No upcoming follow-ups'}</p>
+                  )}
+                  {dashboard.upcomingFollowUps.map(a => (
+                    <div key={a.id} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '8px 0', borderBottom: `1px solid ${th.border}`,
+                    }}>
+                      <div>
+                        <strong>{a.customers?.name}</strong> — {a.subject}
+                        {a.next_action && <span style={{ color: dimText, marginLeft: 8 }}>→ {a.next_action}</span>}
+                      </div>
+                      <div style={{ fontSize: 13, color: dimText, whiteSpace: 'nowrap' }}>
+                        {a.next_action_date}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -462,6 +478,11 @@ export default function CrmPage() {
                 </tr>
               </thead>
               <tbody>
+                {activities.length === 0 && (
+                  <tr><td colSpan={7} style={{ ...sTd, textAlign: 'center', color: dimText }}>
+                    {t.noResults ?? 'No activities yet'}
+                  </td></tr>
+                )}
                 {activities.map(a => (
                   <tr key={a.id}>
                     <td style={sTd}>{new Date(a.activity_date).toLocaleDateString('de-CH')}</td>
@@ -621,7 +642,7 @@ export default function CrmPage() {
                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <select style={sInput} value={actForm.type || 'CALL'} onChange={e => setActForm({ ...actForm, type: e.target.value })}>
-                {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {ACTIVITY_TYPES.map(at => <option key={at} value={at}>{at}</option>)}
               </select>
               <input style={sInput} placeholder={t.subject ?? 'Subject'} value={actForm.subject || ''} onChange={e => setActForm({ ...actForm, subject: e.target.value })} />
               <textarea style={{ ...sInput, minHeight: 80 }} placeholder={t.description ?? 'Description'} value={actForm.description || ''} onChange={e => setActForm({ ...actForm, description: e.target.value })} />
