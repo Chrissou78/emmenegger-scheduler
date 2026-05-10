@@ -20,6 +20,7 @@ import { CustomersPage } from './pages/CustomersPage';
 import { QuotationsPage } from './pages/QuotationsPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import HRPage from './pages/HRPage';
+import CrmPage from './pages/CrmPage';
 import SettingsPage from './pages/SettingsPage';
 
 /* ─── Map legacy DB roles to the 6-role system ─── */
@@ -171,6 +172,7 @@ function AppContent() {
           {/* Available to all authenticated users */}
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/crm" element={<CrmPage />} />
 
           <Route path="/" element={<Navigate to={getDefaultRoute()} replace />} />
         </Route>

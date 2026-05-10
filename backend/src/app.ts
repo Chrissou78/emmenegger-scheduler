@@ -19,6 +19,7 @@ import { statsRouter } from './api/stats.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { authMiddleware } from './middleware/auth';
 import { settingsRouter } from './api/settings.routes';
+import { crmRouter } from './api/crm.routes';
 import { supabase } from './lib/supabase';
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/v1/quotations', authMiddleware, quotationsRouter);
 app.use('/api/v1/invoices', authMiddleware, invoicesRouter);
 app.use('/api/v1/stats', authMiddleware, statsRouter);
 app.use('/api/v1/settings', authMiddleware, settingsRouter);
+app.use('/api/v1/crm', crmRouter);
 
 // ─── ERROR HANDLER ───
 app.use(errorHandler);

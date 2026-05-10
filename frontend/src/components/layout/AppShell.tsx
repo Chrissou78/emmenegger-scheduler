@@ -17,20 +17,34 @@ interface NavItem {
   icon: string;
   permissions?: Permission[];
   section?: string;
+  /** Roles that should NEVER see this item (even if they have the permission) */
+  excludeRoles?: string[];
+  /** If set, ONLY these roles see this item (overrides permissions check) */
+  onlyRoles?: string[];
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/schedule',   labelKey: 'navSchedule',   icon: '📅', permissions: ['schedule.view'],    section: 'planning' },
-  { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning' },
-  { path: '/tasks',      labelKey: 'navTasks',      icon: '📋', permissions: ['tasks.view'],       section: 'planning' },
+  // ── Planning ──
+  { path: '/schedule',   labelKey: 'navSchedule',   icon: '📅', permissions: ['schedule.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
+  { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
+  { path: '/tasks',      labelKey: 'navTasks',      icon: '📋', permissions: ['tasks.view'],       section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
+
+  // ── CRM ──
+  { path: '/crm',        labelKey: 'navCRM',        icon: '💼', section: 'crm', onlyRoles: ['SALES', 'CEO', 'ADMIN', 'GLOBAL_MANAGER'] },
   { path: '/customers',  labelKey: 'navCustomers',  icon: '🏢', permissions: ['customers.view'],   section: 'crm' },
-  { path: '/quotations', labelKey: 'navQuotations', icon: '📄', permissions: ['quotations.view'],  section: 'crm' },
-  { path: '/invoices',   labelKey: 'navInvoices',   icon: '💰', permissions: ['invoices.view'],    section: 'crm' },
+  { path: '/quotations', labelKey: 'navQuotations', icon: '📄', permissions: ['quotations.view'],  section: 'crm', excludeRoles: ['HR', 'FINANCE'] },
+  { path: '/invoices',   labelKey: 'navInvoices',   icon: '💰', permissions: ['invoices.view'],    section: 'crm', excludeRoles: ['SALES'] },
+
+  // ── Operations ──
   { path: '/reports',    labelKey: 'navReports',    icon: '📝', permissions: ['reports.own'],       section: 'ops' },
   { path: '/stats',      labelKey: 'navStats',      icon: '📊', permissions: ['reports.team'],      section: 'ops' },
+
+  // ── Admin ──
   { path: '/hr',         labelKey: 'navHR',         icon: '🏥', permissions: ['hr.view'],           section: 'admin' },
   { path: '/admin',      labelKey: 'navAdmin',      icon: '👥', permissions: ['admin.users'],       section: 'admin' },
   { path: '/settings',   labelKey: 'navSettings',   icon: '⚙️', permissions: ['admin.roles'],      section: 'admin' },
+
+  // ── Always visible ──
   { path: '/profile',    labelKey: 'navProfile',    icon: '👤' },
 ];
 
@@ -49,13 +63,13 @@ const SECTION_LABELS: Record<string, Record<string, string>> = {
 /* ────────────────────── legacy role labels (fallback) ────────────────────── */
 
 const LEGACY_ROLE_LABELS: Record<string, Record<string, string>> = {
-  de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter' },
-  en: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Local Manager', ARBEITER: 'Worker' },
-  fr: { GLOBAL_MANAGER: 'Directeur général', LOCAL_MANAGER: 'Chef de chantier', ARBEITER: 'Ouvrier' },
-  pt: { GLOBAL_MANAGER: 'Gerente Global', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabalhador' },
-  nl: { GLOBAL_MANAGER: 'Algemeen Directeur', LOCAL_MANAGER: 'Lokale Manager', ARBEITER: 'Arbeider' },
-  it: { GLOBAL_MANAGER: 'Direttore Generale', LOCAL_MANAGER: 'Responsabile Locale', ARBEITER: 'Operaio' },
-  es: { GLOBAL_MANAGER: 'Director General', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabajador' },
+  de: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Lokal Manager', ARBEITER: 'Arbeiter', SALES: 'Verkauf', CEO: 'CEO', HR: 'Personalwesen', FINANCE: 'Finanzen' },
+  en: { GLOBAL_MANAGER: 'Global Manager', LOCAL_MANAGER: 'Local Manager', ARBEITER: 'Worker', SALES: 'Sales', CEO: 'CEO', HR: 'Human Resources', FINANCE: 'Finance' },
+  fr: { GLOBAL_MANAGER: 'Directeur général', LOCAL_MANAGER: 'Chef de chantier', ARBEITER: 'Ouvrier', SALES: 'Commercial', CEO: 'CEO', HR: 'Ressources humaines', FINANCE: 'Finance' },
+  pt: { GLOBAL_MANAGER: 'Gerente Global', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabalhador', SALES: 'Comercial', CEO: 'CEO', HR: 'Recursos humanos', FINANCE: 'Finanças' },
+  nl: { GLOBAL_MANAGER: 'Algemeen Directeur', LOCAL_MANAGER: 'Lokale Manager', ARBEITER: 'Arbeider', SALES: 'Verkoop', CEO: 'CEO', HR: 'Personeelszaken', FINANCE: 'Financiën' },
+  it: { GLOBAL_MANAGER: 'Direttore Generale', LOCAL_MANAGER: 'Responsabile Locale', ARBEITER: 'Operaio', SALES: 'Commerciale', CEO: 'CEO', HR: 'Risorse umane', FINANCE: 'Finanza' },
+  es: { GLOBAL_MANAGER: 'Director General', LOCAL_MANAGER: 'Gerente Local', ARBEITER: 'Trabajador', SALES: 'Ventas', CEO: 'CEO', HR: 'Recursos humanos', FINANCE: 'Finanzas' },
 };
 
 function normalizeRole(raw: string): Role {
@@ -80,6 +94,9 @@ export function AppShell() {
   const gold = th.gold;
   const sideW = collapsed ? 64 : 220;
 
+  // ★ Keep raw role for exclude/only checks
+  const rawRole = (user?.role || '').toUpperCase();
+
   const perms = useMemo(() => {
     const role = normalizeRole(user?.role || '');
     return resolvePermissions(role, user?.custom_permissions);
@@ -89,20 +106,48 @@ export function AppShell() {
 
   const visibleItems = useMemo(() =>
     NAV_ITEMS.filter(item => {
+      // ★ If onlyRoles is set, check raw role first
+      if (item.onlyRoles) {
+        return item.onlyRoles.includes(rawRole);
+      }
+
+      // ★ If this role is explicitly excluded, hide the item
+      if (item.excludeRoles?.includes(rawRole)) {
+        return false;
+      }
+
+      // Standard permission check
       if (!item.permissions || item.permissions.length === 0) return true;
       return item.permissions.some(p => perms.has(p));
     }),
-  [perms]);
+  [perms, rawRole]);
 
   useEffect(() => {
     const current = NAV_ITEMS.find(item => location.pathname.startsWith(item.path));
-    if (!current || !current.permissions) return;
+    if (!current) return;
+
+    // Check onlyRoles
+    if (current.onlyRoles && !current.onlyRoles.includes(rawRole)) {
+      const fallback = visibleItems[0]?.path || '/profile';
+      navigate(fallback, { replace: true });
+      return;
+    }
+
+    // Check excludeRoles
+    if (current.excludeRoles?.includes(rawRole)) {
+      const fallback = visibleItems[0]?.path || '/profile';
+      navigate(fallback, { replace: true });
+      return;
+    }
+
+    // Check permissions
+    if (!current.permissions) return;
     const allowed = current.permissions.some(p => perms.has(p));
     if (!allowed) {
       const fallback = visibleItems[0]?.path || '/profile';
       navigate(fallback, { replace: true });
     }
-  }, [location.pathname, perms, visibleItems, navigate]);
+  }, [location.pathname, perms, rawRole, visibleItems, navigate]);
 
   const handleLogout = () => {
     logout();
@@ -112,13 +157,12 @@ export function AppShell() {
   const getLabel = (key: string): string => (t as any)[key] || key;
 
   const roleDisplayName = useMemo(() => {
-    const rawRole = (user?.role || '').toUpperCase();
     const normalized = normalizeRole(rawRole);
     const shared = (SHARED_ROLE_LABELS[lang] || SHARED_ROLE_LABELS.en)?.[normalized];
     if (shared) return shared;
     const legacy = (LEGACY_ROLE_LABELS[lang] || LEGACY_ROLE_LABELS.de)[rawRole];
     return legacy || rawRole;
-  }, [user, lang]);
+  }, [user, lang, rawRole]);
 
   let lastSection = '';
 
@@ -225,7 +269,7 @@ export function AppShell() {
             </div>
           )}
 
-          {/* ★ LANGUAGE BUTTONS — now driven by enabledLangs from context */}
+          {/* language buttons */}
           <div style={{
             display: 'flex', gap: 4,
             justifyContent: collapsed ? 'center' : 'flex-start',

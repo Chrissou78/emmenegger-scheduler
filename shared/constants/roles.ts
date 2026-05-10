@@ -77,6 +77,7 @@ export function getNavAccess(
   const isHR = departments.includes('HR');
   const isFinance = departments.includes('FINANCE');
   const isSales = departments.includes('SALES');
+  const r = (role || '').toUpperCase();
 
   return {
     // Schedule: CEO, operational executives, operational team leaders
@@ -125,6 +126,7 @@ export function getNavAccess(
 
     // Profile: everyone
     profile: true,
+    crm: r === 'SALES' || r === 'CEO' || r === 'ADMIN' || r === 'GLOBAL_MANAGER',
   };
 }
 
@@ -263,6 +265,11 @@ export const PERMISSIONS = [
   'hr.access',              // CEO + HR exec
   'admin.access',           // CEO + all executives
   'profile.view',           // everyone
+  'crm.view',
+  'crm.edit',
+  'crm.delete',
+  'crm.pipeline',
+  'crm.performance',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
