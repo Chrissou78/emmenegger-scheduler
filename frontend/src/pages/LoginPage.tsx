@@ -16,6 +16,9 @@ const LT: Record<string, Record<string, string>> = {
     admin: 'Admin',
     manager: 'Manager',
     worker: 'Arbeiter',
+    hr: 'Personal',
+    finance: 'Finanzen',
+    sales: 'Verkauf',
     devHint: 'Entwickler-Zugänge',
   },
   en: {
@@ -27,6 +30,9 @@ const LT: Record<string, Record<string, string>> = {
     admin: 'Admin',
     manager: 'Manager',
     worker: 'Worker',
+    hr: 'HR',
+    finance: 'Finance',
+    sales: 'Sales',
     devHint: 'Dev accounts',
   },
   fr: {
@@ -38,6 +44,9 @@ const LT: Record<string, Record<string, string>> = {
     admin: 'Admin',
     manager: 'Manager',
     worker: 'Ouvrier',
+    hr: 'RH',
+    finance: 'Finance',
+    sales: 'Ventes',
     devHint: 'Comptes de développement',
   },
   pt: {
@@ -49,6 +58,9 @@ const LT: Record<string, Record<string, string>> = {
     admin: 'Admin',
     manager: 'Gerente',
     worker: 'Trabalhador',
+    hr: 'RH',
+    finance: 'Finanças',
+    sales: 'Vendas',
     devHint: 'Contas de desenvolvimento',
   },
 };
@@ -68,6 +80,9 @@ export function LoginPage() {
   const setDevAccount = () => { setEmail('admin@emmenegger.ch'); setPassword('admin'); };
   const setMarcoAccount = () => { setEmail('marco.cancela@emmenegger.ch'); setPassword('emmenegger2026'); };
   const setWorkerAccount = () => { setEmail('worker@emmenegger.ch'); setPassword('worker2026'); };
+  const setHrAccount = () => { setEmail('hr@emmenegger.ch'); setPassword('emmenegger2026'); };
+  const setFinanceAccount = () => { setEmail('finance@emmenegger.ch'); setPassword('emmenegger2026'); };
+  const setSalesAccount = () => { setEmail('sales@emmenegger.ch'); setPassword('emmenegger2026'); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,9 +92,13 @@ export function LoginPage() {
       const user = useAuthStore.getState().user;
       const role = (user?.role || '').toUpperCase();
       switch (role) {
-        case 'ARBEITER': navigate('/reports'); break;
-        case 'LOCAL_MANAGER':
+        case 'ADMIN':
         case 'GLOBAL_MANAGER': navigate('/schedule'); break;
+        case 'MANAGER':
+        case 'LOCAL_MANAGER': navigate('/schedule'); break;
+        case 'HR': navigate('/hr'); break;
+        case 'FINANCE': navigate('/invoices'); break;
+        case 'SALES': navigate('/customers'); break;
         default: navigate('/reports');
       }
     } catch (err) {
@@ -209,8 +228,8 @@ export function LoginPage() {
           </button>
         </form>
 
-        {/* Dev Quick Buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
+        {/* Dev Quick Buttons — row 1: existing */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
           <button onClick={setDevAccount}
             style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: th.gold, fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
@@ -231,12 +250,37 @@ export function LoginPage() {
           </button>
         </div>
 
+        {/* Dev Quick Buttons — row 2: new roles */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
+          <button onClick={setHrAccount}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#e891b2', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            🧑‍💼 {lt.hr}
+          </button>
+          <button onClick={setFinanceAccount}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#f0b347', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            💰 {lt.finance}
+          </button>
+          <button onClick={setSalesAccount}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#42b883', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            🤝 {lt.sales}
+          </button>
+        </div>
+
         {/* Credentials hint */}
         <div style={{ fontSize: '11px', color: th.textMuted, textAlign: 'center', lineHeight: 1.8 }}>
           <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>{lt.devHint}</div>
           <div>👑 <code style={{ color: th.gold }}>admin@emmenegger.ch</code> / <code style={{ color: th.gold }}>admin</code></div>
           <div>📋 <code style={{ color: '#6495ed' }}>marco.cancela@emmenegger.ch</code> / <code style={{ color: '#6495ed' }}>emmenegger2026</code></div>
           <div>🔧 <code style={{ color: '#4caf50' }}>worker@emmenegger.ch</code> / <code style={{ color: '#4caf50' }}>worker2026</code></div>
+          <div>🧑‍💼 <code style={{ color: '#e891b2' }}>hr@emmenegger.ch</code> / <code style={{ color: '#e891b2' }}>emmenegger2026</code></div>
+          <div>💰 <code style={{ color: '#f0b347' }}>finance@emmenegger.ch</code> / <code style={{ color: '#f0b347' }}>emmenegger2026</code></div>
+          <div>🤝 <code style={{ color: '#42b883' }}>sales@emmenegger.ch</code> / <code style={{ color: '#42b883' }}>emmenegger2026</code></div>
         </div>
       </div>
     </div>
