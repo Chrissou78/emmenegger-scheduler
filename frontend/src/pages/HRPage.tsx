@@ -121,6 +121,16 @@ const L_ALL: Record<string, Record<string, string>> = {
     noResults: "Keine Ergebnisse",
     loading: "Laden…",
     accessDenied: "Zugriff verweigert",
+    payrollMonth: "Lohnmonat",
+    actualHours: "Effektive Stunden",
+    overtimeHours: "Überstunden",
+    overtimeRate: "Überstunden-Zuschlag",
+    familyAllowance: "Kinderzulagen",
+    printPayslip: "Lohnabrechnung drucken",
+    baseSalary: "Grundlohn",
+    overtime: "Überstunden",
+    totalGross: "Bruttolohn total",
+    netPayout: "Netto-Auszahlung",
   },
   en: {
     title: "Human Resources",
@@ -183,6 +193,16 @@ const L_ALL: Record<string, Record<string, string>> = {
     noResults: "No results",
     loading: "Loading…",
     accessDenied: "Access Denied",
+    payrollMonth: "Payroll Month",
+    actualHours: "Actual Hours",
+    overtimeHours: "Overtime Hours",
+    overtimeRate: "Overtime Rate",
+    familyAllowance: "Family Allowance",
+    printPayslip: "Print Payslip",
+    baseSalary: "Base Salary",
+    overtime: "Overtime",
+    totalGross: "Total Gross",
+    netPayout: "Net Payout",
   },
   fr: {
     title: "Ressources humaines",
@@ -245,6 +265,16 @@ const L_ALL: Record<string, Record<string, string>> = {
     noResults: "Aucun résultat",
     loading: "Chargement…",
     accessDenied: "Accès refusé",
+    payrollMonth: "Mois de paie",
+    actualHours: "Heures effectives",
+    overtimeHours: "Heures supplémentaires",
+    overtimeRate: "Majoration heures sup.",
+    familyAllowance: "Allocations familiales",
+    printPayslip: "Imprimer fiche de paie",
+    baseSalary: "Salaire de base",
+    overtime: "Heures supplémentaires",
+    totalGross: "Salaire brut total",
+    netPayout: "Versement net",
   },
   pt: {
     title: "Recursos Humanos",
@@ -307,26 +337,39 @@ const L_ALL: Record<string, Record<string, string>> = {
     noResults: "Sem resultados",
     loading: "Carregando…",
     accessDenied: "Acesso negado",
+    payrollMonth: "Mês de pagamento",
+    actualHours: "Horas efetivas",
+    overtimeHours: "Horas extras",
+    overtimeRate: "Taxa horas extras",
+    familyAllowance: "Abono de família",
+    printPayslip: "Imprimir recibo",
+    baseSalary: "Salário base",
+    overtime: "Horas extras",
+    totalGross: "Salário bruto total",
+    netPayout: "Pagamento líquido",
   },
 };
 
 /* ------------------------------------------------------------------ */
-/*  Swiss social charges engine (2026 rates)                           */
+/*  Swiss social charges engine (2026 official rates)                   */
 /* ------------------------------------------------------------------ */
 const CH_RATES = {
   AHV_IV_EO_TOTAL: 0.106,
   ALV_TOTAL: 0.022,
   ALV_CEILING: 148200,
   ALV_SOLIDARITY: 0.01,
-  UVG_BU: 0.008,
-  UVG_NBU: 0.015,
+  UVG_BU: 0.0079,
+  UVG_NBU: 0.0131,
   UVG_CEILING: 148200,
   KTG_TOTAL: 0.01,
   FAK_DEFAULT: 0.022,
   BVG_ENTRY_THRESHOLD: 22680,
-  BVG_COORDINATION_DEDUCTION: 25725,
-  BVG_MIN_COORDINATED: 3675,
-  BVG_MAX_COORDINATED: 62475,
+  BVG_COORDINATION_DEDUCTION: 26460,
+  BVG_MIN_COORDINATED: 3780,
+  BVG_MAX_COORDINATED: 64260,
+  BVG_MAX_SALARY: 90720,
+  CHILD_ALLOWANCE: 215,
+  EDUCATION_ALLOWANCE: 268,
 };
 
 const FAK_BY_CANTON: Record<string, number> = {
@@ -368,9 +411,10 @@ function computePayslip(
   }
 
   if (annualGross >= CH_RATES.BVG_ENTRY_THRESHOLD) {
+    const cappedSalary = Math.min(annualGross, CH_RATES.BVG_MAX_SALARY);
     const coordSalary = Math.max(
       CH_RATES.BVG_MIN_COORDINATED,
-      Math.min(annualGross - CH_RATES.BVG_COORDINATION_DEDUCTION, CH_RATES.BVG_MAX_COORDINATED)
+      Math.min(cappedSalary - CH_RATES.BVG_COORDINATION_DEDUCTION, CH_RATES.BVG_MAX_COORDINATED)
     );
     const bvgRate = getBvgRate(age);
     const bvgEach = (coordSalary * bvgRate / 2) / 12;
@@ -467,6 +511,15 @@ export default function HRPage() {
   const [tab, setTab] = useState<"general" | "contract" | "social">("general");
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
 
+  /* ---- payroll month state ---- */
+  const now = new Date();
+  const [payrollMonth, setPayrollMonth] = useState(
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  );
+  const [actualHours, setActualHours] = useState(0);
+  const [overtimeHours, setOvertimeHours] = useState(0);
+  const [overtimeRate, setOvertimeRate] = useState(125);
+
   const showToast = (msg: string, type: "ok" | "err" = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -511,6 +564,9 @@ export default function HRPage() {
       const p = json.data ?? json;
       setSelected(p);
       setTab("general");
+      // Reset payroll inputs when selecting a new employee
+      setActualHours(0);
+      setOvertimeHours(0);
     } catch {
       showToast("Detail error", "err");
     }
@@ -576,26 +632,51 @@ export default function HRPage() {
     [profiles]
   );
 
-  /* ---- payslip simulation ---- */
-  const payslip = useMemo(() => {
+  /* ---- monthly payslip computation ---- */
+  const payslipMonthly = useMemo(() => {
     const src = editing ? form : selected;
     if (!src || !src.salary_amount) return null;
 
-    let annualGross: number;
+    const pensum = (src.work_pensum || 100) / 100;
+    const hpw = src.hours_per_week || 42;
+
+    let basePay: number;
+    let overtimePay = 0;
+
     if (src.salary_type === "HOURLY") {
-      const weeksPerYear = 52;
-      annualGross = src.salary_amount * (src.hours_per_week || 42) * weeksPerYear * ((src.work_pensum || 100) / 100);
+      const hours = actualHours > 0 ? actualHours : hpw * 4.33 * pensum;
+      basePay = src.salary_amount * hours;
+      overtimePay = overtimeHours * src.salary_amount * (overtimeRate / 100);
     } else {
-      annualGross = src.salary_amount * 12 * ((src.work_pensum || 100) / 100);
+      basePay = src.salary_amount * pensum;
+      if (overtimeHours > 0) {
+        const hourlyRate = (src.salary_amount * pensum) / (hpw * 4.33);
+        overtimePay = overtimeHours * hourlyRate * (overtimeRate / 100);
+      }
     }
+
+    const monthlyGross = basePay + overtimePay;
+    const annualGross = monthlyGross * 12;
 
     const today = new Date();
     const age = src.entry_date
       ? Math.max(18, today.getFullYear() - new Date(src.entry_date).getFullYear() + 25)
       : 35;
 
-    return computePayslip(annualGross, age, src.canton || "ZH");
-  }, [selected, form, editing]);
+    const result = computePayslip(annualGross, age, src.canton || "ZH");
+
+    const childCount = src.children_count || 0;
+    const familyAllowance = childCount * CH_RATES.CHILD_ALLOWANCE;
+
+    return {
+      ...result,
+      basePay,
+      overtimePay,
+      monthlyGross,
+      familyAllowance,
+      netPayout: result.net + familyAllowance,
+    };
+  }, [selected, form, editing, actualHours, overtimeHours, overtimeRate]);
 
   const contractLabel = (c: string) => L[c] ?? c;
   const salaryLabel = (s: string) =>
@@ -983,120 +1064,179 @@ export default function HRPage() {
             )}
 
             {/* ============ SOCIAL / PAYROLL TAB ============ */}
-            {tab === "social" && canPayroll && payslip && (
+            {tab === "social" && canPayroll && (
               <div>
                 <h3 style={{ margin: "0 0 16px", color: gold }}>{L.simulate}</h3>
 
-                {/* summary cards */}
-                <div style={{
-                  display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14,
-                  marginBottom: 20,
-                }}>
-                  <div style={{
-                    padding: "14px 20px", borderRadius: 10,
-                    background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
-                    textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.grossSalary}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>
-                      {fmtCHF(
-                        (editing ? form! : selected!).salary_type === "HOURLY"
-                          ? (editing ? form! : selected!).salary_amount *
-                            ((editing ? form! : selected!).hours_per_week || 42) * 52 *
-                            (((editing ? form! : selected!).work_pensum || 100) / 100) / 12
-                          : (editing ? form! : selected!).salary_amount *
-                            (((editing ? form! : selected!).work_pensum || 100) / 100)
-                      )}
-                    </div>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.monthly}</div>
+                {/* Month picker + hours inputs */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+                  <div>
+                    <label style={labelStyle}>{L.payrollMonth}</label>
+                    <input style={inputStyle} type="month"
+                      value={payrollMonth}
+                      onChange={(e) => setPayrollMonth(e.target.value)} />
                   </div>
-                  <div style={{
-                    padding: "14px 20px", borderRadius: 10,
-                    background: "#2ecc7122", textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: 11, color: "#2ecc71" }}>{L.netSalary}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: "#2ecc71", marginTop: 4 }}>
-                      {fmtCHF(payslip.net)}
-                    </div>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.monthly}</div>
+                  <div>
+                    <label style={labelStyle}>{L.actualHours}</label>
+                    <input style={inputStyle} type="number" step="0.5" min={0}
+                      value={actualHours}
+                      onChange={(e) => setActualHours(Number(e.target.value))}
+                      placeholder="0 = auto" />
                   </div>
-                  <div style={{
-                    padding: "14px 20px", borderRadius: 10,
-                    background: gold + "18", textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: 11, color: gold }}>{L.totalEmployerCost}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: gold, marginTop: 4 }}>
-                      {fmtCHF(payslip.net + payslip.totalEmployee + payslip.totalEmployer)}
-                    </div>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.monthly}</div>
+                  <div>
+                    <label style={labelStyle}>{L.overtimeHours}</label>
+                    <input style={inputStyle} type="number" step="0.5" min={0}
+                      value={overtimeHours}
+                      onChange={(e) => setOvertimeHours(Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.overtimeRate} (%)</label>
+                    <input style={inputStyle} type="number" step="5" min={100} max={200}
+                      value={overtimeRate}
+                      onChange={(e) => setOvertimeRate(Number(e.target.value))} />
                   </div>
                 </div>
 
-                {/* breakdown table */}
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>{L.contribution}</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>{L.employerShare}</th>
-                      <th style={{ ...thStyle, textAlign: "right" }}>{L.employeeShare}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payslip.lines.map((line, i) => (
-                      <tr key={i}>
-                        <td style={tdStyle}>{line.label}</td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {line.employer > 0 ? fmtCHF(line.employer) : "—"}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: "right" }}>
-                          {line.employee > 0 ? fmtCHF(line.employee) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr style={{ fontWeight: 700 }}>
-                      <td style={tdStyle}>{L.totalDeductions}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", color: gold }}>
-                        {fmtCHF(payslip.totalEmployer)}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right", color: "#e74c3c" }}>
-                        {fmtCHF(payslip.totalEmployee)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                {payslipMonthly && (
+                  <>
+                    {/* Summary cards */}
+                    <div style={{
+                      display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14,
+                      marginBottom: 20,
+                    }}>
+                      <div style={{
+                        padding: "14px 16px", borderRadius: 10,
+                        background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 11, color: dimText }}>{L.baseSalary}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                          {fmtCHF(payslipMonthly.basePay)}
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: "14px 16px", borderRadius: 10,
+                        background: overtimeHours > 0
+                          ? (isDark ? "rgba(243,156,18,.12)" : "rgba(243,156,18,.08)")
+                          : (isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)"),
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 11, color: overtimeHours > 0 ? "#f39c12" : dimText }}>{L.overtime}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: overtimeHours > 0 ? "#f39c12" : th.text }}>
+                          {fmtCHF(payslipMonthly.overtimePay)}
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: "14px 16px", borderRadius: 10,
+                        background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                        textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 11, color: dimText }}>{L.grossSalary}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>
+                          {fmtCHF(payslipMonthly.monthlyGross)}
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: "14px 16px", borderRadius: 10,
+                        background: "#2ecc7122", textAlign: "center",
+                      }}>
+                        <div style={{ fontSize: 11, color: "#2ecc71" }}>{L.netPayout}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "#2ecc71", marginTop: 4 }}>
+                          {fmtCHF(payslipMonthly.netPayout)}
+                        </div>
+                      </div>
+                    </div>
 
-                {/* annual summary */}
-                <div style={{
-                  marginTop: 16, padding: 14, borderRadius: 10,
-                  background: isDark ? "rgba(255,255,255,.04)" : "rgba(0,0,0,.02)",
-                  display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: 12,
-                }}>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.annual} — {L.grossSalary}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700 }}>
-                      {fmtCHF(payslip.net * 12 + payslip.totalEmployee * 12)}
+                    {/* Family allowances */}
+                    {payslipMonthly.familyAllowance > 0 && (
+                      <div style={{
+                        padding: "12px 16px", borderRadius: 10, marginBottom: 16,
+                        background: isDark ? "rgba(78,205,196,.08)" : "rgba(78,205,196,.06)",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                      }}>
+                        <span style={{ fontSize: 13, color: "#4ecdc4", fontWeight: 600 }}>
+                          {L.familyAllowance} ({selected?.children_count} × CHF {CH_RATES.CHILD_ALLOWANCE})
+                        </span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "#4ecdc4" }}>
+                          + {fmtCHF(payslipMonthly.familyAllowance)}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Breakdown table */}
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                      <thead>
+                        <tr>
+                          <th style={thStyle}>{L.contribution}</th>
+                          <th style={{ ...thStyle, textAlign: "right" }}>{L.employerShare}</th>
+                          <th style={{ ...thStyle, textAlign: "right" }}>{L.employeeShare}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payslipMonthly.lines.map((line, i) => (
+                          <tr key={i}>
+                            <td style={tdStyle}>{line.label}</td>
+                            <td style={{ ...tdStyle, textAlign: "right" }}>
+                              {line.employer > 0 ? fmtCHF(line.employer) : "—"}
+                            </td>
+                            <td style={{ ...tdStyle, textAlign: "right" }}>
+                              {line.employee > 0 ? fmtCHF(line.employee) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ fontWeight: 700 }}>
+                          <td style={tdStyle}>{L.totalDeductions}</td>
+                          <td style={{ ...tdStyle, textAlign: "right", color: gold }}>
+                            {fmtCHF(payslipMonthly.totalEmployer)}
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: "right", color: "#e74c3c" }}>
+                            {fmtCHF(payslipMonthly.totalEmployee)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    {/* Employer total cost */}
+                    <div style={{
+                      marginTop: 16, padding: 14, borderRadius: 10,
+                      background: gold + "18",
+                      display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: 12,
+                    }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: gold }}>{L.totalEmployerCost} ({L.monthly})</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: gold }}>
+                          {fmtCHF(payslipMonthly.monthlyGross + payslipMonthly.totalEmployer)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: dimText }}>{L.annual} — {L.grossSalary}</div>
+                        <div style={{ fontSize: 16, fontWeight: 700 }}>
+                          {fmtCHF(payslipMonthly.monthlyGross * 12)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 11, color: "#2ecc71" }}>{L.annual} — {L.netPayout}</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#2ecc71" }}>
+                          {fmtCHF(payslipMonthly.netPayout * 12)}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.annual} — {L.netSalary}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#2ecc71" }}>
-                      {fmtCHF(payslip.net * 12)}
+
+                    {/* Print button */}
+                    <div style={{ marginTop: 20, textAlign: "right" }}>
+                      <button style={btnPrimary} onClick={() => window.print()}>
+                        🖨️ {L.printPayslip}
+                      </button>
                     </div>
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 11, color: dimText }}>{L.annual} — {L.totalEmployerCost}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: gold }}>
-                      {fmtCHF((payslip.net + payslip.totalEmployee + payslip.totalEmployer) * 12)}
-                    </div>
-                  </div>
-                </div>
+                  </>
+                )}
+
+                {!payslipMonthly && (
+                  <p style={{ color: dimText }}>
+                    {L.salary}: —
+                  </p>
+                )}
               </div>
-            )}
-
-            {tab === "social" && canPayroll && !payslip && (
-              <p style={{ color: dimText }}>
-                {L.salary}: —
-              </p>
             )}
           </div>
         </div>
