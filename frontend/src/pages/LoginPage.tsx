@@ -2,23 +2,24 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
-import { themes } from '../i18n/translations';
+import { themes } from '../i18n/visual';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { getTranslations, type LangCode } from '../i18n';
 
 export function LoginPage() {
-  const { t, isDark, lang, setLanguage, toggleTheme } = useTheme();
+  const { t, isDark, lang, setLanguage, toggleTheme, enabledLangs } = useTheme();
   const th = isDark ? themes.dark : themes.light;
   const navigate = useNavigate();
   const { login, loading, error: authError } = useAuthStore();
   const lt = getTranslations(lang as LangCode);
 
-  const [email, setEmail] = useState('admin@emmenegger.ch');
-  const [password, setPassword] = useState('admin');
+  const [email, setEmail] = useState('ceo@emmenegger.ch');
+  const [password, setPassword] = useState('emmenegger2026');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
-  const setDevAccount = () => { setEmail('admin@emmenegger.ch'); setPassword('admin'); };
+  const setCeoAccount = () => { setEmail('ceo@emmenegger.ch'); setPassword('emmenegger2026'); };
+  const setExecAccount = () => { setEmail('admin@emmenegger.ch'); setPassword('admin'); };
   const setMarcoAccount = () => { setEmail('marco.cancela@emmenegger.ch'); setPassword('emmenegger2026'); };
   const setWorkerAccount = () => { setEmail('worker@emmenegger.ch'); setPassword('worker2026'); };
   const setHrAccount = () => { setEmail('hr@emmenegger.ch'); setPassword('emmenegger2026'); };
@@ -33,6 +34,7 @@ export function LoginPage() {
       const user = useAuthStore.getState().user;
       const role = (user?.role || '').toUpperCase();
       switch (role) {
+        case 'CEO': navigate('/schedule'); break;
         case 'ADMIN':
         case 'GLOBAL_MANAGER': navigate('/schedule'); break;
         case 'MANAGER':
@@ -60,8 +62,8 @@ export function LoginPage() {
       }}>
         {/* Top controls: language + theme */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['de', 'en', 'fr', 'pt'] as const).map(l => (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {enabledLangs.map(l => (
               <button key={l}
                 onClick={() => { if (setLanguage) setLanguage(l); }}
                 style={{
@@ -99,7 +101,7 @@ export function LoginPage() {
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Mail size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@emmenegger.ch" required
+                placeholder="ceo@emmenegger.ch" required
                 style={{
                   width: '100%', padding: '12px 12px 12px 40px', border: `1px solid ${th.border}`,
                   borderRadius: '6px', backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
@@ -169,30 +171,36 @@ export function LoginPage() {
           </button>
         </form>
 
-        {/* Dev Quick Buttons — row 1: existing */}
+        {/* Dev Quick Buttons — row 1: CEO, Executive, Manager */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-          <button onClick={setDevAccount}
+          <button onClick={setCeoAccount}
             style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: th.gold, fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            👑 {lt.admin}
+            👑 {lt.ceo}
+          </button>
+          <button onClick={setExecAccount}
+            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#3b82f6', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
+            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
+            👔 {lt.executive}
           </button>
           <button onClick={setMarcoAccount}
             style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#6495ed', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            📋 {lt.manager}
+            🔧 {lt.manager}
           </button>
+        </div>
+
+        {/* Dev Quick Buttons — row 2: Worker, HR, Finance, Sales */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
           <button onClick={setWorkerAccount}
             style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#4caf50', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
             onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            🔧 {lt.worker}
+            👤 {lt.worker}
           </button>
-        </div>
-
-        {/* Dev Quick Buttons — row 2: new roles */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
           <button onClick={setHrAccount}
             style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#e891b2', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
@@ -216,9 +224,10 @@ export function LoginPage() {
         {/* Credentials hint */}
         <div style={{ fontSize: '11px', color: th.textMuted, textAlign: 'center', lineHeight: 1.8 }}>
           <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>{lt.devHint}</div>
-          <div>👑 <code style={{ color: th.gold }}>admin@emmenegger.ch</code> / <code style={{ color: th.gold }}>admin</code></div>
-          <div>📋 <code style={{ color: '#6495ed' }}>marco.cancela@emmenegger.ch</code> / <code style={{ color: '#6495ed' }}>emmenegger2026</code></div>
-          <div>🔧 <code style={{ color: '#4caf50' }}>worker@emmenegger.ch</code> / <code style={{ color: '#4caf50' }}>worker2026</code></div>
+          <div>👑 <code style={{ color: th.gold }}>ceo@emmenegger.ch</code> / <code style={{ color: th.gold }}>emmenegger2026</code></div>
+          <div>👔 <code style={{ color: '#3b82f6' }}>admin@emmenegger.ch</code> / <code style={{ color: '#3b82f6' }}>admin</code></div>
+          <div>🔧 <code style={{ color: '#6495ed' }}>marco.cancela@emmenegger.ch</code> / <code style={{ color: '#6495ed' }}>emmenegger2026</code></div>
+          <div>👤 <code style={{ color: '#4caf50' }}>worker@emmenegger.ch</code> / <code style={{ color: '#4caf50' }}>worker2026</code></div>
           <div>🧑‍💼 <code style={{ color: '#e891b2' }}>hr@emmenegger.ch</code> / <code style={{ color: '#e891b2' }}>emmenegger2026</code></div>
           <div>💰 <code style={{ color: '#f0b347' }}>finance@emmenegger.ch</code> / <code style={{ color: '#f0b347' }}>emmenegger2026</code></div>
           <div>🤝 <code style={{ color: '#42b883' }}>sales@emmenegger.ch</code> / <code style={{ color: '#42b883' }}>emmenegger2026</code></div>

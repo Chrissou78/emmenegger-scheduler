@@ -91,6 +91,7 @@ interface HierarchyUser {
   department: string;
   team_leader_id: string | null;
   executive_id: string | null;
+  ceo_id: string | null;
 }
 
 type ConfigCategory =
@@ -183,16 +184,26 @@ const LEGAL_FORMS = [
 /* ================================================================== */
 /*  Helper – normalise role strings                                    */
 /* ================================================================== */
+function isCeoRole(role: string): boolean {
+  return (role || '').toUpperCase() === 'CEO';
+}
 function isExecRole(role: string): boolean {
-  const r = (role || "").toUpperCase();
-  return r === "ADMIN" || r === "GLOBAL_MANAGER";
+  const r = (role || '').toUpperCase();
+  return r === 'ADMIN' || r === 'GLOBAL_MANAGER';
 }
 function isManagerRole(role: string): boolean {
-  const r = (role || "").toUpperCase();
-  return r === "MANAGER" || r === "LOCAL_MANAGER";
+  const r = (role || '').toUpperCase();
+  return r === 'MANAGER' || r === 'LOCAL_MANAGER';
 }
-function isLeaderOrAbove(role: string): boolean {
-  return isExecRole(role) || isManagerRole(role);
+function isEmployeeRole(role: string): boolean {
+  return !isCeoRole(role) && !isExecRole(role) && !isManagerRole(role);
+}
+
+function getTier(role: string): number {
+  if (isCeoRole(role)) return 4;
+  if (isExecRole(role)) return 3;
+  if (isManagerRole(role)) return 2;
+  return 1;
 }
 
 /* ================================================================== */
@@ -305,7 +316,7 @@ export default function SettingsPage() {
   // Hierarchy
   const [hUsers, setHUsers] = useState<HierarchyUser[]>([]);
   const [hLoading, setHLoading] = useState(false);
-  const [hEditMap, setHEditMap] = useState<Record<string, { team_leader_id: string | null; executive_id: string | null }>>({});
+  const [hEditMap, setHEditMap] = useState<Record<string, { team_leader_id: string | null; executive_id: string | null; ceo_id: string | null;}>>({});
   const [hDirty, setHDirty] = useState(false);
   const [hRoleFilter, setHRoleFilter] = useState("");
 
@@ -436,12 +447,21 @@ export default function SettingsPage() {
           department: (u.department as string) ?? "",
           team_leader_id: (u.team_leader_id as string | null) ?? null,
           executive_id: (u.executive_id as string | null) ?? null,
+          ceo_id: (u.ceo_id as string | null) ?? null,
         })
       );
       setHUsers(list);
-      const map: Record<string, { team_leader_id: string | null; executive_id: string | null }> = {};
+      const map: Record<string, {
+        team_leader_id: string | null;
+        executive_id: string | null;
+        ceo_id: string | null;
+      }> = {};
       list.forEach((u) => {
-        map[u.id] = { team_leader_id: u.team_leader_id, executive_id: u.executive_id };
+        map[u.id] = {
+          team_leader_id: u.team_leader_id,
+          executive_id: u.executive_id,
+          ceo_id: u.ceo_id,
+        };
       });
       setHEditMap(map);
       setHDirty(false);
@@ -582,14 +602,27 @@ export default function SettingsPage() {
       const updates = hUsers
         .filter((u) => {
           const e = hEditMap[u.id];
-          return e && (e.team_leader_id !== u.team_leader_id || e.executive_id !== u.executive_id);
+          return e && (
+            e.team_leader_id !== u.team_leader_id ||
+            e.executive_id !== u.executive_id ||
+            e.ceo_id !== u.ceo_id
+          );
         })
-        .map((u) => ({ id: u.id, team_leader_id: hEditMap[u.id].team_leader_id, executive_id: hEditMap[u.id].executive_id }));
+        .map((u) => ({
+          id: u.id,
+          team_leader_id: hEditMap[u.id].team_leader_id,
+          executive_id: hEditMap[u.id].executive_id,
+          ceo_id: hEditMap[u.id].ceo_id,
+        }));
 
       for (const upd of updates) {
         const r = await fetch(`${API}/api/v1/users/${upd.id}`, {
           method: "PUT", headers: hdrs(),
-          body: JSON.stringify({ team_leader_id: upd.team_leader_id, executive_id: upd.executive_id }),
+          body: JSON.stringify({
+            team_leader_id: upd.team_leader_id,
+            executive_id: upd.executive_id,
+            ceo_id: upd.ceo_id,
+          }),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status} for user ${upd.id}`);
       }
@@ -599,21 +632,30 @@ export default function SettingsPage() {
     finally { setSaving(false); }
   };
 
-  const setHierarchyField = (userId: string, field: "team_leader_id" | "executive_id", value: string | null) => {
+  const setHierarchyField = (
+    userId: string,
+    field: "team_leader_id" | "executive_id" | "ceo_id",
+    value: string | null
+  ) => {
     setHEditMap((prev) => ({ ...prev, [userId]: { ...prev[userId], [field]: value } }));
     setHDirty(true);
   };
 
   /* ── Hierarchy computed data ── */
+  const hCeos = useMemo(() => hUsers.filter((u) => isCeoRole(u.role)), [hUsers]);
   const hExecs = useMemo(() => hUsers.filter((u) => isExecRole(u.role)), [hUsers]);
   const hManagers = useMemo(() => hUsers.filter((u) => isManagerRole(u.role)), [hUsers]);
-  const hEmployees = useMemo(() => hUsers.filter((u) => !isExecRole(u.role) && !isManagerRole(u.role)), [hUsers]);
+  const hEmployees = useMemo(() => hUsers.filter((u) => isEmployeeRole(u.role)), [hUsers]);
   const hAllRoles = useMemo(() => [...new Set(hUsers.map((u) => u.role).filter(Boolean))].sort(), [hUsers]);
 
   const hChangeCount = useMemo(() =>
     hUsers.filter((u) => {
       const e = hEditMap[u.id];
-      return e && (e.team_leader_id !== u.team_leader_id || e.executive_id !== u.executive_id);
+      return e && (
+        e.team_leader_id !== u.team_leader_id ||
+        e.executive_id !== u.executive_id ||
+        e.ceo_id !== u.ceo_id
+      );
     }).length,
   [hUsers, hEditMap]);
 
@@ -1356,64 +1398,104 @@ export default function SettingsPage() {
 
             {!hLoading && (
               <>
-                {/* ── Org Chart ── */}
+                {/* ── Org Chart: CEO → Executives → Team Leaders → Employees ── */}
                 <div style={sCard}>
                   <h3 style={{ margin: "0 0 16px", color: gold }}>🏗️ {t.orgChart}</h3>
 
-                  {hExecs.map((exec) => {
-                    const teamLeadersUnder = hManagers.filter(
-                      (m) => hEditMap[m.id]?.executive_id === exec.id
+                  {hCeos.length === 0 && (
+                    <div style={{ padding: 16, color: dimText, fontStyle: "italic" }}>
+                      ⚠️ {t.noCeo}
+                    </div>
+                  )}
+
+                  {hCeos.map((ceo) => {
+                    const execsUnder = hExecs.filter(
+                      (ex) => hEditMap[ex.id]?.ceo_id === ceo.id
                     );
                     return (
-                      <div key={exec.id} style={{ marginBottom: 24 }}>
-                        {/* Executive node */}
+                      <div key={ceo.id} style={{ marginBottom: 28 }}>
+                        {/* CEO node */}
                         <div style={{
-                          padding: "12px 20px", borderRadius: 10,
-                          background: gold + "22", border: `2px solid ${gold}`,
-                          fontWeight: 700, fontSize: 15, marginBottom: 8,
+                          padding: "14px 20px", borderRadius: 10,
+                          background: `linear-gradient(135deg, ${gold}33, ${gold}11)`,
+                          border: `2px solid ${gold}`,
+                          fontWeight: 700, fontSize: 16, marginBottom: 8,
                         }}>
-                          👔 {exec.first_name} {exec.last_name}
-                          <span style={{ fontSize: 11, marginLeft: 10, color: dimText }}>{exec.role}</span>
+                          👑 {ceo.first_name} {ceo.last_name}
+                          <span style={{ fontSize: 11, marginLeft: 10, padding: "2px 8px", borderRadius: 4, background: gold + "22", color: gold }}>CEO</span>
                         </div>
 
-                        {/* Team leaders under this exec */}
-                        <div style={{ marginLeft: 30, borderLeft: `2px solid ${th.border}`, paddingLeft: 16 }}>
-                          {teamLeadersUnder.length === 0 && (
-                            <div style={{ padding: "6px 0", color: dimText, fontSize: 13, fontStyle: "italic" }}>
+                        {/* Executives under this CEO */}
+                        <div style={{ marginLeft: 30, borderLeft: `2px solid ${gold}44`, paddingLeft: 16 }}>
+                          {execsUnder.length === 0 && (
+                            <div style={{ padding: "8px 0", color: dimText, fontSize: 13, fontStyle: "italic" }}>
                               {t.noResults}
                             </div>
                           )}
-                          {teamLeadersUnder.map((tl) => {
-                            const empsUnder = hEmployees.filter(
-                              (e) => hEditMap[e.id]?.team_leader_id === tl.id
+                          {execsUnder.map((exec) => {
+                            const tlsUnder = hManagers.filter(
+                              (m) => hEditMap[m.id]?.executive_id === exec.id
                             );
                             return (
-                              <div key={tl.id} style={{ marginBottom: 16 }}>
+                              <div key={exec.id} style={{ marginBottom: 20 }}>
+                                {/* Executive node */}
                                 <div style={{
-                                  padding: "10px 16px", borderRadius: 8,
-                                  background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
-                                  border: `1px solid ${th.border}`,
+                                  padding: "12px 18px", borderRadius: 8,
+                                  background: isDark ? "rgba(59,130,246,.1)" : "rgba(59,130,246,.06)",
+                                  border: `1px solid rgba(59,130,246,.3)`,
                                   fontWeight: 600, fontSize: 14, marginBottom: 6,
                                 }}>
-                                  🔧 {tl.first_name} {tl.last_name}
-                                  <span style={{ fontSize: 11, marginLeft: 10, color: dimText }}>
-                                    {tl.role} · {empsUnder.length} {t.directReports}
+                                  👔 {exec.first_name} {exec.last_name}
+                                  <span style={{ fontSize: 11, marginLeft: 10, color: "#3b82f6" }}>{exec.role}</span>
+                                  <span style={{ fontSize: 11, marginLeft: 6, color: dimText }}>
+                                    · {tlsUnder.length} {t.teamLeaders}
                                   </span>
                                 </div>
-                                <div style={{ marginLeft: 24, borderLeft: `1px dashed ${th.border}`, paddingLeft: 12 }}>
-                                  {empsUnder.map((emp) => (
-                                    <div key={emp.id} style={{
-                                      padding: "6px 12px", borderRadius: 6, fontSize: 13, color: th.text,
-                                      background: isDark ? "rgba(255,255,255,.03)" : "rgba(0,0,0,.02)",
-                                      marginBottom: 4,
-                                    }}>
-                                      👤 {emp.first_name} {emp.last_name}
-                                      <span style={{ fontSize: 11, marginLeft: 8, color: dimText }}>{emp.role}</span>
-                                    </div>
-                                  ))}
-                                  {empsUnder.length === 0 && (
-                                    <div style={{ fontSize: 12, color: dimText, fontStyle: "italic", padding: "4px 0" }}>—</div>
+
+                                {/* Team Leaders under this Executive */}
+                                <div style={{ marginLeft: 28, borderLeft: `2px solid ${th.border}`, paddingLeft: 14 }}>
+                                  {tlsUnder.length === 0 && (
+                                    <div style={{ padding: "6px 0", color: dimText, fontSize: 12, fontStyle: "italic" }}>—</div>
                                   )}
+                                  {tlsUnder.map((tl) => {
+                                    const empsUnder = hEmployees.filter(
+                                      (e) => hEditMap[e.id]?.team_leader_id === tl.id
+                                    );
+                                    return (
+                                      <div key={tl.id} style={{ marginBottom: 14 }}>
+                                        {/* Team Leader node */}
+                                        <div style={{
+                                          padding: "10px 14px", borderRadius: 6,
+                                          background: isDark ? "rgba(34,197,94,.08)" : "rgba(34,197,94,.05)",
+                                          border: `1px solid rgba(34,197,94,.25)`,
+                                          fontWeight: 600, fontSize: 13, marginBottom: 4,
+                                        }}>
+                                          🔧 {tl.first_name} {tl.last_name}
+                                          <span style={{ fontSize: 11, marginLeft: 10, color: "#22c55e" }}>{tl.role}</span>
+                                          <span style={{ fontSize: 11, marginLeft: 6, color: dimText }}>
+                                            · {empsUnder.length} {t.employees}
+                                          </span>
+                                        </div>
+
+                                        {/* Employees under this Team Leader */}
+                                        <div style={{ marginLeft: 22, borderLeft: `1px dashed ${th.border}`, paddingLeft: 10 }}>
+                                          {empsUnder.map((emp) => (
+                                            <div key={emp.id} style={{
+                                              padding: "5px 10px", borderRadius: 4, fontSize: 12, color: th.text,
+                                              background: isDark ? "rgba(255,255,255,.03)" : "rgba(0,0,0,.02)",
+                                              marginBottom: 3,
+                                            }}>
+                                              👤 {emp.first_name} {emp.last_name}
+                                              <span style={{ fontSize: 10, marginLeft: 8, color: dimText }}>{emp.role}</span>
+                                            </div>
+                                          ))}
+                                          {empsUnder.length === 0 && (
+                                            <div style={{ fontSize: 11, color: dimText, fontStyle: "italic", padding: "3px 0" }}>—</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );
@@ -1423,20 +1505,31 @@ export default function SettingsPage() {
                     );
                   })}
 
-                  {/* Unassigned warning */}
+                  {/* Unassigned warnings */}
                   {(() => {
+                    const unassignedExecs = hExecs.filter((ex) => !hEditMap[ex.id]?.ceo_id);
                     const unassignedTLs = hManagers.filter((m) => !hEditMap[m.id]?.executive_id);
                     const unassignedEmps = hEmployees.filter((e) => !hEditMap[e.id]?.team_leader_id);
-                    if (unassignedTLs.length === 0 && unassignedEmps.length === 0) return null;
+                    if (unassignedExecs.length === 0 && unassignedTLs.length === 0 && unassignedEmps.length === 0) return null;
                     return (
                       <div style={{
                         marginTop: 20, padding: 16, borderRadius: 10,
                         background: "#ef444422", border: "1px dashed #ef4444",
                       }}>
                         <h4 style={{ margin: "0 0 10px", color: "#ef4444" }}>⚠️ {t.unassigned}</h4>
+                        {unassignedExecs.length > 0 && (
+                          <div style={{ marginBottom: 8 }}>
+                            <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{t.executives}:</span>
+                            {unassignedExecs.map((ex) => (
+                              <span key={ex.id} style={{ marginLeft: 8, fontSize: 13 }}>
+                                {ex.first_name} {ex.last_name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {unassignedTLs.length > 0 && (
                           <div style={{ marginBottom: 8 }}>
-                            <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{t.teamLeader}:</span>
+                            <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>{t.teamLeaders}:</span>
                             {unassignedTLs.map((tl) => (
                               <span key={tl.id} style={{ marginLeft: 8, fontSize: 13 }}>
                                 {tl.first_name} {tl.last_name}
@@ -1475,7 +1568,7 @@ export default function SettingsPage() {
                       value={hRoleFilter}
                       onChange={(e) => setHRoleFilter(e.target.value)}
                     >
-                      <option value="">{t.allRoles}</option>
+                      <option value="">{t.all}</option>
                       {hAllRoles.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </div>
@@ -1483,22 +1576,46 @@ export default function SettingsPage() {
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
-                          <th style={sTh}>{t.label}</th>
+                          <th style={sTh}>{t.name}</th>
                           <th style={sTh}>{t.role}</th>
-                          <th style={sTh}>{t.teamLeader}</th>
-                          <th style={sTh}>{t.executive}</th>
+                          <th style={sTh}>{t.attachedTo}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {hUsers
                           .filter((u) => !hRoleFilter || u.role === hRoleFilter)
+                          .sort((a, b) => getTier(b.role) - getTier(a.role))
                           .map((u) => {
-                            const isExec = isExecRole(u.role);
-                            const isMgr = isManagerRole(u.role);
-                            const edit = hEditMap[u.id] || { team_leader_id: null, executive_id: null };
+                            const tier = getTier(u.role);
+                            const edit = hEditMap[u.id] || { team_leader_id: null, executive_id: null, ceo_id: null };
                             const changed =
                               edit.team_leader_id !== u.team_leader_id ||
-                              edit.executive_id !== u.executive_id;
+                              edit.executive_id !== u.executive_id ||
+                              edit.ceo_id !== u.ceo_id;
+
+                            // Determine which dropdown to show based on tier
+                            // CEO (tier 4) → no superior
+                            // Executive (tier 3) → picks a CEO
+                            // Manager (tier 2) → picks an Executive
+                            // Employee (tier 1) → picks a Team Leader
+
+                            let superiorField: "ceo_id" | "executive_id" | "team_leader_id" | null = null;
+                            let superiorOptions: HierarchyUser[] = [];
+                            let superiorLabel = "";
+
+                            if (tier === 3) {
+                              superiorField = "ceo_id";
+                              superiorOptions = hCeos;
+                              superiorLabel = t.ceoRole;
+                            } else if (tier === 2) {
+                              superiorField = "executive_id";
+                              superiorOptions = hExecs;
+                              superiorLabel = t.executive;
+                            } else if (tier === 1) {
+                              superiorField = "team_leader_id";
+                              superiorOptions = hManagers;
+                              superiorLabel = t.teamLeader;
+                            }
 
                             return (
                               <tr key={u.id} style={{
@@ -1507,65 +1624,53 @@ export default function SettingsPage() {
                                   : "transparent",
                               }}>
                                 <td style={{ ...sTd, fontWeight: 600 }}>
+                                  {tier === 4 && "👑 "}
+                                  {tier === 3 && "👔 "}
+                                  {tier === 2 && "🔧 "}
+                                  {tier === 1 && "👤 "}
                                   {u.first_name} {u.last_name}
                                   {changed && <span style={{ marginLeft: 6, color: "#22c55e", fontSize: 11 }}>●</span>}
                                 </td>
-                                <td style={{ ...sTd, fontSize: 12 }}>
+                                <td style={sTd}>
                                   <span style={{
-                                    padding: "2px 8px", borderRadius: 4,
-                                    background: isExec ? gold + "22" : isMgr ? "#3b82f622" : "transparent",
-                                    color: isExec ? gold : isMgr ? "#3b82f6" : th.text,
-                                    fontWeight: 600, fontSize: 11,
+                                    padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600,
+                                    background:
+                                      tier === 4 ? gold + "22" :
+                                      tier === 3 ? "#3b82f622" :
+                                      tier === 2 ? "#22c55e22" : "transparent",
+                                    color:
+                                      tier === 4 ? gold :
+                                      tier === 3 ? "#3b82f6" :
+                                      tier === 2 ? "#22c55e" : th.text,
                                   }}>
                                     {u.role}
                                   </span>
                                 </td>
 
-                                {/* Team leader dropdown */}
+                                {/* Superior dropdown */}
                                 <td style={sTd}>
-                                  {isExec ? (
-                                    <span style={{ fontSize: 12, color: dimText }}>—</span>
+                                  {superiorField === null ? (
+                                    <span style={{ fontSize: 12, color: gold, fontWeight: 600 }}>— {t.tier4}</span>
                                   ) : (
-                                    <select
-                                      style={{ ...sSelect, padding: "4px 8px", fontSize: 12 }}
-                                      value={edit.team_leader_id ?? ""}
-                                      onChange={(e) =>
-                                        setHierarchyField(u.id, "team_leader_id", e.target.value || null)
-                                      }
-                                    >
-                                      <option value="">—</option>
-                                      {[...hManagers, ...hExecs]
-                                        .filter((m) => m.id !== u.id)
-                                        .map((m) => (
-                                          <option key={m.id} value={m.id}>
-                                            {m.first_name} {m.last_name} ({m.role})
-                                          </option>
-                                        ))}
-                                    </select>
-                                  )}
-                                </td>
-
-                                {/* Executive dropdown */}
-                                <td style={sTd}>
-                                  {isExec ? (
-                                    <span style={{ fontSize: 12, color: dimText }}>—</span>
-                                  ) : (
-                                    <select
-                                      style={{ ...sSelect, padding: "4px 8px", fontSize: 12 }}
-                                      value={edit.executive_id ?? ""}
-                                      onChange={(e) =>
-                                        setHierarchyField(u.id, "executive_id", e.target.value || null)
-                                      }
-                                    >
-                                      <option value="">—</option>
-                                      {hExecs
-                                        .filter((ex) => ex.id !== u.id)
-                                        .map((ex) => (
-                                          <option key={ex.id} value={ex.id}>
-                                            {ex.first_name} {ex.last_name}
-                                          </option>
-                                        ))}
-                                    </select>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <span style={{ fontSize: 10, color: dimText, whiteSpace: "nowrap" }}>{superiorLabel}:</span>
+                                      <select
+                                        style={{ ...sSelect, padding: "4px 8px", fontSize: 12, flex: 1 }}
+                                        value={(edit as any)[superiorField] ?? ""}
+                                        onChange={(e) =>
+                                          setHierarchyField(u.id, superiorField!, e.target.value || null)
+                                        }
+                                      >
+                                        <option value="">— {t.unassigned}</option>
+                                        {superiorOptions
+                                          .filter((s) => s.id !== u.id)
+                                          .map((s) => (
+                                            <option key={s.id} value={s.id}>
+                                              {s.first_name} {s.last_name}
+                                            </option>
+                                          ))}
+                                      </select>
+                                    </div>
                                   )}
                                 </td>
                               </tr>
@@ -1579,7 +1684,6 @@ export default function SettingsPage() {
             )}
           </>
         )}
-
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}

@@ -1,5 +1,5 @@
 // ─── ROLES ───
-export type UserRole = 'ARBEITER' | 'LOCAL_MANAGER' | 'GLOBAL_MANAGER';
+export type UserRole = 'CEO' | 'ADMIN' | 'GLOBAL_MANAGER' | 'MANAGER' | 'LOCAL_MANAGER' | 'HR' | 'FINANCE' | 'SALES' | 'EMPLOYEE' | 'ARBEITER';
 
 // ─── SCHEDULE TYPES ───
 export type ScheduleType = 'GARTEN_TIEFBAU' | 'UNTERHALT';
@@ -20,13 +20,18 @@ export interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
-  department: ScheduleType[];      // can belong to one or both
-  abacusId?: string;               // for HR API sync
+  department: ScheduleType[];
+  abacusId?: string;
   isActive: boolean;
   phone?: string;
   avatarUrl?: string;
   createdAt: string;
   updatedAt: string;
+  // Hierarchy
+  managerId?: string;
+  teamLeaderId?: string;
+  executiveId?: string;
+  ceoId?: string;
 }
 
 export interface UserCreateInput {
@@ -37,6 +42,9 @@ export interface UserCreateInput {
   role: UserRole;
   department: ScheduleType[];
   abacusId?: string;
+  teamLeaderId?: string;
+  executiveId?: string;
+  ceoId?: string;
 }
 
 // ─── CUSTOMER ───

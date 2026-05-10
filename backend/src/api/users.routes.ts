@@ -5,20 +5,57 @@ import bcrypt from 'bcryptjs';
 
 export const usersRouter = Router();
 
-// GET /api/v1/users
+/* ================================================================== */
+/*  Helpers                                                            */
+/* ================================================================== */
+
+/** Role hierarchy tier: CEO=4, Exec=3, Manager=2, Employee=1 */
+function getRoleTier(role: string): number {
+  const r = (role || '').toUpperCase();
+  if (r === 'CEO') return 4;
+  if (r === 'ADMIN' || r === 'GLOBAL_MANAGER') return 3;
+  if (r === 'MANAGER' || r === 'LOCAL_MANAGER') return 2;
+  return 1;
+}
+
+/** Can this role modify hierarchy fields? Tier 3+ (Exec/CEO) */
+function canManageHierarchy(role: string): boolean {
+  return getRoleTier(role) >= 3;
+}
+
+/** Can this role modify ALL hierarchy fields including ceo_id? CEO only */
+function canManageAllHierarchy(role: string): boolean {
+  return getRoleTier(role) >= 4;
+}
+
+/** Strip password_hash from user object */
+function stripPassword({ password_hash, ...rest }: any) {
+  return rest;
+}
+
+/* ================================================================== */
+/*  GET /api/v1/users                                                  */
+/* ================================================================== */
 usersRouter.get('/', async (req: any, res) => {
   try {
     const currentUserId = req.user.userId || req.user.id;
+    const currentRole = (req.user.role || '').toUpperCase();
     let query = supabase.from('users').select('*').order('first_name');
 
-    if (req.user.role === 'LOCAL_MANAGER') {
-      query = query.or(`manager_id.eq.${currentUserId},team_leader_id.eq.${currentUserId},id.eq.${currentUserId}`);
-    }
-
-    if (req.user.role === 'ARBEITER') {
+    // Workers can only see themselves
+    if (currentRole === 'ARBEITER') {
       query = query.eq('id', currentUserId);
     }
+    // Local managers see themselves + their direct reports
+    else if (currentRole === 'LOCAL_MANAGER' || currentRole === 'MANAGER') {
+      query = query.or(
+        `manager_id.eq.${currentUserId},team_leader_id.eq.${currentUserId},id.eq.${currentUserId}`
+      );
+    }
+    // Executives see themselves + their team leaders + those team leaders' employees
+    // CEO and GLOBAL_MANAGER see everyone (no filter)
 
+    // Optional query filters
     if (req.query.department) {
       query = query.contains('departments', [req.query.department]);
     }
@@ -34,30 +71,40 @@ usersRouter.get('/', async (req: any, res) => {
     if (req.query.executive_id) {
       query = query.eq('executive_id', req.query.executive_id);
     }
+    if (req.query.ceo_id) {
+      query = query.eq('ceo_id', req.query.ceo_id);
+    }
 
     const { data, error } = await query;
     if (error) throw error;
 
-    const safe = (data || []).map(({ password_hash, ...u }: any) => u);
-    res.json({ data: safe });
+    res.json({ data: (data || []).map(stripPassword) });
   } catch (err: any) {
     console.error('GET /users error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v1/users/:id
+/* ================================================================== */
+/*  GET /api/v1/users/:id                                              */
+/* ================================================================== */
 usersRouter.get('/:id', async (req: any, res) => {
   try {
     const currentUserId = req.user.userId || req.user.id;
+    const currentRole = (req.user.role || '').toUpperCase();
 
-    if (req.user.role === 'ARBEITER' && req.params.id !== currentUserId) {
+    // Workers can only view themselves
+    if ((currentRole === 'ARBEITER') && req.params.id !== currentUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    if (req.user.role === 'LOCAL_MANAGER' && req.params.id !== currentUserId) {
+    // Local managers can view themselves + their direct reports
+    if ((currentRole === 'LOCAL_MANAGER' || currentRole === 'MANAGER') && req.params.id !== currentUserId) {
       const { data: target } = await supabase
-        .from('users').select('manager_id, team_leader_id').eq('id', req.params.id).single();
+        .from('users')
+        .select('manager_id, team_leader_id')
+        .eq('id', req.params.id)
+        .single();
       if (!target || (target.manager_id !== currentUserId && target.team_leader_id !== currentUserId)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
@@ -69,24 +116,25 @@ usersRouter.get('/:id', async (req: any, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Not found' });
 
-    const { password_hash, ...safe } = data as any;
-    res.json({ data: safe });
+    res.json({ data: stripPassword(data) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v1/users/:id/team  — get direct reports for a team leader
+/* ================================================================== */
+/*  GET /api/v1/users/:id/team — direct reports for a team leader      */
+/* ================================================================== */
 usersRouter.get('/:id/team', async (req: any, res) => {
   try {
     const { id } = req.params;
     const currentUserId = req.user.userId || req.user.id;
+    const currentRole = (req.user.role || '').toUpperCase();
 
-    // Only the team leader themselves, their executive, or a global manager can see the team
-    if (req.user.role === 'ARBEITER') {
+    if (currentRole === 'ARBEITER') {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    if (req.user.role === 'LOCAL_MANAGER' && id !== currentUserId) {
+    if ((currentRole === 'LOCAL_MANAGER' || currentRole === 'MANAGER') && id !== currentUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -97,71 +145,137 @@ usersRouter.get('/:id/team', async (req: any, res) => {
       .order('first_name');
 
     if (error) throw error;
-
-    const safe = (data || []).map(({ password_hash, ...u }: any) => u);
-    res.json({ data: safe });
+    res.json({ data: (data || []).map(stripPassword) });
   } catch (err: any) {
     console.error('GET /users/:id/team error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/v1/users/:id/org  — get full org tree under an executive
+/* ================================================================== */
+/*  GET /api/v1/users/:id/org — full org tree under an executive       */
+/*  4-tier: CEO → Executives → Team Leaders → Employees               */
+/* ================================================================== */
 usersRouter.get('/:id/org', async (req: any, res) => {
   try {
     const { id } = req.params;
 
-    // Get all team leaders reporting to this executive
-    const { data: leaders, error: e1 } = await supabase
-      .from('users')
-      .select('*')
-      .eq('executive_id', id)
-      .order('first_name');
-    if (e1) throw e1;
+    // First determine what tier this user is
+    const { data: rootUser, error: e0 } = await supabase
+      .from('users').select('id, role, first_name, last_name').eq('id', id).single();
+    if (e0) throw e0;
+    if (!rootUser) return res.status(404).json({ error: 'Not found' });
 
-    const safeLeaders = (leaders || []).map(({ password_hash, ...u }: any) => u);
+    const tier = getRoleTier(rootUser.role);
 
-    // For each leader, get their team members
-    const leaderIds = safeLeaders.map((l: any) => l.id);
-    let teamMembers: any[] = [];
-    if (leaderIds.length > 0) {
-      const { data: members, error: e2 } = await supabase
-        .from('users')
-        .select('*')
-        .in('team_leader_id', leaderIds)
-        .order('first_name');
-      if (e2) throw e2;
-      teamMembers = (members || []).map(({ password_hash, ...u }: any) => u);
+    if (tier === 4) {
+      // CEO: get executives → team leaders → employees
+      const { data: executives, error: e1 } = await supabase
+        .from('users').select('*').eq('ceo_id', id).order('first_name');
+      if (e1) throw e1;
+
+      const execIds = (executives || []).map((e: any) => e.id);
+
+      let leaders: any[] = [];
+      if (execIds.length > 0) {
+        const { data: tls, error: e2 } = await supabase
+          .from('users').select('*').in('executive_id', execIds).order('first_name');
+        if (e2) throw e2;
+        leaders = tls || [];
+      }
+
+      const leaderIds = leaders.map((l: any) => l.id);
+      let employees: any[] = [];
+      if (leaderIds.length > 0) {
+        const { data: emps, error: e3 } = await supabase
+          .from('users').select('*').in('team_leader_id', leaderIds).order('first_name');
+        if (e3) throw e3;
+        employees = emps || [];
+      }
+
+      const tree = (executives || []).map((exec: any) => ({
+        ...stripPassword(exec),
+        teamLeaders: leaders
+          .filter((l: any) => l.executive_id === exec.id)
+          .map((leader: any) => ({
+            ...stripPassword(leader),
+            employees: employees
+              .filter((e: any) => e.team_leader_id === leader.id)
+              .map(stripPassword),
+          })),
+      }));
+
+      res.json({ data: { ...stripPassword(rootUser), executives: tree } });
+
+    } else if (tier === 3) {
+      // Executive: get team leaders → employees
+      const { data: leaders, error: e1 } = await supabase
+        .from('users').select('*').eq('executive_id', id).order('first_name');
+      if (e1) throw e1;
+
+      const leaderIds = (leaders || []).map((l: any) => l.id);
+      let employees: any[] = [];
+      if (leaderIds.length > 0) {
+        const { data: emps, error: e2 } = await supabase
+          .from('users').select('*').in('team_leader_id', leaderIds).order('first_name');
+        if (e2) throw e2;
+        employees = emps || [];
+      }
+
+      const tree = (leaders || []).map((leader: any) => ({
+        ...stripPassword(leader),
+        employees: employees
+          .filter((e: any) => e.team_leader_id === leader.id)
+          .map(stripPassword),
+      }));
+
+      res.json({ data: tree });
+
+    } else if (tier === 2) {
+      // Team leader: get direct employees
+      const { data: members, error: e1 } = await supabase
+        .from('users').select('*').eq('team_leader_id', id).order('first_name');
+      if (e1) throw e1;
+
+      res.json({ data: (members || []).map(stripPassword) });
+
+    } else {
+      // Employee: no org tree
+      res.json({ data: [] });
     }
-
-    // Build tree
-    const tree = safeLeaders.map((leader: any) => ({
-      ...leader,
-      team: teamMembers.filter((m: any) => m.team_leader_id === leader.id),
-    }));
-
-    res.json({ data: tree });
   } catch (err: any) {
     console.error('GET /users/:id/org error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/v1/users
-usersRouter.post('/', requireRole('GLOBAL_MANAGER', 'LOCAL_MANAGER'), async (req: any, res) => {
+/* ================================================================== */
+/*  POST /api/v1/users                                                 */
+/* ================================================================== */
+usersRouter.post('/', requireRole('CEO', 'GLOBAL_MANAGER', 'LOCAL_MANAGER'), async (req: any, res) => {
   try {
     const {
       email, password, first_name, last_name, role, departments,
-      phone, is_active, manager_id, team_leader_id, executive_id,
+      phone, is_active, manager_id,
+      team_leader_id, executive_id, ceo_id,
     } = req.body;
     const currentUserId = req.user.userId || req.user.id;
+    const currentRole = (req.user.role || '').toUpperCase();
+    const currentTier = getRoleTier(currentRole);
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
     }
 
-    if (req.user.role === 'LOCAL_MANAGER' && role && role !== 'ARBEITER') {
-      return res.status(403).json({ error: 'Local managers can only create workers' });
+    // Tier checks: you can only create users at your tier or below
+    const newTier = getRoleTier(role || 'ARBEITER');
+    if (newTier >= currentTier) {
+      return res.status(403).json({ error: 'Cannot create a user at or above your own tier' });
+    }
+
+    // Local managers can only create workers
+    if ((currentRole === 'LOCAL_MANAGER' || currentRole === 'MANAGER') && role && getRoleTier(role) > 1) {
+      return res.status(403).json({ error: 'Managers can only create employees' });
     }
 
     const password_hash = await bcrypt.hash(password, 10);
@@ -177,18 +291,23 @@ usersRouter.post('/', requireRole('GLOBAL_MANAGER', 'LOCAL_MANAGER'), async (req
       is_active: is_active !== false,
     };
 
-    if (req.user.role === 'LOCAL_MANAGER') {
+    // Legacy manager_id
+    if (currentRole === 'LOCAL_MANAGER' || currentRole === 'MANAGER') {
       insertData.manager_id = currentUserId;
-      // Auto-assign team leader to the creating manager
       insertData.team_leader_id = currentUserId;
     } else if (manager_id) {
       insertData.manager_id = manager_id;
     }
 
-    // Hierarchy fields (only GLOBAL_MANAGER can set freely)
-    if (req.user.role === 'GLOBAL_MANAGER') {
+    // Hierarchy fields — Exec+ can set team_leader_id and executive_id
+    if (canManageHierarchy(currentRole)) {
       if (team_leader_id !== undefined) insertData.team_leader_id = team_leader_id || null;
       if (executive_id !== undefined) insertData.executive_id = executive_id || null;
+    }
+
+    // ceo_id — only CEO can assign
+    if (canManageAllHierarchy(currentRole)) {
+      if (ceo_id !== undefined) insertData.ceo_id = ceo_id || null;
     }
 
     const { data, error } = await supabase
@@ -196,27 +315,35 @@ usersRouter.post('/', requireRole('GLOBAL_MANAGER', 'LOCAL_MANAGER'), async (req
 
     if (error) throw error;
 
-    const { password_hash: _, ...safe } = data as any;
-    res.status(201).json({ data: safe });
+    res.status(201).json({ data: stripPassword(data) });
   } catch (err: any) {
     console.error('POST /users error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /api/v1/users/:id
+/* ================================================================== */
+/*  PUT /api/v1/users/:id                                              */
+/* ================================================================== */
 usersRouter.put('/:id', async (req: any, res) => {
   try {
     const { id } = req.params;
     const currentUserId = req.user.userId || req.user.id;
+    const currentRole = (req.user.role || '').toUpperCase();
+    const currentTier = getRoleTier(currentRole);
 
-    if (req.user.role === 'ARBEITER' && id !== currentUserId) {
+    // Workers can only update themselves
+    if (currentTier === 1 && id !== currentUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    if (req.user.role === 'LOCAL_MANAGER' && id !== currentUserId) {
+    // Managers can only update themselves + their direct reports
+    if (currentTier === 2 && id !== currentUserId) {
       const { data: target } = await supabase
-        .from('users').select('manager_id, team_leader_id').eq('id', id).single();
+        .from('users')
+        .select('manager_id, team_leader_id')
+        .eq('id', id)
+        .single();
       if (!target || (target.manager_id !== currentUserId && target.team_leader_id !== currentUserId)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
@@ -225,7 +352,8 @@ usersRouter.put('/:id', async (req: any, res) => {
     const updates: any = {};
     const {
       first_name, last_name, phone, email, role, departments,
-      is_active, password, manager_id, team_leader_id, executive_id,
+      is_active, password, manager_id,
+      team_leader_id, executive_id, ceo_id,
       // HR profile fields
       nationality, permit_type, marital_status, children_count,
       canton, ahv_number, iban, entry_date, exit_date,
@@ -233,28 +361,18 @@ usersRouter.put('/:id', async (req: any, res) => {
       hours_per_week, bvg_code, notes,
     } = req.body;
 
-    // Fields any authenticated user can update on their own profile
+    // ── Fields any authenticated user can update on their own profile ──
     if (first_name !== undefined) updates.first_name = first_name;
     if (last_name !== undefined) updates.last_name = last_name;
     if (phone !== undefined) updates.phone = phone;
 
-    // Fields managers+ can update
-    if (req.user.role === 'GLOBAL_MANAGER' || req.user.role === 'LOCAL_MANAGER') {
+    // ── Fields managers+ (tier 2+) can update ──
+    if (currentTier >= 2) {
       if (email !== undefined) updates.email = email;
       if (departments !== undefined) updates.departments = departments;
       if (is_active !== undefined) updates.is_active = is_active;
-    }
 
-    // Fields only GLOBAL_MANAGER can update
-    if (req.user.role === 'GLOBAL_MANAGER') {
-      if (role !== undefined) updates.role = role;
-      if (manager_id !== undefined) updates.manager_id = manager_id || null;
-      if (team_leader_id !== undefined) updates.team_leader_id = team_leader_id || null;
-      if (executive_id !== undefined) updates.executive_id = executive_id || null;
-    }
-
-    // HR profile fields (managers+)
-    if (req.user.role === 'GLOBAL_MANAGER' || req.user.role === 'LOCAL_MANAGER') {
+      // HR profile fields
       if (nationality !== undefined) updates.nationality = nationality;
       if (permit_type !== undefined) updates.permit_type = permit_type;
       if (marital_status !== undefined) updates.marital_status = marital_status;
@@ -273,6 +391,20 @@ usersRouter.put('/:id', async (req: any, res) => {
       if (notes !== undefined) updates.notes = notes;
     }
 
+    // ── Hierarchy fields — Exec+ (tier 3+) can set team_leader_id, executive_id ──
+    if (currentTier >= 3) {
+      if (role !== undefined) updates.role = role;
+      if (manager_id !== undefined) updates.manager_id = manager_id || null;
+      if (team_leader_id !== undefined) updates.team_leader_id = team_leader_id || null;
+      if (executive_id !== undefined) updates.executive_id = executive_id || null;
+    }
+
+    // ── ceo_id — only CEO (tier 4) can assign executives to a CEO ──
+    if (currentTier >= 4) {
+      if (ceo_id !== undefined) updates.ceo_id = ceo_id || null;
+    }
+
+    // ── Password ──
     if (password) {
       updates.password_hash = await bcrypt.hash(password, 10);
     }
@@ -284,21 +416,24 @@ usersRouter.put('/:id', async (req: any, res) => {
 
     if (error) throw error;
 
-    const { password_hash, ...safe } = data as any;
-    res.json({ data: safe });
+    res.json({ data: stripPassword(data) });
   } catch (err: any) {
     console.error('PUT /users error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /api/v1/users/:id
-usersRouter.delete('/:id', requireRole('GLOBAL_MANAGER'), async (req: any, res) => {
+/* ================================================================== */
+/*  DELETE /api/v1/users/:id                                           */
+/* ================================================================== */
+usersRouter.delete('/:id', requireRole('CEO', 'GLOBAL_MANAGER'), async (req: any, res) => {
   try {
-    // Before deleting, clear any references to this user
     const { id } = req.params;
-    await supabase.from('users').update({ team_leader_id: null }).eq('team_leader_id', id);
+
+    // Clear all hierarchy references to this user before deleting
+    await supabase.from('users').update({ ceo_id: null }).eq('ceo_id', id);
     await supabase.from('users').update({ executive_id: null }).eq('executive_id', id);
+    await supabase.from('users').update({ team_leader_id: null }).eq('team_leader_id', id);
     await supabase.from('users').update({ manager_id: null }).eq('manager_id', id);
 
     const { error } = await supabase.from('users').delete().eq('id', id);

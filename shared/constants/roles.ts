@@ -23,6 +23,22 @@ export const ROLE_HIERARCHY: Record<string, number> = {
   EMPLOYEE: 10,
 };
 
+export function getHierarchyField(role: string): string | null {
+  const r = (role || '').toUpperCase();
+  if (r === 'CEO') return null;                    // CEO has no superior
+  if (r === 'ADMIN') return 'ceo_id';              // Executive → CEO
+  if (r === 'MANAGER') return 'executive_id';      // Team Leader → Executive
+  return 'team_leader_id';                          // Employee → Team Leader
+}
+
+export function getRoleTier(role: string): number {
+  const r = (role || '').toUpperCase();
+  if (r === 'CEO') return 4;
+  if (r === 'ADMIN' || r === 'GLOBAL_MANAGER') return 3;
+  if (r === 'MANAGER' || r === 'LOCAL_MANAGER') return 2;
+  return 1; // EMPLOYEE, HR, FINANCE, SALES, etc.
+}
+
 export function getRoleLevel(role: string): number {
   return ROLE_HIERARCHY[role] ?? 0;
 }
