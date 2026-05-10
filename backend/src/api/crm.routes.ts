@@ -10,7 +10,8 @@ export const crmRouter = Router();
 
 crmRouter.get('/dashboard', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    // FIX: req.user has "userId" not "id"
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const userId = req.user.userId;
@@ -22,7 +23,7 @@ crmRouter.get('/dashboard', async (req: any, res) => {
     if (isSales) customerQuery = customerQuery.eq('sales_id', userId);
     const { count: customerCount } = await customerQuery;
 
-    // Open opportunities — wrap in try/catch in case table doesn't exist
+    // Open opportunities
     let openOpps: any[] = [];
     try {
       let oppQuery = supabase
@@ -94,14 +95,13 @@ crmRouter.get('/dashboard', async (req: any, res) => {
 
 crmRouter.get('/customers', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const userId = req.user.userId;
     const role = (req.user.role || '').toUpperCase();
     const { search, sort, order } = req.query;
 
-    // Simple query first — avoid foreign key joins that may not exist yet
     let query = supabase.from('customers').select('*');
 
     // Sales sees only their customers
@@ -149,7 +149,7 @@ crmRouter.get('/customers', async (req: any, res) => {
 
 crmRouter.put('/customers/:id/assign', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const { id } = req.params;
@@ -180,7 +180,7 @@ crmRouter.put('/customers/:id/assign', async (req: any, res) => {
 
 crmRouter.get('/activities', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const userId = req.user.userId;
@@ -216,7 +216,7 @@ crmRouter.get('/activities', async (req: any, res) => {
 
 crmRouter.post('/activities', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const userId = req.user.userId;
@@ -258,7 +258,7 @@ crmRouter.post('/activities', async (req: any, res) => {
 
 crmRouter.put('/activities/:id', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const { id } = req.params;
@@ -307,7 +307,7 @@ crmRouter.delete('/activities/:id', async (req: any, res) => {
 
 crmRouter.get('/opportunities', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const userId = req.user.userId;
@@ -341,7 +341,7 @@ crmRouter.get('/opportunities', async (req: any, res) => {
 
 crmRouter.post('/opportunities', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const userId = req.user.userId;
@@ -379,7 +379,7 @@ crmRouter.post('/opportunities', async (req: any, res) => {
 
 crmRouter.put('/opportunities/:id', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const { id } = req.params;
@@ -432,7 +432,7 @@ crmRouter.delete('/opportunities/:id', async (req: any, res) => {
 
 crmRouter.get('/performance/:customerId', async (req: any, res) => {
   try {
-    if (!req.user?.id) {
+    if (!req.user?.userId) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const { customerId } = req.params;

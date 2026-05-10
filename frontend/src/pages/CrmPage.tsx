@@ -116,8 +116,9 @@ export default function CrmPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Always read fresh token — never rely on stale closure
+  /* ── Always read the token fresh from localStorage ── */
   const getHeaders = (): HeadersInit => {
+    // Primary: Zustand store token. Fallback: localStorage directly.
     const freshToken = token || localStorage.getItem('token');
     return {
       'Content-Type': 'application/json',
@@ -136,7 +137,7 @@ export default function CrmPage() {
 
   const fetchCustomers = async () => {
     try {
-      const r = await fetch(`${API}/api/v1/crm/customers${search ? `?search=${search}` : ''}`, { headers: getHeaders() });
+      const r = await fetch(`${API}/api/v1/crm/customers${search ? `?search=${encodeURIComponent(search)}` : ''}`, { headers: getHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setCustomers(j.data ?? j ?? []);
@@ -181,11 +182,12 @@ export default function CrmPage() {
     } catch { /* */ }
   };
 
-  // Mount: wait for token, fetch once
+  /* ── Mount effect: wait for token, then fetch once ── */
   useEffect(() => {
+    // Check both Zustand state AND localStorage (handles hydration race)
     const currentToken = token || localStorage.getItem('token');
-    if (!currentToken) return;
-    if (hasFetched.current) return;
+    if (!currentToken) return;       // token not available yet — will re-run when it is
+    if (hasFetched.current) return;  // already fetched
     hasFetched.current = true;
 
     fetchDashboard();
@@ -196,7 +198,7 @@ export default function CrmPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Re-fetch customers on search change (debounced)
+  /* ── Re-fetch customers on search change (debounced) ── */
   useEffect(() => {
     const currentToken = token || localStorage.getItem('token');
     if (!currentToken) return;
