@@ -23,3 +23,23 @@ body {
   width: 100%;
   margin: 0 auto;
 }
+
+/* Neon glow on cards (dark mode only) */
+[data-theme="dark"] .glow-card,
+.glow-card {
+  box-shadow: 0 0 20px rgba(0, 229, 160, 0.05),
+              0 0 40px rgba(0, 229, 160, 0.02);
+}
+
+/* Glow on hover for interactive elements */
+button:hover, a:hover {
+  transition: all 0.2s ease;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 160, 0.15);
+  border-radius: 3px;
+}

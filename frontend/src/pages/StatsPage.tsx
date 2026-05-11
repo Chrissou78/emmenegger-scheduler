@@ -42,8 +42,9 @@ const ABS_LABELS: Record<string,Record<string,string>> = {
   pt:{'1':'Doença','2':'Férias','3':'Formação','4':'Viagem','5':'Home Office','6':'Outro'},
 };
 
+/* ★ Updated absence colors to match neon palette */
 const ABS_COLORS: Record<string,string> = {
-  '1':'#ff6b9d','2':'#4ecdc4','3':'#ffa726','4':'#42a5f5','5':'#b388ff','6':'#78909c',
+  '1':'#ff6b9d','2':'#00e5a0','3':'#ffa726','4':'#00bcd4','5':'#b388ff','6':'#78909c',
 };
 
 /* ────────────────────── helpers ────────────────────── */
@@ -69,7 +70,7 @@ function pct(n:number,d:number):number{return d===0?0:Math.round((n/d)*100);}
 function clamp(v:number,min:number,max:number){return Math.max(min,Math.min(max,v));}
 
 /* ══════════════════════════════════════════════════════
-   SVG CHART COMPONENTS (unchanged — kept exactly as-is)
+   SVG CHART COMPONENTS — ★ restyled with neon theme
    ══════════════════════════════════════════════════════ */
 
 function GaugeDonut({value,size=130,strokeWidth=16,color,trackColor,label,sublabel,innerLabel}:{
@@ -80,18 +81,25 @@ function GaugeDonut({value,size=130,strokeWidth=16,color,trackColor,label,sublab
   const circ=2*Math.PI*r;
   const offset=circ-(clamp(value,0,100)/100)*circ;
   const gid=useRef(`gauge-${Math.random().toString(36).slice(2,8)}`).current;
+  const filterId=useRef(`glow-${Math.random().toString(36).slice(2,8)}`).current;
   return(
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
-      <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)',filter:`drop-shadow(0 0 6px ${color}44)`}}>
         <defs>
           <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={color} stopOpacity={0.6}/>
-            <stop offset="100%" stopColor={color} stopOpacity={1}/>
+            <stop offset="0%" stopColor={color} stopOpacity={0.5}/>
+            <stop offset="50%" stopColor={color} stopOpacity={1}/>
+            <stop offset="100%" stopColor={color} stopOpacity={0.7}/>
           </linearGradient>
+          <filter id={filterId}>
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
         </defs>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackColor} strokeWidth={strokeWidth} opacity={0.4}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackColor} strokeWidth={strokeWidth} opacity={0.25}/>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={`url(#${gid})`} strokeWidth={strokeWidth}
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          filter={`url(#${filterId})`}
           style={{transition:'stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)'}}/>
         <text x={size/2} y={size/2-6} textAnchor="middle" dominantBaseline="central"
           style={{transform:'rotate(90deg)',transformOrigin:'center',fontSize:size*0.2,fontWeight:800,fill:color,fontFamily:"'Inter',sans-serif"}}>
@@ -99,7 +107,7 @@ function GaugeDonut({value,size=130,strokeWidth=16,color,trackColor,label,sublab
         </text>
         {innerLabel&&(
           <text x={size/2} y={size/2+12} textAnchor="middle" dominantBaseline="central"
-            style={{transform:'rotate(90deg)',transformOrigin:'center',fontSize:size*0.08,fontWeight:500,fill:color,opacity:.7,fontFamily:"'Inter',sans-serif"}}>
+            style={{transform:'rotate(90deg)',transformOrigin:'center',fontSize:size*0.08,fontWeight:500,fill:color,opacity:.6,fontFamily:"'Inter',sans-serif"}}>
             {innerLabel}
           </text>
         )}
@@ -120,25 +128,42 @@ function PieChart({segments,size=160,strokeWidth=24,trackColor,centerLabel}:{
   const circ=2*Math.PI*r;
   const total=segments.reduce((s,seg)=>s+seg.value,0);
   let accumulated=0;
+  const filterId=useRef(`pie-glow-${Math.random().toString(36).slice(2,8)}`).current;
   return(
     <div style={{position:'relative',width:size,height:size}}>
-      <svg width={size} height={size} style={{transform:'rotate(-90deg)'}}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackColor} strokeWidth={strokeWidth} opacity={0.3}/>
+      <svg width={size} height={size} style={{transform:'rotate(-90deg)',filter:'drop-shadow(0 0 8px rgba(0,229,160,0.15))'}}>
+        <defs>
+          <filter id={filterId}>
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={trackColor} strokeWidth={strokeWidth} opacity={0.2}/>
         {total>0&&segments.map((seg,i)=>{
           const pctVal=seg.value/total;
           const dashLen=pctVal*circ;
           const dashOffset=-(accumulated/total)*circ;
           accumulated+=seg.value;
+          const segGid=`pie-seg-${i}-${Math.random().toString(36).slice(2,6)}`;
           return(
-            <circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={seg.color} strokeWidth={strokeWidth}
-              strokeDasharray={`${dashLen} ${circ-dashLen}`}
-              strokeDashoffset={dashOffset}
-              style={{transition:'stroke-dasharray .8s ease, stroke-dashoffset .8s ease'}}/>
+            <g key={i}>
+              <defs>
+                <linearGradient id={segGid} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor={seg.color} stopOpacity={0.8}/>
+                  <stop offset="100%" stopColor={seg.color} stopOpacity={1}/>
+                </linearGradient>
+              </defs>
+              <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={`url(#${segGid})`} strokeWidth={strokeWidth}
+                strokeDasharray={`${dashLen} ${circ-dashLen}`}
+                strokeDashoffset={dashOffset}
+                filter={`url(#${filterId})`}
+                style={{transition:'stroke-dasharray .8s ease, stroke-dashoffset .8s ease'}}/>
+            </g>
           );
         })}
         {centerLabel&&(
           <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
-            style={{transform:'rotate(90deg)',transformOrigin:'center',fontSize:14,fontWeight:800,fill:'currentColor',fontFamily:"'Inter',sans-serif"}}>
+            style={{transform:'rotate(90deg)',transformOrigin:'center',fontSize:15,fontWeight:800,fill:'currentColor',fontFamily:"'Inter',sans-serif"}}>
             {centerLabel}
           </text>
         )}
@@ -152,29 +177,34 @@ function BarChart({data,color,maxVal,th,showPctLabel=true}:{
   color:string;maxVal:number;th:Record<string,string>;showPctLabel?:boolean;
 }){
   return(
-    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
       {data.map((d,i)=>{
         const p=pct(d.value,d.max);
         const barColor=d.color||color;
+        const barGid=`bar-${i}-${Math.random().toString(36).slice(2,6)}`;
         return(
           <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-            <div style={{width:100,fontSize:12,fontWeight:500,color:th.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={d.label}>
+            <div style={{width:110,fontSize:12,fontWeight:500,color:th.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}} title={d.label}>
               {d.label}
             </div>
-            <div style={{flex:1,height:24,background:`${barColor}15`,borderRadius:6,overflow:'hidden',position:'relative'}}>
-              <div style={{
-                width:`${maxVal===0?0:(d.value/maxVal)*100}%`,
-                height:'100%',background:`linear-gradient(90deg,${barColor}88,${barColor})`,borderRadius:6,
-                transition:'width .8s cubic-bezier(.4,0,.2,1)',minWidth:d.value>0?4:0,
-              }}/>
-              {d.value>0&&(
-                <span style={{position:'absolute',left:8,top:'50%',transform:'translateY(-50%)',fontSize:10,fontWeight:700,color:'#fff',
-                  textShadow:'0 1px 2px rgba(0,0,0,.4)',opacity:pct(d.value,maxVal)>15?1:0}}>
-                  {d.value}
-                </span>
-              )}
+            <div style={{flex:1,height:8,background:`${barColor}12`,borderRadius:20,overflow:'hidden',position:'relative'}}>
+              <svg width="100%" height="8" style={{position:'absolute',left:0,top:0}}>
+                <defs>
+                  <linearGradient id={barGid} x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor={barColor} stopOpacity={0.5}/>
+                    <stop offset="100%" stopColor={barColor} stopOpacity={1}/>
+                  </linearGradient>
+                </defs>
+                <rect
+                  x={0} y={0}
+                  width={`${maxVal===0?0:(d.value/maxVal)*100}%`}
+                  height={8} rx={20}
+                  fill={`url(#${barGid})`}
+                  style={{transition:'width .8s cubic-bezier(.4,0,.2,1)',filter:`drop-shadow(0 0 4px ${barColor}55)`}}
+                />
+              </svg>
             </div>
-            {showPctLabel&&<div style={{width:45,fontSize:12,fontWeight:700,color:barColor,textAlign:'right'}}>{p}%</div>}
+            {showPctLabel&&<div style={{width:52,fontSize:12,fontWeight:700,color:barColor,textAlign:'right'}}>{p}%</div>}
           </div>
         );
       })}
@@ -188,17 +218,17 @@ function VerticalBarChart({groups,height=180,th}:{
 }){
   const allVals=groups.flatMap(g=>g.bars.map(b=>b.value));
   const maxV=Math.max(...allVals,1);
-  const barW=24;
-  const groupGap=16;
-  const barGap=3;
+  const barW=20;
+  const groupGap=20;
+  const barGap=4;
   return(
     <div style={{overflowX:'auto',paddingBottom:8}}>
       <svg width={groups.length*(groups[0]?.bars.length||1)*(barW+barGap)+groups.length*groupGap+40} height={height+40}>
         {[0,.25,.5,.75,1].map((f,i)=>{
           const y=height-(f*height);
           return <g key={i}>
-            <line x1={30} y1={y} x2="100%" y2={y} stroke={th.borderFaint} strokeDasharray="4,4" opacity={0.5}/>
-            <text x={26} y={y+4} textAnchor="end" style={{fontSize:9,fill:th.textDim}}>{Math.round(f*maxV)}</text>
+            <line x1={30} y1={y} x2="100%" y2={y} stroke={th.borderFaint||th.border} strokeDasharray="3,6" opacity={0.3}/>
+            <text x={26} y={y+4} textAnchor="end" style={{fontSize:9,fill:th.textDim||th.textMuted,opacity:.6}}>{Math.round(f*maxV)}</text>
           </g>;
         })}
         {groups.map((g,gi)=>{
@@ -207,14 +237,21 @@ function VerticalBarChart({groups,height=180,th}:{
             {g.bars.map((b,bi)=>{
               const barH=(b.value/maxV)*height;
               const x=groupX+bi*(barW+barGap);
+              const gradId=`vbar-${gi}-${bi}-${Math.random().toString(36).slice(2,6)}`;
               return <g key={bi}>
-                <rect x={x} y={height-barH} width={barW} height={barH} rx={4} fill={b.color}
-                  opacity={0.85} style={{transition:'height .6s ease, y .6s ease'}}>
+                <defs>
+                  <linearGradient id={gradId} x1="0" y1="1" x2="0" y2="0">
+                    <stop offset="0%" stopColor={b.color} stopOpacity={0.5}/>
+                    <stop offset="100%" stopColor={b.color} stopOpacity={1}/>
+                  </linearGradient>
+                </defs>
+                <rect x={x} y={height-barH} width={barW} height={barH} rx={10} fill={`url(#${gradId})`}
+                  style={{transition:'height .6s ease, y .6s ease',filter:`drop-shadow(0 0 4px ${b.color}44)`}}>
                   <title>{b.label}: {b.value}</title>
                 </rect>
-                {barH>20&&(
-                  <text x={x+barW/2} y={height-barH+14} textAnchor="middle"
-                    style={{fontSize:9,fontWeight:700,fill:'#fff'}}>{b.value}</text>
+                {barH>25&&(
+                  <text x={x+barW/2} y={height-barH+16} textAnchor="middle"
+                    style={{fontSize:9,fontWeight:700,fill:'#fff',textShadow:'0 1px 3px rgba(0,0,0,.5)'}}>{b.value}</text>
                 )}
               </g>;
             })}
@@ -231,6 +268,7 @@ function AreaSparkline({data,color,width=220,height=55,labels}:{
   data:number[];color:string;width?:number;height?:number;labels?:string[];
 }){
   const uid = useRef(`area-${Math.random().toString(36).slice(2,8)}`).current;
+  const glowId = useRef(`area-glow-${Math.random().toString(36).slice(2,8)}`).current;
   if(data.length<2) return null;
   const pad=4;const max=Math.max(...data,1);const min=Math.min(...data,0);const range=max-min||1;
   const pts=data.map((v,i)=>{
@@ -242,20 +280,28 @@ function AreaSparkline({data,color,width=220,height=55,labels}:{
   const area=`${pts[0].x},${height-pad} `+line+` ${pts[pts.length-1].x},${height-pad}`;
   return(
     <div>
-      <svg width={width} height={height+20} style={{display:'block'}}>
+      <svg width={width} height={height+20} style={{display:'block',filter:`drop-shadow(0 0 6px ${color}33)`}}>
         <defs>
           <linearGradient id={uid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.35}/>
-            <stop offset="100%" stopColor={color} stopOpacity={0.02}/>
+            <stop offset="0%" stopColor={color} stopOpacity={0.3}/>
+            <stop offset="100%" stopColor={color} stopOpacity={0.01}/>
           </linearGradient>
+          <filter id={glowId}>
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
         </defs>
         <polygon points={area} fill={`url(#${uid})`}/>
-        <polyline points={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"/>
+        <polyline points={line} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+          filter={`url(#${glowId})`}/>
         {pts.map((p,i)=>(
-          <circle key={i} cx={p.x} cy={p.y} r={i===pts.length-1?4:2.5} fill={color} stroke="#fff" strokeWidth={1}/>
+          <circle key={i} cx={p.x} cy={p.y} r={i===pts.length-1?4.5:2.5}
+            fill={i===pts.length-1?color:'transparent'}
+            stroke={color} strokeWidth={i===pts.length-1?0:1.5}
+            style={{filter:i===pts.length-1?`drop-shadow(0 0 4px ${color})`:'none'}}/>
         ))}
         {labels&&labels.map((lb,i)=>(
-          <text key={i} x={pts[i]?.x||0} y={height+12} textAnchor="middle" style={{fontSize:8,fill:color,opacity:.7}}>{lb}</text>
+          <text key={i} x={pts[i]?.x||0} y={height+14} textAnchor="middle" style={{fontSize:8,fill:color,opacity:.6}}>{lb}</text>
         ))}
       </svg>
     </div>
@@ -265,7 +311,7 @@ function AreaSparkline({data,color,width=220,height=55,labels}:{
 function HeatmapGrid({data,rowLabels,colLabels,maxVal,baseColor,th}:{
   data:number[][];rowLabels:string[];colLabels:string[];maxVal:number;baseColor:string;th:Record<string,string>;
 }){
-  const cellSize=36;const gap=3;
+  const cellSize=34;const gap=3;
   return(
     <div style={{overflowX:'auto'}}>
       <div style={{display:'inline-grid',gridTemplateColumns:`80px repeat(${colLabels.length},${cellSize}px)`,gap,alignItems:'center'}}>
@@ -280,11 +326,12 @@ function HeatmapGrid({data,rowLabels,colLabels,maxVal,baseColor,th}:{
               const intensity=maxVal>0?clamp(val/maxVal,0,1):0;
               return(
                 <div key={`${ri}-${ci}`} style={{
-                  width:cellSize,height:cellSize,borderRadius:6,
-                  background:val>0?`${baseColor}${Math.round(intensity*200+55).toString(16).padStart(2,'0')}`:`${th.borderFaint}`,
+                  width:cellSize,height:cellSize,borderRadius:8,
+                  background:val>0?`${baseColor}${Math.round(intensity*200+55).toString(16).padStart(2,'0')}`:`${th.borderFaint||th.border}33`,
                   display:'flex',alignItems:'center',justifyContent:'center',
-                  fontSize:9,fontWeight:700,color:intensity>0.5?'#fff':th.textDim,
-                  transition:'background .4s ease',cursor:'default',
+                  fontSize:9,fontWeight:700,color:intensity>0.5?'#fff':th.textDim||th.textMuted,
+                  transition:'background .4s ease,box-shadow .3s ease',cursor:'default',
+                  boxShadow:intensity>0.6?`0 0 8px ${baseColor}44`:'none',
                 }} title={`${row} / ${colLabels[ci]}: ${val}`}>
                   {val>0?val:''}
                 </div>
@@ -303,21 +350,28 @@ function StackedBar({segments,height=32,th}:{
   const total=segments.reduce((s,seg)=>s+seg.value,0);
   return(
     <div>
-      <div style={{height,borderRadius:8,overflow:'hidden',display:'flex',background:`${th.borderFaint}`}}>
-        {total>0&&segments.filter(s=>s.value>0).map((seg,i)=>(
-          <div key={i} style={{width:`${(seg.value/total)*100}%`,background:seg.color,transition:'width .6s ease',position:'relative',overflow:'hidden'}} title={`${seg.label}: ${seg.value}`}>
-            {(seg.value/total)>0.08&&(
-              <span style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#fff',textShadow:'0 1px 2px rgba(0,0,0,.3)'}}>
-                {pct(seg.value,total)}%
-              </span>
-            )}
-          </div>
-        ))}
+      <div style={{height,borderRadius:20,overflow:'hidden',display:'flex',background:`${th.borderFaint||th.border}22`,boxShadow:'inset 0 1px 3px rgba(0,0,0,.15)'}}>
+        {total>0&&segments.filter(s=>s.value>0).map((seg,i)=>{
+          const segGid=`stacked-${i}-${Math.random().toString(36).slice(2,6)}`;
+          return(
+            <div key={i} style={{
+              width:`${(seg.value/total)*100}%`,
+              background:`linear-gradient(135deg,${seg.color}cc,${seg.color})`,
+              transition:'width .6s ease',position:'relative',overflow:'hidden',
+            }} title={`${seg.label}: ${seg.value}`}>
+              {(seg.value/total)>0.08&&(
+                <span style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#fff',textShadow:'0 1px 2px rgba(0,0,0,.4)'}}>
+                  {pct(seg.value,total)}%
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <div style={{display:'flex',flexWrap:'wrap',gap:12,marginTop:8}}>
+      <div style={{display:'flex',flexWrap:'wrap',gap:14,marginTop:10}}>
         {segments.map((seg,i)=>(
           <div key={i} style={{display:'flex',alignItems:'center',gap:5}}>
-            <div style={{width:10,height:10,borderRadius:'50%',background:seg.color}}/>
+            <div style={{width:10,height:10,borderRadius:'50%',background:seg.color,boxShadow:`0 0 6px ${seg.color}44`}}/>
             <span style={{fontSize:11,color:th.textMuted}}>{seg.label}</span>
             <span style={{fontSize:11,fontWeight:700,color:th.text}}>{seg.value}</span>
           </div>
@@ -395,10 +449,8 @@ export function StatsPage(){
   const users = useMemo(() => {
     switch (statsMode) {
       case 'global':
-        // CEO: sees everyone
         return allUsers;
       case 'perimeter':
-        // Executive: sees team leaders assigned to them + those TLs' employees
         {
           const myId = user?.id;
           if (!myId) return allUsers;
@@ -409,14 +461,12 @@ export function StatsPage(){
           return allUsers.filter(u => scopeIds.has(u.id));
         }
       case 'team':
-        // Team leader: sees direct reports + self
         {
           const myId = user?.id;
           if (!myId) return [];
           return allUsers.filter(u => u.team_leader_id === myId || u.id === myId);
         }
       case 'individual':
-        // Employee: sees only self
         {
           const myId = user?.id;
           if (!myId) return [];
@@ -427,7 +477,6 @@ export function StatsPage(){
     }
   }, [allUsers, statsMode, user?.id]);
 
-  // ★ Scoped user IDs for filtering allocations/absences
   const scopedUserIds = useMemo(() => new Set(users.map(u => u.id)), [users]);
 
   /* ── derived data ── */
@@ -435,7 +484,6 @@ export function StatsPage(){
   const periodWeekIds=useMemo(()=>new Set(periodWeeks.map(w=>w.id)),[periodWeeks]);
   const activeUsers=useMemo(()=>users.filter(u=>u.is_active!==false),[users]);
 
-  // ★ Filter allocations/absences to scoped users
   const periodAllocations=useMemo(()=>
     allocations.filter(a=>periodWeekIds.has(a.week_id) && scopedUserIds.has(a.user_id)),
     [allocations,periodWeekIds,scopedUserIds]);
@@ -487,7 +535,7 @@ export function StatsPage(){
       const day=i+1;
       const bars=depts.map(dept=>{
         const deptUsers=activeUsers.filter(u=>(u.departments||[]).flat().includes(dept));
-        return{value:periodAllocations.filter(a=>a.day_of_week===day&&deptUsers.some(u=>u.id===a.user_id)).length,color:dept==='GARTEN_TIEFBAU'?'#4ecdc4':'#ffa726',label:(L as any)[dept]||dept};
+        return{value:periodAllocations.filter(a=>a.day_of_week===day&&deptUsers.some(u=>u.id===a.user_id)).length,color:dept==='GARTEN_TIEFBAU'?'#00e5a0':'#00bcd4',label:(L as any)[dept]||dept};
       });
       return{label:dn,bars};
     });
@@ -504,10 +552,10 @@ export function StatsPage(){
     const planned=tasks.filter(t=>(t.status||'').toUpperCase()==='PLANNED').length;
     const rate=pct(completed,total);
     const statusCounts:{status:string;count:number;color:string}[]=[
-      {status:'COMPLETED',count:completed,color:'#4ecdc4'},
-      {status:'ACTIVE',count:active,color:'#42a5f5'},
+      {status:'COMPLETED',count:completed,color:'#00e5a0'},
+      {status:'ACTIVE',count:active,color:'#00bcd4'},
       {status:'PLANNED',count:planned,color:'#ffa726'},
-      {status:'CANCELLED',count:cancelled,color:'#ff6b6b'},
+      {status:'CANCELLED',count:cancelled,color:'#ff6b9d'},
     ].filter(s=>s.count>0);
     return{rate,total,completed,cancelled,active,planned,statusCounts};
   },[tasks]);
@@ -573,8 +621,8 @@ export function StatsPage(){
     });
 
     const statusSegments=[
-      {value:available,color:'#4ecdc4',label:L.available??'Available'},
-      {value:inUse,color:'#42a5f5',label:L.inUse??'In Use'},
+      {value:available,color:'#00e5a0',label:L.available??'Available'},
+      {value:inUse,color:'#00bcd4',label:L.inUse??'In Use'},
       {value:maint,color:'#ffa726',label:L.maintenance??'Maintenance'},
     ];
 
@@ -595,7 +643,6 @@ export function StatsPage(){
     const occupationRate = pct(myAllocs.length, maxSlots);
     const absenceRateVal = pct(myAbsences.length, maxDays);
 
-    // My daily breakdown
     const dayNames = [L.mon??'Mo',L.tue??'Tu',L.wed??'We',L.thu??'Th',L.fri??'Fr',L.sat??'Sa'];
     const byDay = [1,2,3,4,5,6].map((d,i) => ({
       label: dayNames[i],
@@ -603,7 +650,6 @@ export function StatsPage(){
       max: numWeeks * slotsPerDay,
     }));
 
-    // Ranking vs peers (anonymous): show my position
     const allActiveUsers = allUsers.filter(u => u.is_active !== false);
     const rankings = allActiveUsers.map(u => {
       const uAllocs = allocations.filter(a => periodWeekIds.has(a.week_id) && a.user_id === u.id).length;
@@ -614,7 +660,6 @@ export function StatsPage(){
     const myRank = rankings.findIndex(r => r.userId === myId) + 1;
     const totalPeers = rankings.length;
 
-    // Weekly trend for myself
     const myTrend = periodWeeks.map(w => {
       const wAllocs = myAllocs.filter(a => a.week_id === w.id).length;
       const wMax = daysPerWeek * slotsPerDay;
@@ -644,44 +689,73 @@ export function StatsPage(){
     };
   }, [statsMode, user?.id, periodAllocations, periodAbsences, periodWeeks, allUsers, allocations, periodWeekIds, lang, L]);
 
-  /* ══════════ COLORS ══════════ */
+  /* ══════════ ★ NEON COLORS ══════════ */
   const colors={
-    occupation:th.gold||'#c8a961',
-    success:'#4ecdc4',
-    absence:'#ff6b9d',
-    machine:'#42a5f5',
-    track:isDark?'#2a2a2a':'#e8e8e8',
-    green:'#4ecdc4',red:'#ff6b6b',orange:'#ffa726',blue:'#42a5f5',purple:'#b388ff',
+    occupation:'#00e5a0',       // ★ neon green
+    success:'#00e5a0',          // ★ neon green
+    absence:'#ff6b9d',          // pink
+    machine:'#00bcd4',          // ★ cyan
+    track:isDark?'#1e2a2a':'#e0ece8',  // ★ subtle dark/light track
+    green:'#00e5a0',            // ★ neon green
+    red:'#ff6b9d',
+    orange:'#ffa726',
+    blue:'#00bcd4',             // ★ cyan
+    purple:'#7c4dff',           // ★ purple
   };
 
-  /* ══════════ STYLES ══════════ */
+  /* ══════════ ★ NEON STYLES ══════════ */
   const card=(extra?:React.CSSProperties):React.CSSProperties=>({
-    background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:14,padding:24,...extra,
+    background:isDark
+      ?'linear-gradient(135deg,rgba(20,30,28,0.95),rgba(15,22,20,0.98))'
+      :'linear-gradient(135deg,rgba(255,255,255,0.98),rgba(245,250,248,0.95))',
+    border:`1px solid ${isDark?'rgba(0,229,160,0.12)':'rgba(0,229,160,0.18)'}`,
+    borderRadius:16,
+    padding:24,
+    boxShadow:isDark
+      ?'0 4px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(0,229,160,0.05)'
+      :'0 4px 24px rgba(0,0,0,.06), 0 0 0 1px rgba(0,229,160,0.08)',
+    backdropFilter:'blur(12px)',
+    ...extra,
   });
 
   const kpiCard=():React.CSSProperties=>({
-    background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:14,padding:'20px 24px',
+    background:isDark
+      ?'linear-gradient(135deg,rgba(20,30,28,0.95),rgba(12,18,16,0.98))'
+      :'linear-gradient(135deg,rgba(255,255,255,0.98),rgba(240,248,245,0.95))',
+    border:`1px solid ${isDark?'rgba(0,229,160,0.1)':'rgba(0,229,160,0.15)'}`,
+    borderRadius:16,
+    padding:'20px 24px',
     display:'flex',alignItems:'center',gap:16,cursor:'default',
-    transition:'transform .2s,box-shadow .2s',
+    transition:'transform .25s cubic-bezier(.4,0,.2,1),box-shadow .25s',
+    boxShadow:isDark
+      ?'0 2px 16px rgba(0,0,0,.25)'
+      :'0 2px 16px rgba(0,0,0,.04)',
   });
 
   const periodBtn=(active:boolean):React.CSSProperties=>({
-    padding:'6px 18px',borderRadius:8,border:'none',cursor:'pointer',
+    padding:'7px 20px',borderRadius:10,border:'none',cursor:'pointer',
     fontSize:13,fontWeight:600,letterSpacing:.3,
-    background:active?colors.occupation:th.buttonBg,
-    color:active?'#fff':th.textMuted,transition:'all .2s',
+    background:active
+      ?'linear-gradient(135deg,#00e5a0,#00bcd4)'
+      :isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.04)',
+    color:active?'#0a1612':isDark?'rgba(255,255,255,.5)':'rgba(0,0,0,.45)',
+    transition:'all .25s cubic-bezier(.4,0,.2,1)',
+    boxShadow:active?'0 2px 12px rgba(0,229,160,0.3)':'none',
   });
 
   const sectionTitle:React.CSSProperties={
-    fontSize:15,fontWeight:700,color:th.text,marginBottom:16,
+    fontSize:14,fontWeight:700,color:th.text,marginBottom:16,
     display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',
   };
 
   const subtab=(active:boolean):React.CSSProperties=>({
-    fontSize:11,fontWeight:600,padding:'4px 10px',borderRadius:6,
-    border:'none',cursor:'pointer',transition:'all .15s',
-    background:active?colors.occupation:th.buttonBg,
-    color:active?'#fff':th.textMuted,
+    fontSize:11,fontWeight:600,padding:'5px 12px',borderRadius:8,
+    border:'none',cursor:'pointer',transition:'all .2s',
+    background:active
+      ?'linear-gradient(135deg,#00e5a0,#00bcd4)'
+      :isDark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.04)',
+    color:active?'#0a1612':isDark?'rgba(255,255,255,.45)':'rgba(0,0,0,.4)',
+    boxShadow:active?'0 2px 8px rgba(0,229,160,0.25)':'none',
   });
 
   const [teamView,setTeamView]=useState<'employee'|'department'|'day'|'heatmap'>('employee');
@@ -735,8 +809,15 @@ export function StatsPage(){
   if(loading){
     return(
       <div style={{display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',height:'60vh',color:th.textMuted,gap:16}}>
-        <div style={{width:48,height:48,border:`4px solid ${colors.track}`,borderTopColor:colors.occupation,borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
-        <span style={{fontSize:14}}>{L.loading??'Loading...'}</span>
+        <div style={{
+          width:48,height:48,
+          border:`4px solid ${colors.track}`,
+          borderTopColor:colors.occupation,
+          borderRadius:'50%',
+          animation:'spin 1s linear infinite',
+          boxShadow:`0 0 16px ${colors.occupation}33`,
+        }}/>
+        <span style={{fontSize:14,letterSpacing:.5}}>{L.loading??'Loading...'}</span>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
@@ -751,14 +832,20 @@ export function StatsPage(){
       {/* ── HEADER ── */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12,marginBottom:28}}>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <h1 style={{fontSize:24,fontWeight:300,letterSpacing:2,margin:0,color:colors.occupation}}>
+          <h1 style={{
+            fontSize:24,fontWeight:300,letterSpacing:3,margin:0,
+            background:'linear-gradient(135deg,#00e5a0,#00bcd4)',
+            WebkitBackgroundClip:'text',
+            WebkitTextFillColor:'transparent',
+            backgroundClip:'text',
+          }}>
             {L.title ?? 'Statistics'}
           </h1>
           {/* ★ Stats mode badge */}
           <span style={{
-            padding:'4px 12px',borderRadius:6,fontSize:11,fontWeight:700,
-            background:`${statsBadgeColor}22`,color:statsBadgeColor,
-            letterSpacing:.5,
+            padding:'4px 14px',borderRadius:8,fontSize:11,fontWeight:700,
+            background:`${statsBadgeColor}18`,color:statsBadgeColor,
+            letterSpacing:.5,border:`1px solid ${statsBadgeColor}25`,
           }}>
             {statsTitle}
           </span>
@@ -767,7 +854,10 @@ export function StatsPage(){
           {(['week','month','quarter','year'] as Period[]).map(p=>(
             <button key={p} onClick={()=>setPeriod(p)} style={periodBtn(period===p)}>{(L as any)[p]??p}</button>
           ))}
-          <button onClick={exportCSV} style={{...periodBtn(false),marginLeft:8,border:`1px solid ${th.border}`}}>
+          <button onClick={exportCSV} style={{
+            ...periodBtn(false),marginLeft:8,
+            border:`1px solid ${isDark?'rgba(0,229,160,0.2)':'rgba(0,229,160,0.3)'}`,
+          }}>
             ⬇ {L.export??'Export'}
           </button>
         </div>
@@ -778,39 +868,40 @@ export function StatsPage(){
         <>
           {/* Personal KPIs */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16,marginBottom:28}}>
-            <div style={kpiCard()}>
+            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(0,229,160,0.15)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
               <GaugeDonut value={individualStats.occupationRate} size={80} strokeWidth={10} color={colors.occupation} trackColor={colors.track} label="" innerLabel={L.slots??'Slots'}/>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.myOccupation??'My Occupation'}</div>
                 <div style={{fontSize:28,fontWeight:800,color:colors.occupation}}>{individualStats.occupationRate}%</div>
-                <div style={{fontSize:11,color:th.textDim}}>{individualStats.totalSlots} / {individualStats.maxSlots}</div>
+                <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>{individualStats.totalSlots} / {individualStats.maxSlots}</div>
               </div>
             </div>
 
-            <div style={kpiCard()}>
+            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(255,107,157,0.15)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
               <GaugeDonut value={individualStats.absenceRate} size={80} strokeWidth={10} color={colors.absence} trackColor={colors.track} label="" innerLabel={L.rate??'Rate'}/>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.myAbsences??'My Absences'}</div>
                 <div style={{fontSize:28,fontWeight:800,color:colors.absence}}>{individualStats.absenceRate}%</div>
-                <div style={{fontSize:11,color:th.textDim}}>{individualStats.totalAbsences} / {individualStats.maxDays}</div>
+                <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>{individualStats.totalAbsences} / {individualStats.maxDays}</div>
               </div>
             </div>
 
-            <div style={kpiCard()}>
+            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(124,77,255,0.15)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
               <div style={{
                 width:80,height:80,borderRadius:'50%',
-                background:`${colors.purple}22`,
+                background:`linear-gradient(135deg,${colors.purple}18,${colors.purple}08)`,
+                border:`1px solid ${colors.purple}25`,
                 display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
               }}>
                 <div style={{fontSize:24,fontWeight:800,color:colors.purple}}>#{individualStats.myRank}</div>
-                <div style={{fontSize:9,color:colors.purple,opacity:.7}}>/ {individualStats.totalPeers}</div>
+                <div style={{fontSize:9,color:colors.purple,opacity:.6}}>/ {individualStats.totalPeers}</div>
               </div>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.ranking??'Ranking'}</div>
                 <div style={{fontSize:16,fontWeight:700,color:colors.purple}}>
                   {L.comparedToOthers??'Compared to Others'}
                 </div>
-                <div style={{fontSize:11,color:th.textDim}}>
+                <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>
                   {pct(individualStats.totalPeers - individualStats.myRank, individualStats.totalPeers)}% {L.aboveAverage??'above'}
                 </div>
               </div>
@@ -838,7 +929,7 @@ export function StatsPage(){
                   <div style={{display:'flex',flexDirection:'column',gap:6}}>
                     {individualStats.myAbsenceTypes.map((s,i)=>(
                       <div key={i} style={{display:'flex',alignItems:'center',gap:6}}>
-                        <div style={{width:10,height:10,borderRadius:'50%',background:s.color}}/>
+                        <div style={{width:10,height:10,borderRadius:'50%',background:s.color,boxShadow:`0 0 6px ${s.color}44`}}/>
                         <span style={{fontSize:11,color:th.textMuted}}>{s.label}</span>
                         <span style={{fontSize:12,fontWeight:700,color:s.color}}>{s.value}</span>
                       </div>
@@ -846,7 +937,7 @@ export function StatsPage(){
                   </div>
                 </div>
               ) : (
-                <div style={{padding:20,textAlign:'center',color:th.textDim,fontSize:13}}>{L.noData??'No absences'}</div>
+                <div style={{padding:20,textAlign:'center',color:th.textDim||th.textMuted,fontSize:13,opacity:.6}}>{L.noData??'No absences'}</div>
               )}
             </div>
           </div>
@@ -866,44 +957,42 @@ export function StatsPage(){
         <>
           {/* ── KPI GAUGES ── */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16,marginBottom:28}}>
-            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,.12)';}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(0,229,160,0.15)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
               <GaugeDonut value={teamOccupation.rate} size={80} strokeWidth={10} color={colors.occupation} trackColor={colors.track} label="" innerLabel={L.slots??'Slots'}/>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.teamOccupation??'Team Occupation'}</div>
                 <div style={{fontSize:28,fontWeight:800,color:colors.occupation}}>{teamOccupation.rate}%</div>
-                <div style={{fontSize:11,color:th.textDim}}>{teamOccupation.filledSlots} / {teamOccupation.totalSlots}</div>
+                <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>{teamOccupation.filledSlots} / {teamOccupation.totalSlots}</div>
               </div>
             </div>
 
-            {/* CEO + Executives see task success rate */}
             {(statsMode === 'global' || statsMode === 'perimeter') && (
-              <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,.12)';}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+              <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(0,229,160,0.12)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
                 <GaugeDonut value={successRate.rate} size={80} strokeWidth={10} color={colors.success} trackColor={colors.track} label="" innerLabel={L.tasks??'Tasks'}/>
                 <div>
                   <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.successRate??'Success Rate'}</div>
                   <div style={{fontSize:28,fontWeight:800,color:colors.success}}>{successRate.rate}%</div>
-                  <div style={{fontSize:11,color:th.textDim}}>{successRate.completed} / {successRate.total}</div>
+                  <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>{successRate.completed} / {successRate.total}</div>
                 </div>
               </div>
             )}
 
-            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,.12)';}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+            <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(255,107,157,0.12)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
               <GaugeDonut value={absenceRate.rate} size={80} strokeWidth={10} color={colors.absence} trackColor={colors.track} label="" innerLabel={L.rate??'Rate'}/>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.absenceRate??'Absence Rate'}</div>
                 <div style={{fontSize:28,fontWeight:800,color:colors.absence}}>{absenceRate.rate}%</div>
-                <div style={{fontSize:11,color:th.textDim}}>{absenceRate.absentDays} / {absenceRate.totalDays}</div>
+                <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>{absenceRate.absentDays} / {absenceRate.totalDays}</div>
               </div>
             </div>
 
-            {/* Machine KPI only for CEO and operational executives */}
             {(statsMode === 'global' || (statsMode === 'perimeter' && isOperational((user?.departments ?? []).flat() as string[]))) && (
-              <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,.12)';}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+              <div style={kpiCard()} onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow=`0 8px 32px rgba(0,188,212,0.15)`;}} onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow=isDark?'0 2px 16px rgba(0,0,0,.25)':'0 2px 16px rgba(0,0,0,.04)';}}>
                 <GaugeDonut value={machineOccupation.usageRate} size={80} strokeWidth={10} color={colors.machine} trackColor={colors.track} label="" innerLabel={L.rate??'Rate'}/>
                 <div>
                   <div style={{fontSize:12,fontWeight:600,color:th.textMuted,textTransform:'uppercase',letterSpacing:.5}}>{L.machineOccupation??'Machine Usage'}</div>
                   <div style={{fontSize:28,fontWeight:800,color:colors.machine}}>{machineOccupation.usageRate}%</div>
-                  <div style={{fontSize:11,color:th.textDim}}>{machineOccupation.inUse} / {machineOccupation.totalMachines}</div>
+                  <div style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>{machineOccupation.inUse} / {machineOccupation.totalMachines}</div>
                 </div>
               </div>
             )}
@@ -991,13 +1080,13 @@ export function StatsPage(){
                   <div style={{display:'flex',justifyContent:'center',gap:40,marginBottom:20}}>
                     {teamOccupation.byDept.map((d,i)=>(
                       <GaugeDonut key={i} value={pct(d.value,d.max)} size={110} strokeWidth={12}
-                        color={i===0?colors.green:colors.orange} trackColor={colors.track}
+                        color={i===0?colors.green:colors.blue} trackColor={colors.track}
                         label={d.label} sublabel={`${d.value}/${d.max} ${(L.slots??'slots').toLowerCase()}`}/>
                     ))}
                   </div>
                   <StackedBar th={th} segments={teamOccupation.byDept.map((d,i)=>({
                     value:d.value,
-                    color:i===0?colors.green:colors.orange,
+                    color:i===0?colors.green:colors.blue,
                     label:d.label,
                   }))}/>
                 </>
@@ -1031,12 +1120,12 @@ export function StatsPage(){
                   <div style={{display:'flex',flexDirection:'column',gap:10}}>
                     {successRate.statusCounts.map((s,i)=>(
                       <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                        <div style={{width:14,height:14,borderRadius:4,background:s.color}}/>
+                        <div style={{width:14,height:14,borderRadius:4,background:s.color,boxShadow:`0 0 6px ${s.color}44`}}/>
                         <span style={{fontSize:12,color:th.textMuted,minWidth:80}}>
                           {s.status==='COMPLETED'?(L.completed??'Completed'):s.status==='ACTIVE'?(L.active??'Active'):s.status==='PLANNED'?(L.pending??'Planned'):(L.cancelled??'Cancelled')}
                         </span>
                         <span style={{fontSize:14,fontWeight:800,color:s.color}}>{s.count}</span>
-                        <span style={{fontSize:11,color:th.textDim}}>({pct(s.count,successRate.total)}%)</span>
+                        <span style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>({pct(s.count,successRate.total)}%)</span>
                       </div>
                     ))}
                   </div>
@@ -1074,16 +1163,16 @@ export function StatsPage(){
                       <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         {absenceRate.typeSegments.map((s,i)=>(
                           <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                            <div style={{width:12,height:12,borderRadius:'50%',background:s.color}}/>
+                            <div style={{width:12,height:12,borderRadius:'50%',background:s.color,boxShadow:`0 0 6px ${s.color}44`}}/>
                             <span style={{fontSize:12,color:th.textMuted,minWidth:90}}>{s.label}</span>
                             <span style={{fontSize:14,fontWeight:800,color:s.color}}>{s.value}</span>
-                            <span style={{fontSize:11,color:th.textDim}}>({pct(s.value,absenceRate.absentDays)}%)</span>
+                            <span style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>({pct(s.value,absenceRate.absentDays)}%)</span>
                           </div>
                         ))}
                       </div>
                     </>
                   ):(
-                    <div style={{fontSize:13,color:th.textDim,padding:20}}>{L.noData??'No data'}</div>
+                    <div style={{fontSize:13,color:th.textDim||th.textMuted,padding:20,opacity:.6}}>{L.noData??'No data'}</div>
                   )}
                 </div>
               )}
@@ -1104,7 +1193,7 @@ export function StatsPage(){
               )}
             </div>
 
-            {/* ─── MACHINE OCCUPATION (CEO + operational executives + team leaders) ─── */}
+            {/* ─── MACHINE OCCUPATION ─── */}
             {(statsMode === 'global' || statsMode === 'perimeter' || statsMode === 'team') && (
               <div style={card()}>
                 <div style={sectionTitle}>
@@ -1128,10 +1217,10 @@ export function StatsPage(){
                     <div style={{display:'flex',flexDirection:'column',gap:10}}>
                       {machineOccupation.statusSegments.map((s,i)=>(
                         <div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                          <div style={{width:14,height:14,borderRadius:4,background:s.color}}/>
+                          <div style={{width:14,height:14,borderRadius:4,background:s.color,boxShadow:`0 0 6px ${s.color}44`}}/>
                           <span style={{fontSize:12,color:th.textMuted,minWidth:90}}>{s.label}</span>
                           <span style={{fontSize:16,fontWeight:800,color:s.color}}>{s.value}</span>
-                          <span style={{fontSize:11,color:th.textDim}}>({pct(s.value,machineOccupation.totalMachines)}%)</span>
+                          <span style={{fontSize:11,color:th.textDim||th.textMuted,opacity:.6}}>({pct(s.value,machineOccupation.totalMachines)}%)</span>
                         </div>
                       ))}
                     </div>
