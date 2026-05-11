@@ -25,6 +25,9 @@ interface Task { id: string; code: string; name: string; color: string; schedule
 
 const API = import.meta.env.VITE_API_URL || '';
 
+/* ─── Pagination constant ─── */
+const PAGE_SIZE = 20;
+
 /* ─── Color palette ─── */
 const PALETTE = [
   '#B8860B','#4A6741','#5B6E82','#7D4E57','#8E6F3E','#4A4063','#704241','#3B4F64',
@@ -68,11 +71,9 @@ export function SchedulePage() {
   const canView = perms.has("schedule.view" as Permission);
   const canEdit = perms.has("schedule.edit" as Permission);
 
-  // ★ Role-based schedule scope
   const userRole = user?.role || 'EMPLOYEE';
   const userDepts: string[] = (() => {
     const raw = user?.departments || (user?.departments ? [user.departments] : []);
-    // Flatten in case departments is string[][] (e.g., Supabase returns nested arrays)
     return raw.flat(Infinity) as string[];
   })();
 
@@ -86,14 +87,16 @@ export function SchedulePage() {
   /* ─── State ─── */
   const [weekOff, setWeekOff] = useState(0);
   const [dept, setDept] = useState('all');
-  const [allUsers, setAllUsers] = useState<User[]>([]);  // ★ renamed: all fetched users
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [rawAllocs, setRawAllocs] = useState<Allocation[]>([]);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
 
-  // ★ Team leader filter (for CEO / executives)
   const [selectedTeamLeaderId, setSelectedTeamLeaderId] = useState<string | null>(null);
+
+  // ★ Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Single cell picker
   const [picker, setPicker] = useState<{ userId: string; day: number; rect: DOMRect } | null>(null);
@@ -120,7 +123,6 @@ export function SchedulePage() {
     'Content-Type': 'application/json',
   }), [token]);
 
-  // ★ Compute team leaders list (for the filter dropdown)
   const teamLeaders = useMemo(() =>
     allUsers.filter(u => {
       const r = (u.role || '').toUpperCase();
@@ -129,16 +131,11 @@ export function SchedulePage() {
     [allUsers]
   );
 
-  // ★ Filter users based on scope + TL filter + dept
   const users = useMemo(() => {
     let list = allUsers;
-
-    // Apply scope-based filtering
     if (scheduleScope === 'team') {
-      // Team leader: only see their direct reports + self
       list = list.filter(u => u.team_leader_id === user?.id || u.id === user?.id);
     } else if (scheduleScope === 'all') {
-      // CEO / operational executive: see all, but optionally filter by TL
       if (selectedTeamLeaderId) {
         list = list.filter(u =>
           u.team_leader_id === selectedTeamLeaderId ||
@@ -146,16 +143,24 @@ export function SchedulePage() {
         );
       }
     }
-    // scheduleScope === 'none' should not reach here (blocked by access guard)
-
     return list;
   }, [allUsers, scheduleScope, selectedTeamLeaderId, user?.id]);
 
   const emps = useMemo(() => users.filter(u => dept === 'all' || u.department === dept), [users, dept]);
+
+  // ★ Reset page to 1 when filters change
+  useEffect(() => { setCurrentPage(1); }, [dept, selectedTeamLeaderId, weekOff, scheduleScope]);
+
+  // ★ Pagination derived values
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(emps.length / PAGE_SIZE)), [emps.length]);
+  const pagedEmps = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return emps.slice(start, start + PAGE_SIZE);
+  }, [emps, currentPage]);
+
   const matchingWeeks = useMemo(() => weeks.filter(w => w.week_number === kw && w.year === year), [weeks, kw, year]);
   const weekIds = useMemo(() => new Set(matchingWeeks.map(w => w.id)), [matchingWeeks]);
 
-  // Allocation lookup: userId → day → { taskIds[], allocIds[] }
   const allocMap = useMemo(() => {
     const m: Record<string, Record<number, { taskIds: string[]; allocIds: string[] }>> = {};
     rawAllocs.forEach(a => {
@@ -176,7 +181,6 @@ export function SchedulePage() {
     return m;
   }, [tasks]);
 
-  // Stats
   const totalSlots = useMemo(() =>
     Object.values(allocMap).reduce((s, u) => s + Object.values(u).reduce((ss, d) => ss + d.taskIds.length, 0), 0),
   [allocMap]);
@@ -204,7 +208,7 @@ export function SchedulePage() {
       const r = await fetch(`${API}/api/v1/users?limit=500`, { headers: authHeaders });
       if (!r.ok) return;
       const d = await r.json();
-      setAllUsers(d.data || d.items || d || []);  // ★ store in allUsers
+      setAllUsers(d.data || d.items || d || []);
     } catch {}
   };
   const fetchAllocations = async () => {
@@ -225,7 +229,6 @@ export function SchedulePage() {
   useEffect(() => { if (weeks.length > 0) fetchAllocations(); }, [weekOff, weeks]);
   useEffect(() => { if (toast) { const tm = setTimeout(() => setToast(null), 3000); return () => clearTimeout(tm); } }, [toast]);
 
-  // Close pickers on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPicker(null);
@@ -321,6 +324,7 @@ export function SchedulePage() {
     let success = 0, skip = 0;
 
     if (bulkPicker.type === 'day' && bulkPicker.day !== undefined) {
+      // ★ Bulk day applies to ALL emps (not just current page)
       for (const emp of emps) {
         const cell = getCell(emp.id, bulkPicker.day!);
         if (cell.taskIds.length >= 2 || cell.taskIds.includes(taskId)) { skip++; continue; }
@@ -431,7 +435,6 @@ export function SchedulePage() {
   const deptLabel = (d: string) => d === 'garten' ? (t.gartenFull ?? 'Garten & Tiefbau') : d === 'unterhalt' ? (t.unterhaltFull ?? 'Unterhalt') : (t.bothDept ?? 'All');
 
   /* ═══════════════════════════════════════ ACCESS GUARD ═══════════════════════════════════════ */
-  // ★ Block access if scope is 'none' (employees, non-operational executives/TLs)
   if (scheduleScope === 'none' || !canView) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: th.text }}>
@@ -452,7 +455,7 @@ export function SchedulePage() {
         <div style={{
           position: 'fixed', top: 24, right: 24, zIndex: 9999, padding: '12px 20px', borderRadius: 6,
           background: toast.err ? th.toastErrBg : th.toastBg, color: toast.err ? th.toastErrText : th.toastText,
-          border: `1px solid ${toast.err ? th.toastErrBorder : th.toastBorder}`, fontSize: 12, fontWeight: 600,
+          border: `1px solid ${toast.err ? th.toastErrBorder : th.toastBorder}`, fontSize: 13, fontWeight: 600,
           boxShadow: '0 4px 20px rgba(0,0,0,.3)', animation: 'fadeSlide .3s ease',
         }}>{toast.msg}</div>
       )}
@@ -492,7 +495,7 @@ export function SchedulePage() {
               ))}
             </div>
 
-            {/* ★ Team Leader Filter — only for CEO and operational executives */}
+            {/* ★ Team Leader Filter */}
             {scheduleScope === 'all' && teamLeaders.length > 0 && (
               <div style={{ marginLeft: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
@@ -561,19 +564,19 @@ export function SchedulePage() {
         </div>
 
         {/* ── Schedule Grid ── */}
-        <div style={{ background: th.bgCard, borderRadius: 4, border: `1px solid ${th.border}`, overflow: 'visible', position: 'relative' }}>
+        <div style={{ background: th.bgCard, borderRadius: 8, border: `1px solid ${th.border}`, overflow: 'visible', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 32 }} />
-              <col style={{ width: 150 }} />
+              <col style={{ width: 40 }} />       {/* ★ wider badge col */}
+              <col style={{ width: 200 }} />      {/* ★ wider name col (was 150) */}
               {(t.days as string[]).map((_: string, i: number) => <col key={i} />)}
             </colgroup>
             <thead>
-              <tr style={{ height: 36 }}>
+              <tr style={{ height: 48 }}>          {/* ★ taller header (was 36) */}
                 <th style={{ ...thBase(th), background: th.goldGhost }} />
                 <th style={{
                   ...thBase(th), background: th.goldGhost, textAlign: 'left' as const,
-                  padding: '6px 12px', fontSize: 9, color: th.goldDim, fontWeight: 700,
+                  padding: '8px 14px', fontSize: 11, color: th.goldDim, fontWeight: 700,
                   letterSpacing: 2, textTransform: 'uppercase' as const,
                 }}>
                   {t.employees ?? 'Employees'}
@@ -581,7 +584,7 @@ export function SchedulePage() {
                 {(t.days as string[]).map((d: string, i: number) => (
                   <th key={d}
                     style={{
-                      ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '4px',
+                      ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '6px',
                       cursor: canEdit ? 'pointer' : 'default',
                     }}
                     onClick={e => {
@@ -593,18 +596,18 @@ export function SchedulePage() {
                     }}
                     title={canEdit ? `${t.bulkDay ?? 'Bulk assign day'}: ${(t.days as string[])[i]}` : undefined}
                   >
-                    <div style={{ fontSize: 11, fontWeight: 500, color: th.gold }}>{d}</div>
-                    <div style={{ fontSize: 8, color: th.textGhost, fontWeight: 500 }}>{fmtDate(dates[i])}</div>
-                    {canEdit && <div style={{ fontSize: 7, color: th.goldDim, marginTop: 1 }}>▼</div>}
+                    <div style={{ fontSize: 13, fontWeight: 600, color: th.gold }}>{d}</div>
+                    <div style={{ fontSize: 10, color: th.textGhost, fontWeight: 500, marginTop: 2 }}>{fmtDate(dates[i])}</div>
+                    {canEdit && <div style={{ fontSize: 8, color: th.goldDim, marginTop: 2 }}>▼</div>}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {emps.length === 0 && (
+              {pagedEmps.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{
-                    textAlign: 'center', padding: 40, color: th.textDim, fontSize: 13,
+                    textAlign: 'center', padding: 40, color: th.textDim, fontSize: 14,
                   }}>
                     {selectedTeamLeaderId
                       ? (t.noEmployeesForTL ?? 'No employees found for this team leader')
@@ -612,22 +615,39 @@ export function SchedulePage() {
                   </td>
                 </tr>
               )}
-              {emps.map((emp, idx) => (
-                <tr key={emp.id} style={{ height: 40, borderTop: idx > 0 ? `1px solid ${th.borderFaint}` : 'none' }}
+              {/* ★ Iterate pagedEmps instead of emps */}
+              {pagedEmps.map((emp, idx) => (
+                <tr key={emp.id} style={{
+                  height: 56,                      /* ★ taller rows (was 40) */
+                  borderTop: idx > 0 ? `1px solid ${th.borderFaint}` : 'none',
+                  transition: 'background .15s',
+                }}
                   onMouseEnter={e => (e.currentTarget.style.background = th.rowHover)}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   {/* Role badge */}
                   <td style={{
                     textAlign: 'center' as const, borderRight: `1px solid ${th.borderFaint}`,
-                    fontSize: 9, fontWeight: 700, color: emp.department === 'garten' ? th.roleV : th.roleM,
+                    fontSize: 11, fontWeight: 700,
+                    color: emp.department === 'garten' ? th.roleV : th.roleM,
+                    padding: '4px',
                   }}>
-                    {emp.department === 'garten' ? 'GT' : 'UH'}
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: 28, height: 28, borderRadius: 6,
+                      background: emp.department === 'garten'
+                        ? (isDark ? 'rgba(74,103,65,.2)' : 'rgba(74,103,65,.08)')
+                        : (isDark ? 'rgba(125,78,87,.2)' : 'rgba(125,78,87,.08)'),
+                      fontSize: 10, fontWeight: 800, letterSpacing: .5,
+                    }}>
+                      {emp.department === 'garten' ? 'GT' : 'UH'}
+                    </div>
                   </td>
-                  {/* Name — click for bulk row */}
+                  {/* ★ Name — 2-line layout with bigger font */}
                   <td style={{
-                    padding: '4px 12px', borderRight: `1px solid ${th.borderFaint}`,
+                    padding: '6px 14px', borderRight: `1px solid ${th.borderFaint}`,
                     cursor: canEdit ? 'pointer' : 'default',
+                    verticalAlign: 'middle' as const,
                   }}
                     onClick={e => {
                       if (!canEdit) return;
@@ -638,12 +658,21 @@ export function SchedulePage() {
                     }}
                     title={canEdit ? `${t.bulkEmployee ?? 'Bulk assign employee'}: ${emp.first_name}` : undefined}
                   >
-                    <div style={{ fontSize: 12, fontWeight: 600, color: th.empName }}>
-                      {emp.first_name} {emp.last_name}
+                    <div style={{
+                      fontSize: 14, fontWeight: 700, color: th.empName,
+                      lineHeight: 1.3,
+                    }}>
+                      {emp.first_name}
                     </div>
                     <div style={{
-                      fontSize: 8, color: th.textGhost, fontWeight: 500,
-                      letterSpacing: 1, textTransform: 'uppercase' as const,
+                      fontSize: 13, fontWeight: 500, color: th.text,
+                      lineHeight: 1.3, opacity: 0.7,
+                    }}>
+                      {emp.last_name}
+                    </div>
+                    <div style={{
+                      fontSize: 9, color: th.textGhost, fontWeight: 500,
+                      letterSpacing: 1, textTransform: 'uppercase' as const, marginTop: 2,
                     }}>
                       {deptLabel(emp.department)}{canEdit ? ' · ▶' : ''}
                     </div>
@@ -655,14 +684,14 @@ export function SchedulePage() {
                     return (
                       <td key={di} style={{
                         borderRight: di < 5 ? `1px solid ${th.borderFaint}` : 'none',
-                        padding: '2px 3px', position: 'relative' as const,
+                        padding: '4px 5px', position: 'relative' as const,
                         cursor: canEdit ? 'pointer' : 'default',
                         verticalAlign: 'middle' as const,
                       }}
                         onClick={e => openPicker(emp.id, di, e)}
                       >
                         {hasTasks ? (
-                          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 1, height: '100%', justifyContent: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 2, height: '100%', justifyContent: 'center' }}>
                             {cell.taskIds.map((tid, tidx) => {
                               const task = taskById[tid];
                               const color = getTaskColor(tid);
@@ -670,12 +699,12 @@ export function SchedulePage() {
                                 <div key={tid} style={{
                                   background: isDark ? `${color}33` : `${color}22`,
                                   borderLeft: `3px solid ${color}`,
-                                  borderRadius: 3, padding: '2px 6px',
+                                  borderRadius: 4, padding: '4px 8px',
                                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                  minHeight: 16,
+                                  minHeight: 22,
                                 }} title={task?.name || tid}>
                                   <span style={{
-                                    fontSize: 9, fontWeight: 600, color: isDark ? '#ddd' : '#333',
+                                    fontSize: 11, fontWeight: 600, color: isDark ? '#ddd' : '#333',
                                     overflow: 'hidden', textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap' as const, flex: 1,
                                   }}>
@@ -683,10 +712,15 @@ export function SchedulePage() {
                                   </span>
                                   {canEdit && (
                                     <span style={{
-                                      fontSize: 10, color: th.textDim, cursor: 'pointer',
-                                      marginLeft: 4, lineHeight: 1, flexShrink: 0,
+                                      fontSize: 12, color: th.textDim, cursor: 'pointer',
+                                      marginLeft: 6, lineHeight: 1, flexShrink: 0,
+                                      borderRadius: 3, width: 16, height: 16,
+                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      transition: 'background .15s',
                                     }}
                                       onClick={e => { e.stopPropagation(); removeAlloc(cell.allocIds[tidx]); }}
+                                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.15)'; e.currentTarget.style.color = '#ef4444'; }}
+                                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = th.textDim; }}
                                       title={t.remove ?? 'Remove'}
                                     >×</span>
                                   )}
@@ -697,7 +731,7 @@ export function SchedulePage() {
                         ) : (
                           <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            height: '100%', color: th.textGhost, fontSize: 16, fontWeight: 300,
+                            height: '100%', color: th.textGhost, fontSize: 20, fontWeight: 300,
                           }}>{canEdit ? '+' : ''}</div>
                         )}
                       </td>
@@ -707,17 +741,89 @@ export function SchedulePage() {
               ))}
             </tbody>
           </table>
+
+          {/* ★ PAGINATION CONTROLS */}
+          {totalPages > 1 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '14px 20px',
+              borderTop: `1px solid ${th.border}`,
+              background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.015)',
+            }}>
+              {/* First */}
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                style={pageBtn(th, isDark, false, currentPage === 1)}
+                title="First"
+              >«</button>
+              {/* Prev */}
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={pageBtn(th, isDark, false, currentPage === 1)}
+                title="Previous"
+              >‹</button>
+
+              {/* Page numbers */}
+              {(() => {
+                const pages: (number | '...')[] = [];
+                if (totalPages <= 7) {
+                  for (let i = 1; i <= totalPages; i++) pages.push(i);
+                } else {
+                  pages.push(1);
+                  if (currentPage > 3) pages.push('...');
+                  for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i);
+                  if (currentPage < totalPages - 2) pages.push('...');
+                  pages.push(totalPages);
+                }
+                return pages.map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} style={{ color: th.textDim, fontSize: 12, padding: '0 4px' }}>…</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p as number)}
+                      style={pageBtn(th, isDark, currentPage === p, false)}
+                    >{p}</button>
+                  )
+                );
+              })()}
+
+              {/* Next */}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                style={pageBtn(th, isDark, false, currentPage === totalPages)}
+                title="Next"
+              >›</button>
+              {/* Last */}
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                style={pageBtn(th, isDark, false, currentPage === totalPages)}
+                title="Last"
+              >»</button>
+
+              {/* Page info */}
+              <span style={{
+                marginLeft: 12, fontSize: 11, color: th.textDim, fontWeight: 500,
+              }}>
+                {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, emps.length)} / {emps.length}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ── Active Tasks Legend ── */}
-        <div style={{ marginTop: 16, padding: '16px 20px', background: th.bgCard, borderRadius: 4, border: `1px solid ${th.border}` }}>
+        <div style={{ marginTop: 16, padding: '16px 20px', background: th.bgCard, borderRadius: 8, border: `1px solid ${th.border}` }}>
           <div style={{
-            fontSize: 9, color: th.goldDim, marginBottom: 12, fontWeight: 700,
+            fontSize: 10, color: th.goldDim, marginBottom: 12, fontWeight: 700,
             letterSpacing: 2, textTransform: 'uppercase' as const,
           }}>
             {t.activeTasks ?? 'Active Tasks'} · {t.kw ?? 'KW'} {kw} · {activeTaskIds.size}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
             {Array.from(activeTaskIds).map(tid => {
               const task = taskById[tid];
               if (!task) return null;
@@ -726,20 +832,20 @@ export function SchedulePage() {
                 s + Object.values(u).reduce((ss, d) => ss + (d.taskIds.includes(tid) ? 1 : 0), 0), 0);
               return (
                 <div key={tid} style={{
-                  padding: '6px 10px', background: th.legendItemBg, borderRadius: 4,
+                  padding: '8px 12px', background: th.legendItemBg, borderRadius: 6,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   borderLeft: `3px solid ${color}`,
                 }}>
                   <div style={{ overflow: 'hidden' }}>
                     <div style={{
-                      fontSize: 10, fontWeight: 600, color: th.text,
+                      fontSize: 12, fontWeight: 600, color: th.text,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
                     }}>{task.name}</div>
-                    <div style={{ fontSize: 8, color: th.textDim }}>
+                    <div style={{ fontSize: 9, color: th.textDim }}>
                       {task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}
                     </div>
                   </div>
-                  <span style={{ fontSize: 11, color: th.gold, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{count}</span>
+                  <span style={{ fontSize: 13, color: th.gold, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{count}</span>
                 </div>
               );
             })}
@@ -747,9 +853,9 @@ export function SchedulePage() {
         </div>
 
         {/* ── Absences Legend ── */}
-        <div style={{ marginTop: 16, padding: '16px 20px', background: th.bgCard, borderRadius: 4, border: `1px solid ${th.border}` }}>
+        <div style={{ marginTop: 16, padding: '16px 20px', background: th.bgCard, borderRadius: 8, border: `1px solid ${th.border}` }}>
           <div style={{
-            fontSize: 9, color: th.goldDim, marginBottom: 12, fontWeight: 700,
+            fontSize: 10, color: th.goldDim, marginBottom: 12, fontWeight: 700,
             letterSpacing: 2, textTransform: 'uppercase' as const,
           }}>
             {t.absenceLegend ?? 'Absences'}
@@ -764,7 +870,7 @@ export function SchedulePage() {
                   borderLeft: `3px solid ${abs?.bg || '#666'}`,
                 }}>
                   <span style={{ fontSize: 14 }}>{abs?.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 500, color: th.textMuted }}>{label as string}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: th.textMuted }}>{label as string}</span>
                 </div>
               );
             })}
@@ -786,7 +892,7 @@ export function SchedulePage() {
         }}>
           <div style={{ padding: '10px 12px', borderBottom: `1px solid ${th.border}` }}>
             <div style={{
-              fontSize: 9, color: th.goldDim, fontWeight: 700, letterSpacing: 1,
+              fontSize: 10, color: th.goldDim, fontWeight: 700, letterSpacing: 1,
               marginBottom: 6, textTransform: 'uppercase' as const,
             }}>
               {allUsers.find(u => u.id === picker.userId)?.first_name} · {(t.daysShort as string[])?.[picker.day] ?? ''}
@@ -1013,4 +1119,21 @@ function navBtn(th: Theme): React.CSSProperties {
 }
 function thBase(th: Theme): React.CSSProperties {
   return { padding: 0, borderBottom: `1px solid ${th.border}`, borderRight: `1px solid ${th.borderFaint}` };
+}
+
+/* ★ Pagination button style helper */
+function pageBtn(th: Theme, isDark: boolean, isActive: boolean, isDisabled: boolean): React.CSSProperties {
+  return {
+    width: 32, height: 32, borderRadius: 6,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, fontWeight: isActive ? 800 : 500,
+    cursor: isDisabled ? 'default' : 'pointer',
+    opacity: isDisabled ? 0.3 : 1,
+    background: isActive
+      ? (isDark ? 'rgba(200,169,110,.2)' : 'rgba(200,169,110,.15)')
+      : 'transparent',
+    color: isActive ? th.gold : th.text,
+    border: isActive ? `1px solid ${th.gold}` : `1px solid transparent`,
+    transition: 'all .15s',
+  };
 }
