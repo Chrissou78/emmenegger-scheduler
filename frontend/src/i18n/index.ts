@@ -7,11 +7,19 @@ import pt from './locales/pt.json';
 import nl from './locales/nl.json';
 import it from './locales/it.json';
 import es from './locales/es.json';
+import pl from './locales/pl.json';
+import ro from './locales/ro.json';
+import hr from './locales/hr.json';
+import sq from './locales/sq.json';
+import sr from './locales/sr.json';
+import tr from './locales/tr.json';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
-export type LangCode = 'de' | 'en' | 'fr' | 'pt' | 'nl' | 'it' | 'es';
+export type LangCode =
+  | 'de' | 'en' | 'fr' | 'pt' | 'nl' | 'it' | 'es'
+  | 'pl' | 'ro' | 'hr' | 'sq' | 'sr' | 'tr';
 
 export interface LangMeta {
   code: LangCode;
@@ -21,6 +29,7 @@ export interface LangMeta {
 
 export const ALL_LANGUAGES: Record<LangCode, Record<string, any>> = {
   de, en, fr, pt, nl, it, es,
+  pl, ro, hr, sq, sr, tr,
 };
 
 /** Metadata extracted from _meta key in each JSON file */
@@ -29,7 +38,10 @@ export const LANG_META: LangMeta[] = Object.values(ALL_LANGUAGES).map(
 );
 
 /** Ordered list of all available language codes */
-export const ALL_LANG_CODES: LangCode[] = ['de', 'en', 'fr', 'pt', 'nl', 'it', 'es'];
+export const ALL_LANG_CODES: LangCode[] = [
+  'de', 'en', 'fr', 'pt', 'nl', 'it', 'es',
+  'pl', 'ro', 'hr', 'sq', 'sr', 'tr',
+];
 
 /** Default enabled languages (if no settings from DB yet) */
 export const DEFAULT_ENABLED_LANGS: LangCode[] = ['de', 'en', 'fr', 'pt'];
