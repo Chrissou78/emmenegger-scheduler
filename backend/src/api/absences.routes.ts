@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
-import { requireRole } from '../middleware/auth';
+import { requireRole, isRoleOneOf } from '../middleware/auth';
 
 export const absencesRouter = Router();
 
@@ -11,17 +11,16 @@ absencesRouter.get('/', async (req: any, res, next) => {
     let query = supabase.from('absences').select('*');
 
     const currentUserId = req.user.userId || req.user.id;
+    const role = req.user.role || '';
 
-    // Role-based filtering
-    if (req.user.role === 'ARBEITER') {
-      // Workers see only their own absences
+    // ★ Use isRoleOneOf for role-based filtering
+    if (isRoleOneOf(role, 'ARBEITER', 'EMPLOYEE')) {
       query = query.eq('user_id', currentUserId);
-    } else if (req.user.role === 'LOCAL_MANAGER') {
-      // Local managers see only their team's absences
+    } else if (isRoleOneOf(role, 'LOCAL_MANAGER', 'MANAGER')) {
       const { data: teamUsers } = await supabase
         .from('users')
         .select('id')
-        .or(`manager_id.eq.${currentUserId},id.eq.${currentUserId}`);
+        .or(`manager_id.eq.${currentUserId},team_leader_id.eq.${currentUserId},id.eq.${currentUserId}`);
 
       const teamIds = (teamUsers || []).map((u: any) => u.id);
       if (teamIds.length > 0) {
@@ -30,9 +29,8 @@ absencesRouter.get('/', async (req: any, res, next) => {
         query = query.eq('user_id', currentUserId);
       }
     }
-    // GLOBAL_MANAGER sees all — no filter needed
+    // CEO, ADMIN, GLOBAL_MANAGER, HR, etc. see all
 
-    // Optional filters
     if (userId) {
       query = query.eq('user_id', userId);
     }
@@ -56,21 +54,20 @@ absencesRouter.get('/', async (req: any, res, next) => {
 // POST /api/v1/absences
 absencesRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req: any, res, next) => {
   try {
-    // ★ Accept both field naming conventions
     const user_id = req.body.user_id || req.body.userId;
     const date = req.body.date;
     const absence_code = req.body.absence_code || req.body.absenceCode;
     const source = req.body.source || 'MANUAL';
     const notes = req.body.notes || null;
     const currentUserId = req.user.userId || req.user.id;
+    const role = req.user.role || '';
 
     if (!user_id || !date || !absence_code) {
       return res.status(400).json({ error: 'Missing required fields: user_id, date, absence_code' });
     }
 
-    // LOCAL_MANAGER / MANAGER can only create absences for their team
-    const userRoleUpper = (req.user.role || '').toUpperCase();
-    if (userRoleUpper === 'LOCAL_MANAGER' || userRoleUpper === 'MANAGER') {
+    // ★ Use isRoleOneOf for team check
+    if (isRoleOneOf(role, 'LOCAL_MANAGER', 'MANAGER')) {
       const { data: targetUser } = await supabase
         .from('users')
         .select('id, manager_id, team_leader_id')

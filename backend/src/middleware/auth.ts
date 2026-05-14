@@ -22,23 +22,23 @@ declare global {
 /* ★ Normalize role — map new role names to legacy equivalents for permission checks */
 function normalizeRoleForAuth(role: string): string[] {
   const upper = (role || '').toUpperCase();
-  // Return the role itself PLUS any legacy equivalents
   switch (upper) {
-    case 'CEO':
-      return ['CEO', 'GLOBAL_MANAGER'];
-    case 'ADMIN':
-      return ['ADMIN', 'GLOBAL_MANAGER'];
-    case 'EXECUTIVE':
-      return ['EXECUTIVE', 'GLOBAL_MANAGER'];
-    case 'MANAGER':
-      return ['MANAGER', 'LOCAL_MANAGER'];
-    case 'GLOBAL_MANAGER':
-      return ['GLOBAL_MANAGER', 'ADMIN'];
-    case 'LOCAL_MANAGER':
-      return ['LOCAL_MANAGER', 'MANAGER'];
-    default:
-      return [upper];
+    case 'CEO':            return ['CEO', 'GLOBAL_MANAGER', 'ADMIN'];
+    case 'ADMIN':          return ['ADMIN', 'GLOBAL_MANAGER'];
+    case 'EXECUTIVE':      return ['EXECUTIVE', 'GLOBAL_MANAGER'];
+    case 'MANAGER':        return ['MANAGER', 'LOCAL_MANAGER'];
+    case 'GLOBAL_MANAGER': return ['GLOBAL_MANAGER', 'ADMIN', 'CEO'];
+    case 'LOCAL_MANAGER':  return ['LOCAL_MANAGER', 'MANAGER'];
+    case 'EMPLOYEE':       return ['EMPLOYEE', 'ARBEITER'];
+    case 'ARBEITER':       return ['ARBEITER', 'EMPLOYEE'];
+    default:               return [upper];
   }
+}
+
+/* ★ Helper: check if user's role matches any of the given roles (used in route handlers) */
+export function isRoleOneOf(userRole: string, ...roles: string[]): boolean {
+  const userRoles = normalizeRoleForAuth(userRole);
+  return roles.some(r => userRoles.some(ur => ur.toUpperCase() === r.toUpperCase()));
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -57,17 +57,14 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-// ★ Updated: Role guard now understands both old and new role names
+// ★ Role guard — understands both old and new role names
 export function requireRole(...roles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Get all equivalent roles for the user's actual role
     const userRoles = normalizeRoleForAuth(req.user.role);
-
-    // Check if ANY of the user's equivalent roles match ANY of the required roles
     const hasRole = roles.some(requiredRole =>
       userRoles.some(ur => ur.toUpperCase() === requiredRole.toUpperCase())
     );
@@ -87,7 +84,8 @@ export function requireScopeOrSelf(paramName = 'userId') {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
     const targetId = req.params[paramName] || req.body?.[paramName];
 
-    if (req.user.role === 'ARBEITER' && targetId && targetId !== req.user.userId) {
+    // ★ Check both ARBEITER and EMPLOYEE
+    if (isRoleOneOf(req.user.role, 'ARBEITER', 'EMPLOYEE') && targetId && targetId !== req.user.userId) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Workers can only access their own data',

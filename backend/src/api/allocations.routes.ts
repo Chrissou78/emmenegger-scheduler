@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
-import { requireRole } from '../middleware/auth';
+import { requireRole, isRoleOneOf } from '../middleware/auth';
 import jwt from 'jsonwebtoken';
 
 export const allocationsRouter = Router();
@@ -18,25 +18,26 @@ allocationsRouter.get('/', async (req: any, res, next) => {
       query = query.eq('user_id', user_id);
     }
 
-    // LOCAL_MANAGER: only show allocations for their team
     const currentUserId = req.user.userId || req.user.id;
-    if (req.user.role === 'LOCAL_MANAGER' && currentUserId) {
+    const role = req.user.role || '';
+
+    // ★ Use isRoleOneOf instead of hardcoded string checks
+    if (isRoleOneOf(role, 'LOCAL_MANAGER', 'MANAGER') && currentUserId) {
       const { data: teamUsers } = await supabase
         .from('users')
         .select('id')
-        .or(`manager_id.eq.${currentUserId},id.eq.${currentUserId}`);
+        .or(`manager_id.eq.${currentUserId},team_leader_id.eq.${currentUserId},id.eq.${currentUserId}`);
 
       const teamIds = (teamUsers || []).map((u: any) => u.id);
       if (teamIds.length > 0) {
         query = query.in('user_id', teamIds);
       } else {
-        // No team found — return only own allocations
         query = query.eq('user_id', currentUserId);
       }
     }
 
-    // ARBEITER: only their own allocations
-    if (req.user.role === 'ARBEITER' && currentUserId) {
+    // ★ Check both ARBEITER and EMPLOYEE
+    if (isRoleOneOf(role, 'ARBEITER', 'EMPLOYEE') && currentUserId) {
       query = query.eq('user_id', currentUserId);
     }
 
@@ -66,16 +67,20 @@ allocationsRouter.post('/', async (req: any, res, next) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'User ID not found in token' });
     }
 
-    // LOCAL_MANAGER can only create allocations for their team
-    if (req.user.role === 'LOCAL_MANAGER') {
+    const role = req.user.role || '';
+
+    // ★ LOCAL_MANAGER or MANAGER can only create allocations for their team
+    if (isRoleOneOf(role, 'LOCAL_MANAGER', 'MANAGER')) {
       const currentUserId = req.user.userId || req.user.id;
       const { data: targetUser } = await supabase
         .from('users')
-        .select('id, manager_id')
+        .select('id, manager_id, team_leader_id')
         .eq('id', user_id)
         .single();
 
-      if (targetUser && targetUser.id !== currentUserId && targetUser.manager_id !== currentUserId) {
+      if (targetUser && targetUser.id !== currentUserId
+        && targetUser.manager_id !== currentUserId
+        && targetUser.team_leader_id !== currentUserId) {
         return res.status(403).json({ success: false, message: 'Cannot allocate for users outside your team' });
       }
     }
@@ -145,18 +150,19 @@ allocationsRouter.post(
     try {
       const { sourceWeekId, targetWeekId } = req.body;
       const currentUserId = req.user.userId || req.user.id;
+      const role = req.user.role || '';
 
       let sourceQuery = supabase
         .from('allocations')
         .select('user_id, task_id, day_of_week, time_slot')
         .eq('week_id', sourceWeekId);
 
-      // LOCAL_MANAGER: only copy their team's allocations
-      if (req.user.role === 'LOCAL_MANAGER' && currentUserId) {
+      // ★ Use isRoleOneOf
+      if (isRoleOneOf(role, 'LOCAL_MANAGER', 'MANAGER') && currentUserId) {
         const { data: teamUsers } = await supabase
           .from('users')
           .select('id')
-          .or(`manager_id.eq.${currentUserId},id.eq.${currentUserId}`);
+          .or(`manager_id.eq.${currentUserId},team_leader_id.eq.${currentUserId},id.eq.${currentUserId}`);
 
         const teamIds = (teamUsers || []).map((u: any) => u.id);
         if (teamIds.length > 0) {

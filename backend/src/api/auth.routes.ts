@@ -47,17 +47,19 @@ authRouter.post('/login', async (req, res) => {
       });
     }
 
+    // ★ Include departments in JWT payload
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         role: user.role,
+        departments: user.departments || [],  // ★ NEW
       },
       process.env.JWT_SECRET || 'emmenegger-dev-secret-change-in-production',
       { expiresIn: '7d' }
     );
 
-    console.log(`✅ Login successful for: ${email}`);
+    console.log(`✅ Login successful for: ${email} (role: ${user.role})`);
 
     res.json({
       success: true,
