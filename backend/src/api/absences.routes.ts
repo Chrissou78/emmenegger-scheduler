@@ -56,18 +56,30 @@ absencesRouter.get('/', async (req: any, res, next) => {
 // POST /api/v1/absences
 absencesRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req: any, res, next) => {
   try {
-    const { user_id, date, absence_code, source, notes } = req.body;
+    // ★ Accept both field naming conventions
+    const user_id = req.body.user_id || req.body.userId;
+    const date = req.body.date;
+    const absence_code = req.body.absence_code || req.body.absenceCode;
+    const source = req.body.source || 'MANUAL';
+    const notes = req.body.notes || null;
     const currentUserId = req.user.userId || req.user.id;
 
-    // LOCAL_MANAGER can only create absences for their team
-    if (req.user.role === 'LOCAL_MANAGER') {
+    if (!user_id || !date || !absence_code) {
+      return res.status(400).json({ error: 'Missing required fields: user_id, date, absence_code' });
+    }
+
+    // LOCAL_MANAGER / MANAGER can only create absences for their team
+    const userRoleUpper = (req.user.role || '').toUpperCase();
+    if (userRoleUpper === 'LOCAL_MANAGER' || userRoleUpper === 'MANAGER') {
       const { data: targetUser } = await supabase
         .from('users')
-        .select('id, manager_id')
+        .select('id, manager_id, team_leader_id')
         .eq('id', user_id)
         .single();
 
-      if (targetUser && targetUser.id !== currentUserId && targetUser.manager_id !== currentUserId) {
+      if (targetUser && targetUser.id !== currentUserId
+        && targetUser.manager_id !== currentUserId
+        && targetUser.team_leader_id !== currentUserId) {
         return res.status(403).json({ error: 'Cannot create absences for users outside your team' });
       }
     }
@@ -78,8 +90,8 @@ absencesRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (
         user_id,
         date,
         absence_code,
-        source: source || 'MANUAL',
-        notes: notes || null,
+        source,
+        notes,
         approved_by_id: currentUserId,
       })
       .select()

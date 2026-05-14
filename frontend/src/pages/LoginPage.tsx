@@ -13,41 +13,57 @@ export function LoginPage() {
   const { login, loading, error: authError } = useAuthStore();
   const lt = getTranslations(lang as LangCode);
 
-  const [email, setEmail] = useState('ceo@emmenegger.ch');
-  const [password, setPassword] = useState('emmenegger2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [quickLoading, setQuickLoading] = useState<string | null>(null);
 
-  const setCeoAccount = () => { setEmail('ceo@emmenegger.ch'); setPassword('emmenegger2026'); };
-  const setExecAccount = () => { setEmail('admin@emmenegger.ch'); setPassword('admin'); };
-  const setMarcoAccount = () => { setEmail('marco.cancela@emmenegger.ch'); setPassword('emmenegger2026'); };
-  const setWorkerAccount = () => { setEmail('worker@emmenegger.ch'); setPassword('worker2026'); };
-  const setHrAccount = () => { setEmail('hr@emmenegger.ch'); setPassword('emmenegger2026'); };
-  const setFinanceAccount = () => { setEmail('finance@emmenegger.ch'); setPassword('emmenegger2026'); };
-  const setSalesAccount = () => { setEmail('sales@emmenegger.ch'); setPassword('emmenegger2026'); };
+  /* ─── Navigate based on role after login ─── */
+  const navigateByRole = () => {
+    const user = useAuthStore.getState().user;
+    const role = (user?.role || '').toUpperCase();
+    switch (role) {
+      case 'CEO':
+      case 'ADMIN':
+      case 'GLOBAL_MANAGER':
+      case 'MANAGER':
+      case 'LOCAL_MANAGER':
+        navigate('/schedule'); break;
+      case 'HR': navigate('/hr'); break;
+      case 'FINANCE': navigate('/invoices'); break;
+      case 'SALES': navigate('/customers'); break;
+      default: navigate('/reports');
+    }
+  };
 
+  /* ─── Form submit ─── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
       await login(email, password);
-      const user = useAuthStore.getState().user;
-      const role = (user?.role || '').toUpperCase();
-      switch (role) {
-        case 'CEO': navigate('/schedule'); break;
-        case 'ADMIN':
-        case 'GLOBAL_MANAGER': navigate('/schedule'); break;
-        case 'MANAGER':
-        case 'LOCAL_MANAGER': navigate('/schedule'); break;
-        case 'HR': navigate('/hr'); break;
-        case 'FINANCE': navigate('/invoices'); break;
-        case 'SALES': navigate('/customers'); break;
-        default: navigate('/reports');
-      }
+      navigateByRole();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
   };
+
+  /* ─── Direct login helper for test buttons ─── */
+  const quickLogin = async (qEmail: string, qPassword: string, label: string) => {
+    setError('');
+    setQuickLoading(label);
+    try {
+      await login(qEmail, qPassword);
+      navigateByRole();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Login as ${label} failed`);
+    } finally {
+      setQuickLoading(null);
+    }
+  };
+
+  const isLoading = loading || !!quickLoading;
 
   return (
     <div style={{
@@ -101,11 +117,12 @@ export function LoginPage() {
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Mail size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="ceo@emmenegger.ch" required
+                placeholder="email@emmenegger.ch" required disabled={isLoading}
                 style={{
                   width: '100%', padding: '12px 12px 12px 40px', border: `1px solid ${th.border}`,
                   borderRadius: '6px', backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
                   color: th.text, fontSize: '14px', outline: 'none', transition: 'border-color 0.2s',
+                  opacity: isLoading ? 0.6 : 1,
                 }}
                 onFocus={(e) => (e.target.style.borderColor = th.gold)}
                 onBlur={(e) => (e.target.style.borderColor = th.border)}
@@ -121,11 +138,12 @@ export function LoginPage() {
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Lock size={18} style={{ position: 'absolute', left: '12px', color: th.textMuted }} />
               <input type={showPassword ? 'text' : 'password'} value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required
+                onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}
                 style={{
                   width: '100%', padding: '12px 40px 12px 40px', border: `1px solid ${th.border}`,
                   borderRadius: '6px', backgroundColor: isDark ? '#1a1a1a' : '#fafaf8',
                   color: th.text, fontSize: '14px', outline: 'none',
+                  opacity: isLoading ? 0.6 : 1,
                 }}
                 onFocus={(e) => (e.target.style.borderColor = th.gold)}
                 onBlur={(e) => (e.target.style.borderColor = th.border)}
@@ -158,81 +176,106 @@ export function LoginPage() {
           )}
 
           {/* Login Button */}
-          <button type="submit" disabled={loading}
+          <button type="submit" disabled={isLoading}
             style={{
-              width: '100%', padding: '12px', backgroundColor: loading ? th.textMuted : th.gold,
+              width: '100%', padding: '12px', backgroundColor: isLoading ? th.textMuted : th.gold,
               color: isDark ? '#0a0a0a' : '#1a1a0a', border: 'none', borderRadius: '6px',
-              fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '14px', fontWeight: '600', cursor: isLoading ? 'not-allowed' : 'pointer',
               transition: 'opacity 0.2s', marginBottom: '20px',
             }}
-            onMouseOver={(e) => !loading && (e.currentTarget.style.opacity = '0.9')}
+            onMouseOver={(e) => !isLoading && (e.currentTarget.style.opacity = '0.9')}
             onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}>
-            {loading ? lt.signingIn : lt.signIn}
+            {isLoading ? lt.signingIn : lt.signIn}
           </button>
         </form>
 
-        {/* Dev Quick Buttons — row 1: CEO, Executive, Manager */}
+        {/* ★ Quick login section label */}
+        <div style={{
+          fontSize: 10, fontWeight: 700, color: th.textMuted, textAlign: 'center',
+          letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 10,
+        }}>
+          {lt.quickAccess ?? 'Quick Access'}
+        </div>
+
+        {/* ★ Direct login buttons — row 1: CEO, Executive, Manager */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-          <button onClick={setCeoAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: th.gold, fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            👑 {lt.ceo}
-          </button>
-          <button onClick={setExecAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#3b82f6', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            👔 {lt.executive}
-          </button>
-          <button onClick={setMarcoAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#6495ed', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            🔧 {lt.manager}
-          </button>
+          {([
+            { label: lt.ceo ?? 'CEO', icon: '👑', color: th.gold, email: 'ceo@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.executive ?? 'Executive', icon: '👔', color: '#3b82f6', email: 'admin@emmenegger.ch', pw: 'admin' },
+            { label: lt.manager ?? 'Manager', icon: '🔧', color: '#6495ed', email: 'marco.cancela@emmenegger.ch', pw: 'emmenegger2026' },
+          ] as const).map(acc => (
+            <button
+              key={acc.email}
+              disabled={isLoading}
+              onClick={() => quickLogin(acc.email, acc.pw, acc.label)}
+              style={{
+                padding: '10px 6px', backgroundColor: th.btnBg,
+                border: `1px solid ${quickLoading === acc.label ? acc.color : th.border}`,
+                borderRadius: '6px', color: acc.color, fontSize: '11px', fontWeight: '600',
+                cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                opacity: isLoading && quickLoading !== acc.label ? 0.5 : 1,
+                position: 'relative',
+              }}
+              onMouseOver={(e) => !isLoading && (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}
+            >
+              {quickLoading === acc.label ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{
+                    width: 12, height: 12, border: `2px solid ${acc.color}44`,
+                    borderTopColor: acc.color, borderRadius: '50%',
+                    animation: 'ql-spin .6s linear infinite', display: 'inline-block',
+                  }} />
+                  …
+                </span>
+              ) : (
+                <>{acc.icon} {acc.label}</>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* Dev Quick Buttons — row 2: Worker, HR, Finance, Sales */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '20px' }}>
-          <button onClick={setWorkerAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#4caf50', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            👤 {lt.worker}
-          </button>
-          <button onClick={setHrAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#e891b2', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            🧑‍💼 {lt.hr}
-          </button>
-          <button onClick={setFinanceAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#f0b347', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            💰 {lt.finance}
-          </button>
-          <button onClick={setSalesAccount}
-            style={{ padding: '10px 6px', backgroundColor: th.btnBg, border: `1px solid ${th.border}`, borderRadius: '6px', color: '#42b883', fontSize: '11px', fontWeight: '600', cursor: 'pointer', transition: 'background-color 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = th.btnBgHover)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}>
-            🤝 {lt.sales}
-          </button>
-        </div>
-
-        {/* Credentials hint */}
-        <div style={{ fontSize: '11px', color: th.textMuted, textAlign: 'center', lineHeight: 1.8 }}>
-          <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>{lt.devHint}</div>
-          <div>👑 <code style={{ color: th.gold }}>ceo@emmenegger.ch</code> / <code style={{ color: th.gold }}>emmenegger2026</code></div>
-          <div>👔 <code style={{ color: '#3b82f6' }}>admin@emmenegger.ch</code> / <code style={{ color: '#3b82f6' }}>admin</code></div>
-          <div>🔧 <code style={{ color: '#6495ed' }}>marco.cancela@emmenegger.ch</code> / <code style={{ color: '#6495ed' }}>emmenegger2026</code></div>
-          <div>👤 <code style={{ color: '#4caf50' }}>worker@emmenegger.ch</code> / <code style={{ color: '#4caf50' }}>worker2026</code></div>
-          <div>🧑‍💼 <code style={{ color: '#e891b2' }}>hr@emmenegger.ch</code> / <code style={{ color: '#e891b2' }}>emmenegger2026</code></div>
-          <div>💰 <code style={{ color: '#f0b347' }}>finance@emmenegger.ch</code> / <code style={{ color: '#f0b347' }}>emmenegger2026</code></div>
-          <div>🤝 <code style={{ color: '#42b883' }}>sales@emmenegger.ch</code> / <code style={{ color: '#42b883' }}>emmenegger2026</code></div>
+        {/* ★ Direct login buttons — row 2: Worker, HR, Finance, Sales */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
+          {([
+            { label: lt.worker ?? 'Worker', icon: '👤', color: '#4caf50', email: 'worker@emmenegger.ch', pw: 'worker2026' },
+            { label: lt.hr ?? 'HR', icon: '🧑‍💼', color: '#e891b2', email: 'hr@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.finance ?? 'Finance', icon: '💰', color: '#f0b347', email: 'finance@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.sales ?? 'Sales', icon: '🤝', color: '#42b883', email: 'sales@emmenegger.ch', pw: 'emmenegger2026' },
+          ] as const).map(acc => (
+            <button
+              key={acc.email}
+              disabled={isLoading}
+              onClick={() => quickLogin(acc.email, acc.pw, acc.label)}
+              style={{
+                padding: '10px 6px', backgroundColor: th.btnBg,
+                border: `1px solid ${quickLoading === acc.label ? acc.color : th.border}`,
+                borderRadius: '6px', color: acc.color, fontSize: '11px', fontWeight: '600',
+                cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
+                opacity: isLoading && quickLoading !== acc.label ? 0.5 : 1,
+              }}
+              onMouseOver={(e) => !isLoading && (e.currentTarget.style.backgroundColor = th.btnBgHover)}
+              onMouseOut={(e) => (e.currentTarget.style.backgroundColor = th.btnBg)}
+            >
+              {quickLoading === acc.label ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{
+                    width: 12, height: 12, border: `2px solid ${acc.color}44`,
+                    borderTopColor: acc.color, borderRadius: '50%',
+                    animation: 'ql-spin .6s linear infinite', display: 'inline-block',
+                  }} />
+                  …
+                </span>
+              ) : (
+                <>{acc.icon} {acc.label}</>
+              )}
+            </button>
+          ))}
         </div>
       </div>
+
+      {/* ★ Spinner keyframes for quick-login buttons */}
+      <style>{`@keyframes ql-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
