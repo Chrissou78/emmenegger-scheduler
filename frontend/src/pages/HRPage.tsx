@@ -3,8 +3,10 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useTheme } from "../contexts/themeContext";
 import { useAuthStore } from "../contexts/authStore";
 import { useRolesStore } from "../store/rolesStore";
-import { resolvePermissions, type Role, type Permission,} from "../../../shared/constants/roles";
-import { getTranslations, type LangCode } from '../i18n';
+import { resolvePermissions, type Role, type Permission } from "../../../shared/constants/roles";
+import { getTranslations, type LangCode } from "../i18n";
+import { CsvToolbar, type CsvColumn } from "../components/CsvToolbar";
+import { exportCsv } from "../utils/csv";
 
 const API = import.meta.env.VITE_API_URL ?? "";
 
@@ -62,6 +64,20 @@ interface UserSummary {
   first_name: string;
   last_name: string;
   role: string;
+}
+
+/* Batch payroll entry */
+interface BatchPayslipEntry {
+  profile: HRProfile;
+  basePay: number;
+  overtimePay: number;
+  monthlyGross: number;
+  familyAllowance: number;
+  netPayout: number;
+  totalEmployer: number;
+  totalEmployee: number;
+  lines: PayslipLine[];
+  net: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,6 +173,36 @@ function computePayslip(
 }
 
 /* ------------------------------------------------------------------ */
+/*  HR CSV Column definitions                                          */
+/* ------------------------------------------------------------------ */
+const HR_CSV_COLUMNS: CsvColumn[] = [
+  { key: "id", label: "ID" },
+  { key: "first_name", label: "First Name" },
+  { key: "last_name", label: "Last Name" },
+  { key: "email", label: "Email" },
+  { key: "role", label: "Role" },
+  { key: "department", label: "Department" },
+  { key: "nationality", label: "Nationality" },
+  { key: "permit_type", label: "Permit Type" },
+  { key: "marital_status", label: "Marital Status" },
+  { key: "children_count", label: "Children" },
+  { key: "canton", label: "Canton" },
+  { key: "ahv_number", label: "AHV Number" },
+  { key: "iban", label: "IBAN" },
+  { key: "entry_date", label: "Entry Date" },
+  { key: "exit_date", label: "Exit Date" },
+  { key: "contract_type", label: "Contract Type" },
+  { key: "salary_type", label: "Salary Type" },
+  { key: "salary_amount", label: "Salary Amount" },
+  { key: "work_pensum", label: "Work Pensum (%)" },
+  { key: "hours_per_week", label: "Hours/Week" },
+  { key: "bvg_code", label: "BVG Code" },
+  { key: "team_leader_id", label: "Team Leader ID" },
+  { key: "executive_id", label: "Executive ID" },
+  { key: "notes", label: "Notes" },
+];
+
+/* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 export default function HRPage() {
@@ -234,6 +280,13 @@ export default function HRPage() {
   const [actualHours, setActualHours] = useState(0);
   const [overtimeHours, setOvertimeHours] = useState(0);
   const [overtimeRate, setOvertimeRate] = useState(125);
+
+  /* ---- batch payroll & charges state ---- */
+  const [showBatchPayroll, setShowBatchPayroll] = useState(false);
+  const [showCharges, setShowCharges] = useState(false);
+  const [batchMonth, setBatchMonth] = useState(
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+  );
 
   const showToast = (msg: string, type: "ok" | "err" = "ok") => {
     setToast({ msg, type });
@@ -330,6 +383,27 @@ export default function HRPage() {
     }
   };
 
+  /* ---- CSV import handler (plain insert, no upsert) ---- */
+  const handleCsvImport = async (rows: Record<string, any>[]) => {
+    let ok = 0;
+    let fail = 0;
+    for (const row of rows) {
+      try {
+        const res = await fetch(`${API}/api/v1/users`, {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify(row),
+        });
+        if (res.ok) ok++;
+        else fail++;
+      } catch {
+        fail++;
+      }
+    }
+    showToast(`Imported ${ok} rows${fail ? `, ${fail} failed` : ""}`, fail ? "err" : "ok");
+    fetchProfiles();
+  };
+
   /* ---- helpers ---- */
   const closeDetail = () => {
     setSelected(null);
@@ -381,7 +455,7 @@ export default function HRPage() {
     return u ? `${u.first_name} ${u.last_name}` : id;
   };
 
-  /* ---- monthly payslip computation ---- */
+  /* ---- monthly payslip computation (single employee) ---- */
   const payslipMonthly = useMemo(() => {
     const src = editing ? form : selected;
     if (!src || !src.salary_amount) return null;
@@ -427,6 +501,75 @@ export default function HRPage() {
     };
   }, [selected, form, editing, actualHours, overtimeHours, overtimeRate]);
 
+  /* ---- batch payroll computation (all active employees) ---- */
+  const batchPayroll = useMemo((): BatchPayslipEntry[] => {
+    const activeProfiles = profiles.filter((p) => p.salary_amount > 0 && !p.exit_date);
+    const today = new Date();
+
+    return activeProfiles.map((p) => {
+      const pensum = (p.work_pensum || 100) / 100;
+      const hpw = p.hours_per_week || 42;
+
+      let basePay: number;
+      if (p.salary_type === "HOURLY") {
+        basePay = p.salary_amount * hpw * 4.33 * pensum;
+      } else {
+        basePay = p.salary_amount * pensum;
+      }
+
+      const monthlyGross = basePay;
+      const annualGross = monthlyGross * 12;
+
+      const age = p.entry_date
+        ? Math.max(18, today.getFullYear() - new Date(p.entry_date).getFullYear() + 25)
+        : 35;
+
+      const result = computePayslip(annualGross, age, p.canton || "ZH");
+      const childCount = p.children_count || 0;
+      const familyAllowance = childCount * CH_RATES.CHILD_ALLOWANCE;
+
+      return {
+        profile: p,
+        basePay,
+        overtimePay: 0,
+        monthlyGross,
+        familyAllowance,
+        netPayout: result.net + familyAllowance,
+        totalEmployer: result.totalEmployer,
+        totalEmployee: result.totalEmployee,
+        lines: result.lines,
+        net: result.net,
+      };
+    });
+  }, [profiles]);
+
+  /* Aggregated charge totals */
+  const chargeTotals = useMemo(() => {
+    const totals = {
+      gross: 0, employerCharges: 0, employeeCharges: 0, totalCost: 0,
+      familyAllowance: 0, netPayout: 0,
+      byCharge: {} as Record<string, { employer: number; employee: number }>,
+    };
+
+    for (const entry of batchPayroll) {
+      totals.gross += entry.monthlyGross;
+      totals.employerCharges += entry.totalEmployer;
+      totals.employeeCharges += entry.totalEmployee;
+      totals.totalCost += entry.monthlyGross + entry.totalEmployer;
+      totals.familyAllowance += entry.familyAllowance;
+      totals.netPayout += entry.netPayout;
+
+      for (const line of entry.lines) {
+        if (!totals.byCharge[line.label]) {
+          totals.byCharge[line.label] = { employer: 0, employee: 0 };
+        }
+        totals.byCharge[line.label].employer += line.employer;
+        totals.byCharge[line.label].employee += line.employee;
+      }
+    }
+    return totals;
+  }, [batchPayroll]);
+
   const contractLabel = (c: string) => L[c] ?? c;
   const salaryLabel = (s: string) =>
     s === "HOURLY" ? L.HOURLY_PAY : L.MONTHLY;
@@ -466,25 +609,46 @@ export default function HRPage() {
       )}
 
       {/* ---- LIST VIEW ---- */}
-      {!panelOpen && (
+      {!panelOpen && !showBatchPayroll && !showCharges && (
         <>
           <div style={{
             display: "flex", justifyContent: "space-between",
             alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12,
           }}>
             <h1 style={{ margin: 0, fontSize: 26, color: gold }}>{L.title}</h1>
-            <div style={{
-              padding: "10px 20px", borderRadius: 10,
-              background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
-              textAlign: "center",
-            }}>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{profiles.length}</div>
-              <div style={{ fontSize: 11, color: dimText }}>{L.employees}</div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {/* Batch Payroll & Charges buttons (payroll permission) */}
+              {canPayroll && (
+                <>
+                  <button
+                    style={btnSecondary}
+                    onClick={() => setShowCharges(true)}
+                  >
+                    📊 {L.chargesOverview ?? "Charges Overview"}
+                  </button>
+                  <button
+                    style={btnSecondary}
+                    onClick={() => setShowBatchPayroll(true)}
+                  >
+                    🧾 {L.batchPayroll ?? "Batch Payroll"}
+                  </button>
+                </>
+              )}
+
+              <div style={{
+                padding: "10px 20px", borderRadius: 10,
+                background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                textAlign: "center",
+              }}>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{profiles.length}</div>
+                <div style={{ fontSize: 11, color: dimText }}>{L.employees}</div>
+              </div>
             </div>
           </div>
 
-          {/* filters */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+          {/* filters + CSV toolbar */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
             <input
               style={{ ...inputStyle, maxWidth: 260 }}
               placeholder={L.search}
@@ -512,6 +676,37 @@ export default function HRPage() {
               <option value="HOURLY">{L.HOURLY}</option>
               <option value="APPRENTICE">{L.APPRENTICE}</option>
             </select>
+
+            {/* CSV Toolbar with upsert support */}
+            <div style={{ marginLeft: "auto" }}>
+              <CsvToolbar
+                columns={HR_CSV_COLUMNS}
+                data={profiles}
+                filename="hr-employees"
+                onImport={handleCsvImport}
+                canImport={canEdit}
+                upsertEnabled={true}
+                upsertMatchKey="id"
+                apiUrl={API}
+                upsertEndpoint="/api/v1/users"
+                authHeaders={headers()}
+                existingIds={new Set(profiles.map((p) => p.id))}
+                upsertTransform={(row) => ({
+                  ...row,
+                  salary_amount: row.salary_amount ? Number(row.salary_amount) : undefined,
+                  work_pensum: row.work_pensum ? Number(row.work_pensum) : undefined,
+                  children_count: row.children_count ? Number(row.children_count) : undefined,
+                  hours_per_week: row.hours_per_week ? Number(row.hours_per_week) : undefined,
+                })}
+                onUpsertComplete={(result) => {
+                  showToast(
+                    `${result.created} created, ${result.updated} updated${result.errors > 0 ? `, ${result.errors} errors` : ""}`,
+                    result.errors > 0 ? "err" : "ok"
+                  );
+                  fetchProfiles();
+                }}
+              />
+            </div>
           </div>
 
           {loading && (
@@ -580,6 +775,343 @@ export default function HRPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* ================================================================ */}
+      {/*  CHARGES OVERVIEW MODAL                                          */}
+      {/* ================================================================ */}
+      {showCharges && !panelOpen && (
+        <div>
+          <div style={{
+            display: "flex", justifyContent: "space-between",
+            alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10,
+          }}>
+            <button style={btnSecondary} onClick={() => setShowCharges(false)}>
+              ◀ {L.back}
+            </button>
+            <h2 style={{ margin: 0, color: gold }}>📊 {L.chargesOverview ?? "Charges Overview"}</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                style={{ ...inputStyle, maxWidth: 160 }}
+                type="month"
+                value={batchMonth}
+                onChange={(e) => setBatchMonth(e.target.value)}
+              />
+              <button
+                style={btnPrimary}
+                onClick={() => {
+                  const chargeRows = batchPayroll.map((e) => ({
+                    name: `${e.profile.first_name} ${e.profile.last_name}`,
+                    department: e.profile.department,
+                    gross: e.monthlyGross.toFixed(2),
+                    employer_charges: e.totalEmployer.toFixed(2),
+                    employee_charges: e.totalEmployee.toFixed(2),
+                    family_allowance: e.familyAllowance.toFixed(2),
+                    net_payout: e.netPayout.toFixed(2),
+                    total_cost: (e.monthlyGross + e.totalEmployer).toFixed(2),
+                  }));
+                  exportCsv({
+                    data: chargeRows,
+                    columns: [
+                      { key: "name", label: "Name" },
+                      { key: "department", label: "Department" },
+                      { key: "gross", label: "Gross" },
+                      { key: "employer_charges", label: "Employer Charges" },
+                      { key: "employee_charges", label: "Employee Charges" },
+                      { key: "family_allowance", label: "Family Allowance" },
+                      { key: "net_payout", label: "Net Payout" },
+                      { key: "total_cost", label: "Total Cost" },
+                    ],
+                    filename: `charges-overview-${batchMonth}`,
+                  });
+                }}
+              >
+                ↓ CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Summary cards */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 14, marginBottom: 24,
+          }}>
+            {[
+              { label: L.grossSalary ?? "Gross", value: chargeTotals.gross, color: th.text },
+              { label: L.employerShare ?? "Employer Charges", value: chargeTotals.employerCharges, color: gold },
+              { label: L.employeeShare ?? "Employee Charges", value: chargeTotals.employeeCharges, color: "#e74c3c" },
+              { label: L.totalEmployerCost ?? "Total Cost", value: chargeTotals.totalCost, color: gold },
+              { label: L.familyAllowance ?? "Family Allowance", value: chargeTotals.familyAllowance, color: "#4ecdc4" },
+              { label: L.netPayout ?? "Net Payout", value: chargeTotals.netPayout, color: "#2ecc71" },
+            ].map((card, i) => (
+              <div key={i} style={{
+                padding: "14px 16px", borderRadius: 10,
+                background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                textAlign: "center",
+              }}>
+                <div style={{ fontSize: 11, color: dimText }}>{card.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4, color: card.color }}>
+                  {fmtCHF(card.value)}
+                </div>
+                <div style={{ fontSize: 10, color: dimText, marginTop: 2 }}>
+                  {L.annual ?? "Annual"}: {fmtCHF(card.value * 12)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Aggregated charge breakdown */}
+          <div style={cardStyle}>
+            <h3 style={{ margin: "0 0 16px", color: gold, fontSize: 16 }}>
+              {L.contribution ?? "Contributions"} — {L.total ?? "Total"}
+            </h3>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>{L.contribution ?? "Contribution"}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{L.employerShare ?? "Employer"}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{L.employeeShare ?? "Employee"}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{L.total ?? "Total"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(chargeTotals.byCharge).map(([label, vals]) => (
+                  <tr key={label}>
+                    <td style={tdStyle}>{label}</td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      {vals.employer > 0 ? fmtCHF(vals.employer) : "—"}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      {vals.employee > 0 ? fmtCHF(vals.employee) : "—"}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>
+                      {fmtCHF(vals.employer + vals.employee)}
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700 }}>
+                  <td style={tdStyle}>{L.totalDeductions ?? "Total Deductions"}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: gold }}>
+                    {fmtCHF(chargeTotals.employerCharges)}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "#e74c3c" }}>
+                    {fmtCHF(chargeTotals.employeeCharges)}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: "right" }}>
+                    {fmtCHF(chargeTotals.employerCharges + chargeTotals.employeeCharges)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Per-employee table */}
+          <div style={{ ...cardStyle, marginTop: 20 }}>
+            <h3 style={{ margin: "0 0 16px", color: gold, fontSize: 16 }}>
+              {L.employees} — {L.details ?? "Details"}
+            </h3>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>{L.name}</th>
+                    <th style={thStyle}>{L.department}</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>{L.grossSalary ?? "Gross"}</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>{L.employerShare ?? "Employer"}</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>{L.employeeShare ?? "Employee"}</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>{L.familyAllowance ?? "FAK"}</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>{L.netPayout ?? "Net"}</th>
+                    <th style={{ ...thStyle, textAlign: "right" }}>{L.totalEmployerCost ?? "Total Cost"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {batchPayroll.map((entry) => (
+                    <tr key={entry.profile.id}>
+                      <td style={tdStyle}>
+                        {entry.profile.first_name} {entry.profile.last_name}
+                      </td>
+                      <td style={tdStyle}>{entry.profile.department}</td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{fmtCHF(entry.monthlyGross)}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", color: gold }}>{fmtCHF(entry.totalEmployer)}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", color: "#e74c3c" }}>{fmtCHF(entry.totalEmployee)}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", color: "#4ecdc4" }}>{fmtCHF(entry.familyAllowance)}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", color: "#2ecc71" }}>{fmtCHF(entry.netPayout)}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>
+                        {fmtCHF(entry.monthlyGross + entry.totalEmployer)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/*  BATCH PAYROLL MODAL                                             */}
+      {/* ================================================================ */}
+      {showBatchPayroll && !panelOpen && (
+        <div>
+          <div style={{
+            display: "flex", justifyContent: "space-between",
+            alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10,
+          }}>
+            <button style={btnSecondary} onClick={() => setShowBatchPayroll(false)}>
+              ◀ {L.back}
+            </button>
+            <h2 style={{ margin: 0, color: gold }}>🧾 {L.batchPayroll ?? "Batch Payroll"}</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                style={{ ...inputStyle, maxWidth: 160 }}
+                type="month"
+                value={batchMonth}
+                onChange={(e) => setBatchMonth(e.target.value)}
+              />
+              <button style={btnPrimary} onClick={() => window.print()}>
+                🖨️ {L.printPayslip ?? "Print All"}
+              </button>
+            </div>
+          </div>
+
+          {/* Payslip cards for each employee */}
+          <div className="hr-batch-payslips">
+            {batchPayroll.map((entry) => (
+              <div
+                key={entry.profile.id}
+                className="payslip-page"
+                style={{
+                  ...cardStyle,
+                  marginBottom: 24,
+                  pageBreakAfter: "always",
+                }}
+              >
+                {/* Header */}
+                <div style={{
+                  display: "flex", justifyContent: "space-between",
+                  alignItems: "flex-start", marginBottom: 16,
+                }}>
+                  <div>
+                    <h3 style={{ margin: 0, color: gold }}>
+                      {entry.profile.first_name} {entry.profile.last_name}
+                    </h3>
+                    <div style={{ fontSize: 12, color: dimText, marginTop: 4 }}>
+                      {entry.profile.department} — {entry.profile.role} — {entry.profile.canton}
+                    </div>
+                    <div style={{ fontSize: 12, color: dimText }}>
+                      AHV: {entry.profile.ahv_number || "—"} | IBAN: {entry.profile.iban || "—"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 12, color: dimText }}>{batchMonth}</div>
+                    <div style={{ fontSize: 12, color: dimText }}>
+                      {contractLabel(entry.profile.contract_type)} — {entry.profile.work_pensum}%
+                    </div>
+                  </div>
+                </div>
+
+                {/* Summary row */}
+                <div style={{
+                  display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10,
+                  marginBottom: 16,
+                }}>
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 8,
+                    background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                    textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: 10, color: dimText }}>{L.grossSalary ?? "Gross"}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{fmtCHF(entry.monthlyGross)}</div>
+                  </div>
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 8,
+                    background: isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.04)",
+                    textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: 10, color: "#e74c3c" }}>{L.employeeShare ?? "Deductions"}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#e74c3c" }}>
+                      -{fmtCHF(entry.totalEmployee)}
+                    </div>
+                  </div>
+                  {entry.familyAllowance > 0 && (
+                    <div style={{
+                      padding: "10px 12px", borderRadius: 8,
+                      background: isDark ? "rgba(78,205,196,.08)" : "rgba(78,205,196,.06)",
+                      textAlign: "center",
+                    }}>
+                      <div style={{ fontSize: 10, color: "#4ecdc4" }}>{L.familyAllowance ?? "FAK"}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "#4ecdc4" }}>
+                        +{fmtCHF(entry.familyAllowance)}
+                      </div>
+                    </div>
+                  )}
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 8,
+                    background: "#2ecc7122", textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: 10, color: "#2ecc71" }}>{L.netPayout ?? "Net"}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#2ecc71" }}>
+                      {fmtCHF(entry.netPayout)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Charge lines table */}
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...thStyle, fontSize: 11 }}>{L.contribution ?? "Contribution"}</th>
+                      <th style={{ ...thStyle, fontSize: 11, textAlign: "right" }}>{L.employerShare ?? "Employer"}</th>
+                      <th style={{ ...thStyle, fontSize: 11, textAlign: "right" }}>{L.employeeShare ?? "Employee"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entry.lines.map((line, i) => (
+                      <tr key={i}>
+                        <td style={{ ...tdStyle, fontSize: 12 }}>{line.label}</td>
+                        <td style={{ ...tdStyle, fontSize: 12, textAlign: "right" }}>
+                          {line.employer > 0 ? fmtCHF(line.employer) : "—"}
+                        </td>
+                        <td style={{ ...tdStyle, fontSize: 12, textAlign: "right" }}>
+                          {line.employee > 0 ? fmtCHF(line.employee) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr style={{ fontWeight: 700 }}>
+                      <td style={{ ...tdStyle, fontSize: 12 }}>{L.totalDeductions ?? "Total"}</td>
+                      <td style={{ ...tdStyle, fontSize: 12, textAlign: "right", color: gold }}>
+                        {fmtCHF(entry.totalEmployer)}
+                      </td>
+                      <td style={{ ...tdStyle, fontSize: 12, textAlign: "right", color: "#e74c3c" }}>
+                        {fmtCHF(entry.totalEmployee)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Employer cost footer */}
+                <div style={{
+                  marginTop: 12, padding: 10, borderRadius: 8,
+                  background: gold + "18",
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                }}>
+                  <span style={{ fontSize: 12, color: gold, fontWeight: 600 }}>
+                    {L.totalEmployerCost ?? "Total Employer Cost"}
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: gold }}>
+                    {fmtCHF(entry.monthlyGross + entry.totalEmployer)}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {batchPayroll.length === 0 && (
+              <div style={{ textAlign: "center", padding: 40, color: dimText }}>
+                {L.noResults ?? "No active employees with salary data."}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ---- DETAIL / EDIT PANEL ---- */}
@@ -710,6 +1242,21 @@ export default function HRPage() {
                     <label style={labelStyle}>{L.name} (2)</label>
                     <input style={inputStyle} value={form.last_name}
                       onChange={(e) => setField("last_name", e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{L.department}</label>
+                    <input
+                      style={inputStyle}
+                      list="dept-datalist"
+                      value={form.department}
+                      onChange={(e) => setField("department", e.target.value)}
+                      placeholder={L.department}
+                    />
+                    <datalist id="dept-datalist">
+                      {departments.map((d) => (
+                        <option key={d} value={d} />
+                      ))}
+                    </datalist>
                   </div>
                   <div>
                     <label style={labelStyle}>{L.nationality}</label>
@@ -1075,6 +1622,18 @@ export default function HRPage() {
           </div>
         </div>
       )}
+
+      {/* ---- Print CSS ---- */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .hr-batch-payslips, .hr-batch-payslips * { visibility: visible; }
+          .hr-batch-payslips { position: absolute; left: 0; top: 0; width: 100%; }
+          .payslip-page { page-break-after: always; break-after: page; }
+          .payslip-page:last-child { page-break-after: auto; break-after: auto; }
+          button { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }

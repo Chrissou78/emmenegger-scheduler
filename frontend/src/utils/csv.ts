@@ -1,7 +1,7 @@
 /**
  * CSV Import / Export utility.
  * Handles proper escaping, BOM for Excel compatibility, multilingual headers,
- * and flexible parsing of imported files.
+ * flexible parsing of imported files, and ID-based upsert operations.
  */
 
 // ─── EXPORT ───
@@ -16,7 +16,7 @@ function escapeCell(value: unknown): string {
   return str;
 }
 
-export interface CsvExportOptions<T> {
+export interface CsvExportOptions<T = Record<string, any>> {
   /** The data rows */
   data: T[];
   /** Column definitions: key = object property, label = CSV header */
@@ -171,6 +171,69 @@ export function readFileAsText(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsText(file, 'UTF-8');
   });
+}
+
+// ─── UPSERT ───
+
+export interface UpsertResult {
+  created: number;
+  updated: number;
+  errors: number;
+}
+
+export interface UpsertOptions {
+  /** Parsed CSV rows */
+  rows: Record<string, any>[];
+  /** Key used to identify existing records (e.g. "id") */
+  matchKey: string;
+  /** Base API URL */
+  apiUrl: string;
+  /** Endpoint path (POST for create, PUT/:id for update) */
+  endpoint: string;
+  /** Authorization / content-type headers */
+  authHeaders: HeadersInit;
+  /** Set of IDs that already exist in the system */
+  existingIds: Set<string>;
+  /** Optional transform before sending row to API */
+  transform?: (row: Record<string, any>) => Record<string, any>;
+}
+
+/**
+ * Performs ID-based upsert: POST for new records, PUT for existing ones.
+ * Returns counts of created, updated, and errored rows.
+ */
+export async function upsertRows(opts: UpsertOptions): Promise<UpsertResult> {
+  const { rows, matchKey, apiUrl, endpoint, authHeaders, existingIds, transform } = opts;
+  const result: UpsertResult = { created: 0, updated: 0, errors: 0 };
+
+  for (const raw of rows) {
+    const row = transform ? transform(raw) : raw;
+    const id = raw[matchKey];
+    const isUpdate = id && existingIds.has(String(id));
+
+    try {
+      const url = isUpdate
+        ? `${apiUrl}${endpoint}/${id}`
+        : `${apiUrl}${endpoint}`;
+
+      const res = await fetch(url, {
+        method: isUpdate ? 'PUT' : 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(row),
+      });
+
+      if (res.ok) {
+        if (isUpdate) result.updated++;
+        else result.created++;
+      } else {
+        result.errors++;
+      }
+    } catch {
+      result.errors++;
+    }
+  }
+
+  return result;
 }
 
 // ─── Internal CSV Parsing Helpers ───

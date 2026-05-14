@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import {
   exportCsv,
   downloadTemplate,
   parseCsv,
   readFileAsText,
+  upsertRows,
   type CsvExportOptions,
   type CsvImportResult,
+  type UpsertResult,
 } from '../utils/csv';
 
 /* ─── Translations ─── */
@@ -18,6 +20,8 @@ const L: Record<string, Record<string, string>> = {
     rows: 'Zeilen', errors: 'Fehler', skipped: 'Übersprungen',
     preview: 'Vorschau', success: 'Import erfolgreich', noFile: 'Keine Datei ausgewählt',
     dragDrop: 'CSV-Datei hier ablegen oder klicken',
+    upsertMode: 'Upsert (ID-basiert)', toCreate: 'Neu anlegen', toUpdate: 'Aktualisieren',
+    upsertResult: 'Upsert-Ergebnis', created: 'Erstellt', updated: 'Aktualisiert',
   },
   en: {
     export: 'CSV Export', import: 'CSV Import', template: 'Download Template',
@@ -26,6 +30,8 @@ const L: Record<string, Record<string, string>> = {
     rows: 'Rows', errors: 'Errors', skipped: 'Skipped',
     preview: 'Preview', success: 'Import successful', noFile: 'No file selected',
     dragDrop: 'Drop CSV file here or click to browse',
+    upsertMode: 'Upsert (ID-based)', toCreate: 'To create', toUpdate: 'To update',
+    upsertResult: 'Upsert result', created: 'Created', updated: 'Updated',
   },
   fr: {
     export: 'Export CSV', import: 'Import CSV', template: 'Télécharger le modèle',
@@ -34,6 +40,8 @@ const L: Record<string, Record<string, string>> = {
     rows: 'Lignes', errors: 'Erreurs', skipped: 'Ignorées',
     preview: 'Aperçu', success: 'Import réussi', noFile: 'Aucun fichier sélectionné',
     dragDrop: 'Déposez un fichier CSV ici ou cliquez',
+    upsertMode: 'Upsert (basé sur ID)', toCreate: 'À créer', toUpdate: 'À mettre à jour',
+    upsertResult: 'Résultat upsert', created: 'Créés', updated: 'Mis à jour',
   },
   pt: {
     export: 'Exportar CSV', import: 'Importar CSV', template: 'Descarregar Modelo',
@@ -42,6 +50,8 @@ const L: Record<string, Record<string, string>> = {
     rows: 'Linhas', errors: 'Erros', skipped: 'Ignoradas',
     preview: 'Pré-visualização', success: 'Import concluído', noFile: 'Nenhum ficheiro selecionado',
     dragDrop: 'Arraste um ficheiro CSV aqui ou clique',
+    upsertMode: 'Upsert (baseado em ID)', toCreate: 'A criar', toUpdate: 'A atualizar',
+    upsertResult: 'Resultado upsert', created: 'Criados', updated: 'Atualizados',
   },
 };
 
@@ -63,10 +73,28 @@ interface CsvToolbarProps<T extends Record<string, any>> {
   validators?: Record<string, (value: string) => string | null>;
   /** Example rows for the template file */
   exampleRows?: Record<string, string>[];
-  /** Called when import is confirmed — receives parsed rows */
+  /** Called when import is confirmed (plain insert) — receives parsed rows */
   onImport: (rows: Record<string, any>[]) => Promise<void>;
   /** Whether import is allowed (e.g. manager-only) */
   canImport?: boolean;
+
+  /* ── Upsert props ── */
+  /** Enable upsert UI toggle */
+  upsertEnabled?: boolean;
+  /** The column key used to match existing records (usually "id") */
+  upsertMatchKey?: string;
+  /** Base API URL */
+  apiUrl?: string;
+  /** Endpoint path for upsert (POST for create, PUT/:id for update) */
+  upsertEndpoint?: string;
+  /** Auth headers for API calls */
+  authHeaders?: HeadersInit;
+  /** Set of existing IDs to distinguish create vs update */
+  existingIds?: Set<string>;
+  /** Transform row before sending to API */
+  upsertTransform?: (row: Record<string, any>) => Record<string, any>;
+  /** Called after upsert completes */
+  onUpsertComplete?: (result: UpsertResult) => void;
 }
 
 export function CsvToolbar<T extends Record<string, any>>({
@@ -78,6 +106,14 @@ export function CsvToolbar<T extends Record<string, any>>({
   exampleRows,
   onImport,
   canImport = true,
+  upsertEnabled = false,
+  upsertMatchKey = 'id',
+  apiUrl = '',
+  upsertEndpoint = '',
+  authHeaders = {},
+  existingIds,
+  upsertTransform,
+  onUpsertComplete,
 }: CsvToolbarProps<T>) {
   const { th, isDark, lang } = useTheme();
   const t = L[lang] || L.en;
@@ -87,6 +123,23 @@ export function CsvToolbar<T extends Record<string, any>>({
   const [preview, setPreview] = useState<CsvImportResult<Record<string, any>> | null>(null);
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [useUpsert, setUseUpsert] = useState(false);
+
+  /* Compute create vs update counts for upsert preview */
+  const upsertCounts = useMemo(() => {
+    if (!preview || !existingIds || !useUpsert) return { toCreate: 0, toUpdate: 0 };
+    let toCreate = 0;
+    let toUpdate = 0;
+    for (const row of preview.data) {
+      const key = row[upsertMatchKey];
+      if (key && existingIds.has(String(key))) {
+        toUpdate++;
+      } else {
+        toCreate++;
+      }
+    }
+    return { toCreate, toUpdate };
+  }, [preview, existingIds, useUpsert, upsertMatchKey]);
 
   const handleExport = () => {
     exportCsv({ data, columns, filename, formatters });
@@ -122,9 +175,26 @@ export function CsvToolbar<T extends Record<string, any>>({
     if (!preview || preview.data.length === 0) return;
     setImporting(true);
     try {
-      await onImport(preview.data);
-      setModalOpen(false);
-      setPreview(null);
+      if (useUpsert && upsertEnabled && upsertEndpoint) {
+        // Upsert mode
+        const result = await upsertRows({
+          rows: preview.data,
+          matchKey: upsertMatchKey,
+          apiUrl,
+          endpoint: upsertEndpoint,
+          authHeaders,
+          existingIds: existingIds ?? new Set(),
+          transform: upsertTransform,
+        });
+        setModalOpen(false);
+        setPreview(null);
+        onUpsertComplete?.(result);
+      } else {
+        // Plain insert mode
+        await onImport(preview.data);
+        setModalOpen(false);
+        setPreview(null);
+      }
     } catch { /* parent handles errors */ }
     setImporting(false);
   };
@@ -149,7 +219,7 @@ export function CsvToolbar<T extends Record<string, any>>({
 
         {/* Import button (managers only) */}
         {canImport && (
-          <button onClick={() => { setModalOpen(true); setPreview(null); }}
+          <button onClick={() => { setModalOpen(true); setPreview(null); setUseUpsert(false); }}
             style={{ ...btnStyle, border: `1px solid ${th.border}`, background: 'transparent', color: th.textMuted }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = th.gold; e.currentTarget.style.color = th.gold; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = th.border; e.currentTarget.style.color = th.textMuted; }}
@@ -177,7 +247,7 @@ export function CsvToolbar<T extends Record<string, any>>({
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
         }} onClick={() => { setModalOpen(false); setPreview(null); }}>
           <div style={{
-            background: th.modalCard || th.bgCard, borderRadius: 12, padding: 28, width: 560,
+            background: th.modalCard || th.bgCard, borderRadius: 12, padding: 28, width: 600,
             maxHeight: '85vh', overflowY: 'auto', border: `1px solid ${th.border}`,
             boxShadow: isDark ? '0 20px 60px rgba(0,0,0,.5)' : '0 20px 60px rgba(0,0,0,.1)',
           }} onClick={e => e.stopPropagation()}>
@@ -185,6 +255,30 @@ export function CsvToolbar<T extends Record<string, any>>({
             <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 600, color: th.gold }}>
               {t.importTitle}
             </h3>
+
+            {/* Upsert toggle */}
+            {upsertEnabled && (
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
+                fontSize: 13, color: th.textMuted, cursor: 'pointer',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={useUpsert}
+                  onChange={(e) => setUseUpsert(e.target.checked)}
+                  style={{ accentColor: th.gold }}
+                />
+                {t.upsertMode}
+                <span style={{
+                  fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                  background: useUpsert ? (th.gold + '22') : 'transparent',
+                  color: useUpsert ? th.gold : th.textDim,
+                  border: `1px solid ${useUpsert ? th.gold : th.borderFaint}`,
+                }}>
+                  {upsertMatchKey.toUpperCase()}
+                </span>
+              </label>
+            )}
 
             {/* Drop zone */}
             <div
@@ -211,7 +305,7 @@ export function CsvToolbar<T extends Record<string, any>>({
             {preview && (
               <div style={{ marginTop: 20 }}>
                 {/* Stats */}
-                <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
                   <div style={{ padding: '8px 16px', borderRadius: 8, background: isDark ? 'rgba(76,175,80,.12)' : 'rgba(76,175,80,.08)', textAlign: 'center' }}>
                     <div style={{ fontSize: 20, fontWeight: 700, color: '#4caf50' }}>{preview.data.length}</div>
                     <div style={{ fontSize: 10, color: th.textDim }}>{t.rows}</div>
@@ -227,6 +321,19 @@ export function CsvToolbar<T extends Record<string, any>>({
                       <div style={{ fontSize: 20, fontWeight: 700, color: '#ff9800' }}>{preview.skipped}</div>
                       <div style={{ fontSize: 10, color: th.textDim }}>{t.skipped}</div>
                     </div>
+                  )}
+                  {/* Upsert counts */}
+                  {useUpsert && upsertEnabled && (
+                    <>
+                      <div style={{ padding: '8px 16px', borderRadius: 8, background: isDark ? 'rgba(33,150,243,.12)' : 'rgba(33,150,243,.08)', textAlign: 'center' }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: '#2196f3' }}>{upsertCounts.toCreate}</div>
+                        <div style={{ fontSize: 10, color: th.textDim }}>{t.toCreate}</div>
+                      </div>
+                      <div style={{ padding: '8px 16px', borderRadius: 8, background: isDark ? 'rgba(156,39,176,.12)' : 'rgba(156,39,176,.08)', textAlign: 'center' }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: '#9c27b0' }}>{upsertCounts.toUpdate}</div>
+                        <div style={{ fontSize: 10, color: th.textDim }}>{t.toUpdate}</div>
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -260,8 +367,12 @@ export function CsvToolbar<T extends Record<string, any>>({
                         <tr style={{ background: th.bgCard }}>
                           <th style={{ padding: '6px 10px', textAlign: 'left', color: th.textDim, fontWeight: 600 }}>#</th>
                           {columns.slice(0, 5).map(col => (
-                            <th key={col.key} style={{ padding: '6px 10px', textAlign: 'left', color: th.textDim, fontWeight: 600 }}>
+                            <th key={col.key} style={{
+                              padding: '6px 10px', textAlign: 'left', fontWeight: 600,
+                              color: (useUpsert && col.key === upsertMatchKey) ? th.gold : th.textDim,
+                            }}>
                               {col.label}
+                              {useUpsert && col.key === upsertMatchKey && ' 🔑'}
                             </th>
                           ))}
                           {columns.length > 5 && (
@@ -270,17 +381,31 @@ export function CsvToolbar<T extends Record<string, any>>({
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.data.slice(0, 5).map((row, i) => (
-                          <tr key={i} style={{ borderTop: `1px solid ${th.borderFaint}` }}>
-                            <td style={{ padding: '6px 10px', color: th.textDim }}>{i + 1}</td>
-                            {columns.slice(0, 5).map(col => (
-                              <td key={col.key} style={{ padding: '6px 10px', color: th.text, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {row[col.key] || '–'}
+                        {preview.data.slice(0, 5).map((row, i) => {
+                          const isExisting = useUpsert && existingIds?.has(String(row[upsertMatchKey]));
+                          return (
+                            <tr key={i} style={{ borderTop: `1px solid ${th.borderFaint}` }}>
+                              <td style={{ padding: '6px 10px', color: th.textDim }}>
+                                {i + 1}
+                                {useUpsert && (
+                                  <span style={{
+                                    marginLeft: 4, fontSize: 9, padding: '1px 4px', borderRadius: 3,
+                                    background: isExisting ? 'rgba(156,39,176,.15)' : 'rgba(33,150,243,.15)',
+                                    color: isExisting ? '#9c27b0' : '#2196f3',
+                                  }}>
+                                    {isExisting ? 'UPD' : 'NEW'}
+                                  </span>
+                                )}
                               </td>
-                            ))}
-                            {columns.length > 5 && <td style={{ padding: '6px 10px', color: th.textDim }}>…</td>}
-                          </tr>
-                        ))}
+                              {columns.slice(0, 5).map(col => (
+                                <td key={col.key} style={{ padding: '6px 10px', color: th.text, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {row[col.key] || '–'}
+                                </td>
+                              ))}
+                              {columns.length > 5 && <td style={{ padding: '6px 10px', color: th.textDim }}>…</td>}
+                            </tr>
+                          );
+                        })}
                         {preview.data.length > 5 && (
                           <tr>
                             <td colSpan={Math.min(columns.length, 5) + 2} style={{ padding: '6px 10px', color: th.textDim, fontStyle: 'italic', textAlign: 'center' }}>
@@ -308,7 +433,12 @@ export function CsvToolbar<T extends Record<string, any>>({
                     background: th.gold, color: '#fff', cursor: importing ? 'wait' : 'pointer',
                     fontWeight: 700, fontSize: 13, opacity: importing ? .7 : 1,
                   }}>
-                  {importing ? t.importing : `${t.confirm} (${preview.data.length})`}
+                  {importing
+                    ? t.importing
+                    : useUpsert
+                      ? `${t.confirm} — ${upsertCounts.toCreate} new / ${upsertCounts.toUpdate} upd`
+                      : `${t.confirm} (${preview.data.length})`
+                  }
                 </button>
               )}
             </div>
