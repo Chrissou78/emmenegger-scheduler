@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   // ── Planning ──
   { path: '/schedule',   labelKey: 'navSchedule',   icon: '📅', permissions: ['schedule.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
   { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
+  { path: '/logistics', labelKey: 'navLogistics', icon: '🔧', permissions: ['logistics.view' as Permission], section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
   { path: '/tasks',      labelKey: 'navTasks',      icon: '📋', permissions: ['tasks.view'],       section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
 
   // ── CRM ──

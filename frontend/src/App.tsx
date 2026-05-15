@@ -22,6 +22,7 @@ import { InvoicesPage } from './pages/InvoicesPage';
 import HRPage from './pages/HRPage';
 import CrmPage from './pages/CrmPage';
 import SettingsPage from './pages/settings';
+import { LogisticsPage } from './pages/LogisticsPage';
 
 /* ─── Map legacy DB roles to the 6-role system ─── */
 function normalizeRole(raw: string): Role {
@@ -154,6 +155,12 @@ function AppContent() {
           <Route path="/hr" element={
             <RequirePermission permission="hr.view">
               <HRPage />
+            </RequirePermission>
+          } />
+
+          <Route path="/logistics" element={
+            <RequirePermission permission="logistics.view">
+              <LogisticsPage />
             </RequirePermission>
           } />
 

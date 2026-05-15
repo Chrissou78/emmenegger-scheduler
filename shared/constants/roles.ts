@@ -68,6 +68,7 @@ export interface NavAccess {
   admin: boolean;
   settings: boolean;
   profile: boolean;
+  logistics: boolean;
 }
 
 export function getNavAccess(
@@ -130,6 +131,7 @@ export function getNavAccess(
     settings: tier === 'ceo' || tier === 'executive',
 
     profile: true,
+    logistics: tier === 'ceo' || (tier === 'executive' && operational) || (tier === 'teamleader' && operational) || (tier === 'employee' && operational),
   };
 }
 
@@ -223,6 +225,7 @@ export const PERMISSIONS = [
   "stats.global", "stats.perimeter", "stats.team", "stats.individual",
   "hr.access", "admin.access", "profile.view",
   "crm.view", "crm.edit", "crm.delete", "crm.pipeline", "crm.performance",
+  "logistics.view", "logistics.edit", "logistics.delete", "logistics.consume",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -252,6 +255,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "admin.customers", "admin.machines", "admin.tasks",
     "reports.own", "reports.team", "reports.all",
     "crm.view", "crm.edit", "crm.pipeline", "crm.performance",
+    "logistics.view", "logistics.edit", "logistics.delete", "logistics.consume",
   ],
 
   MANAGER: [
@@ -264,6 +268,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "hr.view",
     "admin.view",
     "reports.own", "reports.team",
+    "logistics.view", "logistics.edit", "logistics.consume",
   ],
 
   HR: [
@@ -294,6 +299,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "tasks.view",
     "machines.view",
     "reports.own",
+    "logistics.view", "logistics.consume",
   ],
 };
 
