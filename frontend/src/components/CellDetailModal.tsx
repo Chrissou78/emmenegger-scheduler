@@ -1,5 +1,5 @@
 // frontend/src/components/CellDetailModal.tsx
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { themes, ABS } from '../i18n/translations';
 import { getTranslations, type LangCode } from '../i18n';
 
@@ -49,7 +49,6 @@ export interface CellDetailModalProps {
   activeTaskIds: Set<string>;
   weekIds: string[];
 
-  /* ★ NEW: all machine allocations for the entire week — for conflict checking */
   allWeekMachineAllocations: MachineAllocation[];
 
   canEdit: boolean;
@@ -85,6 +84,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'machines' | 'absences'>('tasks');
   const [taskSearch, setTaskSearch] = useState('');
   const [machineSearch, setMachineSearch] = useState('');
+  const [selectedMachineId, setSelectedMachineId] = useState('');
   const [saving, setSaving] = useState(false);
   const taskSearchRef = useRef<HTMLInputElement>(null);
   const machSearchRef = useRef<HTMLInputElement>(null);
@@ -99,7 +99,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
   const cellMachines = machineAllocations;
   const cellAbsences = absences;
 
-  /* ★ Build a set of machine IDs already allocated on this day (any user) */
+  /* Build a set of machine IDs already allocated on this day (any user) */
   const machinesAllocatedThisDay = useMemo(() => {
     const set = new Set<string>();
     for (const ma of allWeekMachineAllocations) {
@@ -109,6 +109,12 @@ export function CellDetailModal(props: CellDetailModalProps) {
     }
     return set;
   }, [allWeekMachineAllocations, day]);
+
+  /* IDs of machines assigned to THIS cell (this user + this day) */
+  const cellMachineIds = useMemo(
+    () => new Set(cellMachines.map(ma => ma.machine_id)),
+    [cellMachines]
+  );
 
   /* ─── Filtered task list ─── */
   const filteredTasks = useMemo(() => {
@@ -134,7 +140,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
     return list.slice(0, 40);
   }, [taskSearch, tasks, cellTasks, activeTaskIds]);
 
-  /* ★ Filtered machine list — shows availability status */
+  /* Filtered machine list */
   const filteredMachines = useMemo(() => {
     const s = machineSearch.toLowerCase();
     let list = machines.filter(m => m.is_active !== false);
@@ -145,24 +151,17 @@ export function CellDetailModal(props: CellDetailModalProps) {
         (m.inventory_nr || '').toLowerCase().includes(s)
       );
     }
-
-    // IDs assigned to THIS cell (this user + this day)
-    const assignedToThisCell = new Set(cellMachines.map(ma => ma.machine_id));
-
-    // Sort: assigned to cell first (for display), then available, then taken by others
     list.sort((a, b) => {
-      const aInCell = assignedToThisCell.has(a.id) ? 0 : 1;
-      const bInCell = assignedToThisCell.has(b.id) ? 0 : 1;
+      const aInCell = cellMachineIds.has(a.id) ? 0 : 1;
+      const bInCell = cellMachineIds.has(b.id) ? 0 : 1;
       if (aInCell !== bInCell) return aInCell - bInCell;
-
       const aTaken = machinesAllocatedThisDay.has(a.id) ? 1 : 0;
       const bTaken = machinesAllocatedThisDay.has(b.id) ? 1 : 0;
       if (aTaken !== bTaken) return aTaken - bTaken;
-
       return a.name.localeCompare(b.name);
     });
     return list.slice(0, 40);
-  }, [machineSearch, machines, cellMachines, machinesAllocatedThisDay]);
+  }, [machineSearch, machines, cellMachineIds, machinesAllocatedThisDay]);
 
   /* ─── Actions ─── */
   const addTask = async (taskId: string) => {
@@ -221,26 +220,28 @@ export function CellDetailModal(props: CellDetailModalProps) {
     setSaving(false);
   };
 
-  /* ★ FIXED addMachine — sends userId, handles all responses with clear feedback */
   const addMachine = async (machineId: string) => {
     if (!canEdit || saving) return;
 
-    // ★ Client-side conflict check — don't even try if already allocated this day
+    // siteId comes from the first task in this cell — guaranteed to exist
+    // because the picker is only shown when cellTasks.length > 0
+    const siteId = cellTasks[0]?.task_id;
+    if (!siteId) return; // safety guard
+
+    const weekId = weekIds[0];
+    if (!weekId) {
+      showToast(t.weekNotFound ?? 'Week not found', true);
+      return;
+    }
+
+    // Client-side conflict check
     if (machinesAllocatedThisDay.has(machineId)) {
-      const machine = machines.find(m => m.id === machineId);
-      showToast(`🚜 ${machine?.name || ''} — ${t.machineConflict ?? 'Already allocated this day'}`, true);
+      showToast(t.machineConflict ?? 'This machine is already allocated for this day', true);
       return;
     }
 
     setSaving(true);
-    const weekId = weekIds[0];
-    if (!weekId) {
-      showToast(t.weekNotFound ?? 'Week not found', true);
-      setSaving(false);
-      return;
-    }
-
-    const siteId = cellTasks[0]?.task_id || undefined;
+    const machine = machines.find(m => m.id === machineId);
 
     try {
       const r = await fetch(`${apiUrl}/api/v1/machines/allocations`, {
@@ -250,28 +251,22 @@ export function CellDetailModal(props: CellDetailModalProps) {
           siteId,
           weekId,
           dayOfWeek: day,
-          userId: emp.id,       // ★ FIX #1: link machine to this employee
+          userId: emp.id,
         }),
       });
-
       if (r.ok) {
-        const machine = machines.find(m => m.id === machineId);
-        showToast(`🚜 ${machine?.name || ''} → ${emp.first_name}`);
+        showToast(`${machine?.name || ''} → ${emp.first_name}`);
+        setSelectedMachineId('');
         await onRefresh();
       } else {
-        // ★ FIX #3: always read and display the error
-        const err = await r.json().catch(() => ({ message: `HTTP ${r.status}` }));
+        const err = await r.json().catch(() => ({}));
         if (r.status === 409) {
-          showToast(`🚜 ${t.machineConflict ?? 'Machine already allocated on this day'}`, true);
-        } else if (r.status === 400) {
-          showToast(`⚠️ ${err.message || 'Bad request'}`, true);
+          showToast(t.machineConflict ?? 'Machine already allocated elsewhere on this day', true);
         } else {
-          showToast(`❌ ${err.message || t.error || 'Error'}`, true);
+          showToast(err.error || err.message || `Error ${r.status}`, true);
         }
       }
-    } catch {
-      showToast(t.networkError ?? 'Network error', true);
-    }
+    } catch { showToast(t.networkError ?? 'Network error', true); }
     setSaving(false);
   };
 
@@ -367,7 +362,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
     transition: 'background .1s', marginBottom: 2,
   };
 
-  const badge = (color: string): React.CSSProperties => ({
+  const badgeDot = (color: string): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0,
   });
@@ -427,7 +422,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
             }}>✕</button>
           </div>
 
-          {/* ── Summary badges ── */}
+          {/* Summary badges */}
           <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <span style={{
               padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
@@ -546,7 +541,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
                           onMouseEnter={e => { if (!isAssigned) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                         >
-                          <div style={badge(color)} />
+                          <div style={badgeDot(color)} />
                           <div style={{ flex: 1, overflow: 'hidden' }}>
                             <div style={{ fontSize: 12, fontWeight: 600, color: (th as any).text,
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -583,7 +578,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
           {/* ═══ MACHINES TAB ═══ */}
           {activeTab === 'machines' && (
             <>
-              {/* ★ Currently assigned to THIS cell */}
+              {/* ── Currently assigned machines in this cell ── */}
               {cellMachines.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{
@@ -606,8 +601,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
                             {machine?.name || '?'}
                           </div>
                           <div style={{ fontSize: 10, color: (th as any).textMuted }}>
-                            {machine?.category || ''}{machine?.inventory_nr ? ` · #${machine.inventory_nr}` : ''}
-                            {machine?.tonnage ? ` · ${machine.tonnage}t` : ''}
+                            {machine?.category || ''}{machine?.inventory_nr ? ` · ${machine.inventory_nr}` : ''}
                           </div>
                         </div>
                         {canEdit && (
@@ -620,11 +614,26 @@ export function CellDetailModal(props: CellDetailModalProps) {
                 </div>
               )}
 
-              {/* ★ Add machine — with availability status */}
-              {canEdit && (
+              {/* ── Machine picker: ONLY when cell has at least one task ── */}
+              {canEdit && cellTasks.length === 0 ? (
+                <div style={{
+                  marginTop: cellMachines.length > 0 ? 0 : 8,
+                  padding: '14px 16px', borderRadius: 10,
+                  background: isDark ? 'rgba(255,193,7,.08)' : '#fff8e1',
+                  border: `1px solid ${isDark ? 'rgba(255,193,7,.2)' : '#ffe082'}`,
+                  color: isDark ? '#ffd54f' : '#795548',
+                  fontSize: 13, lineHeight: 1.5,
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                }}>
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>⚠️</span>
+                  <span>
+                    {t.machineNeedsSite ?? 'Assign a task to this cell first — a delivery site is required before allocating machines.'}
+                  </span>
+                </div>
+              ) : canEdit ? (
                 <div>
                   <div style={{
-                    fontSize: 10, fontWeight: 700, color: '#42a5f5',
+                    fontSize: 10, fontWeight: 700, color: gold,
                     letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8,
                   }}>{t.addMachine ?? 'Add Machine'}</div>
                   <input
@@ -641,59 +650,52 @@ export function CellDetailModal(props: CellDetailModalProps) {
                   />
                   <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                     {filteredMachines.map(machine => {
-                      const isInThisCell = cellMachines.some(ma => ma.machine_id === machine.id);
-                      const isTakenByOther = !isInThisCell && machinesAllocatedThisDay.has(machine.id);
-                      const isUnavailable = isInThisCell || isTakenByOther;
+                      const isInCell = cellMachineIds.has(machine.id);
+                      const isTakenElsewhere = !isInCell && machinesAllocatedThisDay.has(machine.id);
+                      const isClickable = !isInCell && !isTakenElsewhere;
 
                       return (
                         <div
                           key={machine.id}
-                          onClick={() => !isUnavailable && addMachine(machine.id)}
+                          onClick={() => isClickable && addMachine(machine.id)}
                           style={{
                             ...addItemRow,
-                            opacity: isUnavailable ? 0.4 : 1,
-                            cursor: isUnavailable ? 'default' : 'pointer',
-                            background: isTakenByOther
-                              ? (isDark ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.04)')
-                              : 'transparent',
+                            opacity: isTakenElsewhere ? 0.35 : isInCell ? 0.5 : 1,
+                            cursor: isClickable ? 'pointer' : 'default',
                           }}
-                          onMouseEnter={e => {
-                            if (!isUnavailable) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)';
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.background = isTakenByOther
-                              ? (isDark ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.04)')
-                              : 'transparent';
-                          }}
+                          onMouseEnter={e => { if (isClickable) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                         >
-                          <span style={{ fontSize: 14 }}>🚜</span>
+                          <div style={{
+                            width: 28, height: 28, borderRadius: 6,
+                            background: isDark ? 'rgba(66,165,245,.1)' : 'rgba(66,165,245,.06)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 13, flexShrink: 0,
+                          }}>🚜</div>
                           <div style={{ flex: 1, overflow: 'hidden' }}>
                             <div style={{ fontSize: 12, fontWeight: 600, color: (th as any).text,
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {machine.name}
                             </div>
                             <div style={{ fontSize: 9, color: (th as any).textMuted }}>
-                              {machine.category}{machine.inventory_nr ? ` · #${machine.inventory_nr}` : ''}
+                              {machine.category}{machine.inventory_nr ? ` · ${machine.inventory_nr}` : ''}
                               {machine.tonnage ? ` · ${machine.tonnage}t` : ''}
                             </div>
                           </div>
-                          {/* ★ Status indicators */}
-                          {isInThisCell && <span style={{ color: '#42a5f5', fontSize: 13 }}>✓</span>}
-                          {isTakenByOther && (
+                          {isInCell && <span style={{ color: gold, fontSize: 13 }}>✓</span>}
+                          {isTakenElsewhere && (
                             <span style={{
-                              fontSize: 9, color: '#ef4444', fontWeight: 700,
-                              background: isDark ? 'rgba(239,68,68,.15)' : 'rgba(239,68,68,.1)',
+                              fontSize: 9, fontWeight: 700, color: '#ef4444',
+                              background: isDark ? 'rgba(239,68,68,.12)' : 'rgba(239,68,68,.08)',
                               padding: '2px 8px', borderRadius: 4,
-                            }}>
-                              {t.machineInUse ?? 'In Use'}
-                            </span>
+                            }}>{t.inUse ?? 'In Use'}</span>
                           )}
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              )}
+              ) : null}
             </>
           )}
 

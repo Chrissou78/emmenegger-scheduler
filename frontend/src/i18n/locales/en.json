@@ -387,7 +387,13 @@
   "logNoAlerts": "No open alerts",
   "logNoTransactions": "No transactions",
   "logStockTabHint": "Use the Consume/Purchase buttons above to record stock movements. Edit to change thresholds.",
-  "logQtyRequired": "Quantity is required"
+  "logQtyRequired": "Quantity is required",
+  "machineNeedsSite": "Assign a task to this cell first — a delivery site is required before allocating machines.",
+  "noMachinesAssigned": "No machines assigned",
+  "machineConflict": "Machine Conflict",
+  "addMachine": "Add Machine",
+  "searchMachines": "Search Machines",
+  "inUse": "In Use"
 
 
 }
