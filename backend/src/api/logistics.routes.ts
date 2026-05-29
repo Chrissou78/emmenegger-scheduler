@@ -25,16 +25,15 @@ logisticsRouter.get('/parts', async (req, res, next) => {
       const s = `%${search}%`;
       query = query.or(`name.ilike.${s},part_number.ilike.${s},description.ilike.${s},location.ilike.${s}`);
     }
-    if (low_stock === 'true') {
-      query = query.lte('stock_qty', supabase.rpc ? 0 : 0); // handled client-side below
-    }
+
+    // No DB-level low_stock filter — done client-side below
+    // because PostgREST can't compare column-to-column (stock_qty <= min_qty)
 
     const { data, error } = await query.order('category').order('name');
     if (error) throw error;
 
     let result = data || [];
 
-    // Filter low stock on server if col reference doesn't work via PostgREST
     if (low_stock === 'true') {
       result = result.filter((p: any) => p.stock_qty <= p.min_qty);
     }
