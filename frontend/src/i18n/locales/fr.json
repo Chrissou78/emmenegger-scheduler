@@ -387,6 +387,26 @@
   "logNoAlerts": "Aucune alerte ouverte",
   "logNoTransactions": "Aucun mouvement",
   "logStockTabHint": "Utilisez les boutons Consommer/Acheter pour enregistrer les mouvements. Modifiez pour changer les seuils.",
-  "logQtyRequired": "La quantité est requise"
-
+  "logQtyRequired": "La quantité est requise",
+  "quarter": "Trimestre",
+  "export": "Export",
+  "title": "Statistiques",
+  "teamOccupation": "Occupation de l'équipe",
+  "successRate": "Taux de réussite",
+  "absenceRate": "Taux d'absence",
+  "machineOccupation": "Utilisation des machines",
+  "available": "Disponible",
+  "maintenance": "Maintenance",
+  "slots": "Créneaux",
+  "rate": "Taux",
+  "noData": "Aucune donnée",
+  "mon": "Lu",
+  "tue": "Ma",
+  "wed": "Me",
+  "thu": "Je",
+  "fri": "Ve",
+  "sat": "Sa",
+  "weekNum": "S",
+  "quickAccess": "Accès rapide",
+  "executive2": "Directeur"
 }

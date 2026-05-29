@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "pt", "name": "Português", "flag": "🇵🇹" },
-
   "brand": "Emmenegger",
   "sub": "Despacho & Planejamento",
-
   "day": "Dia",
   "week": "Semana",
   "month": "Mês",
@@ -53,7 +51,6 @@
   "darkMode": "Modo escuro",
   "lightMode": "Modo claro",
   "language": "Idioma",
-
   "navSchedule": "Disposição",
   "navMachines": "Máquinas",
   "navTasks": "Tarefas",
@@ -66,14 +63,12 @@
   "navSettings": "Configurações",
   "navHR": "RH",
   "navProfile": "Perfil",
-
   "settings": "Configurações",
   "roles": "Funções & Permissões",
   "company": "Empresa",
   "vatCrossBorder": "IVA & Fronteiriços",
   "hierarchy": "Hierarquia",
   "languages": "Idiomas",
-
   "roleName": "Nome da função",
   "roleLabel": "Rótulo",
   "permissions": "Permissões",
@@ -83,7 +78,6 @@
   "editRole": "Editar função",
   "createRole": "Nova função",
   "deleteRole": "Excluir função",
-
   "companyName": "Nome da empresa",
   "legalForm": "Forma jurídica",
   "uid": "N° IDE",
@@ -103,7 +97,6 @@
   "vatPeriod": "Período IVA",
   "vatRate": "Taxa IVA",
   "fiscalYearStart": "Início do ano fiscal",
-
   "configLists": "Listas de configuração",
   "key": "Chave",
   "label": "Rótulo",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Tem certeza que deseja excluir este item?",
   "yes": "Sim",
   "no": "Não",
-
   "contractTypes": "Tipos de contrato",
   "salaryTypes": "Tipos de salário",
   "scheduleTypes": "Tipos de agendamento",
@@ -122,14 +114,12 @@
   "absenceCodes": "Códigos de ausência",
   "machineCategories": "Categorias de máquinas",
   "machineOperators": "Operadores de máquinas",
-
   "crossBorder": "Fronteiriços",
   "countryCode": "Código do país",
   "rateName": "Nome da taxa",
   "rateType": "Tipo de taxa",
   "percentage": "Percentagem",
   "description": "Descrição",
-
   "hierarchyDesc": "Gerenciar atribuições organizacionais",
   "teamLeader": "Líder de equipa",
   "executive": "Diretor",
@@ -142,7 +132,6 @@
   "bulkAssign": "Atribuição em massa",
   "team": "Equipa",
   "none": "Nenhum",
-
   "languageManagement": "Gestão de idiomas",
   "languageManagementDesc": "Ativar ou desativar idiomas disponíveis para a interface",
   "enabledLanguages": "Idiomas ativados",
@@ -153,7 +142,6 @@
   "languageSaved": "Configurações de idioma salvas",
   "atLeastOneLang": "Pelo menos um idioma deve estar ativado",
   "cannotDisableDefault": "O idioma padrão não pode ser desativado",
-
   "name": "Nome",
   "firstName": "Nome próprio",
   "lastName": "Apelido",
@@ -181,10 +169,8 @@
   "noExecutive": "Sem diretor",
   "selectTeamLeader": "Selecionar líder de equipa",
   "selectExecutive": "Selecionar diretor",
-
   "accessDenied": "Acesso negado",
   "noPermission": "Não tem permissão para ver esta página",
-
   "saved": "Salvo",
   "error": "Erro",
   "success": "Sucesso",
@@ -212,7 +198,6 @@
   "tier3": "Diretores",
   "tier2": "Líderes de equipa",
   "tier1": "Funcionários",
-
   "signIn": "Entrar",
   "signingIn": "A entrar...",
   "forgotPassword": "Esqueceu a senha?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Não tem acesso ao planeamento",
   "noAccessPage": "Não tem acesso a esta página",
   "noEmployeesForTL": "Sem funcionários para este líder de equipa",
-
   "statsGlobal": "Estatísticas globais",
   "statsPerimeter": "Estatísticas de perímetro",
   "statsTeam": "Estatísticas de equipa",
@@ -269,12 +253,10 @@
   "taskCompletion": "Conclusão de tarefas",
   "attendance": "Assiduidade",
   "machineUtilization": "Utilização de máquinas",
-
   "navMyWeek": "A minha semana",
   "customerMargin": "Margem de cliente",
   "teamPerformance": "Desempenho da equipa",
   "personalStats": "Estatísticas pessoais",
-
   "crm": "CRM",
   "crmDashboard": "Painel",
   "crmMyCustomers": "Os meus clientes",
@@ -387,6 +369,26 @@
   "logNoAlerts": "Sem alertas abertos",
   "logNoTransactions": "Sem movimentos",
   "logStockTabHint": "Use os botões Consumir/Comprar para registar movimentos. Edite para alterar limites.",
-  "logQtyRequired": "Quantidade é obrigatória"
-
+  "logQtyRequired": "Quantidade é obrigatória",
+  "quarter": "Trimestre",
+  "export": "Exportar",
+  "title": "Estatísticas",
+  "teamOccupation": "Ocupação da equipa",
+  "successRate": "Taxa de sucesso",
+  "absenceRate": "Taxa de ausência",
+  "machineOccupation": "Utilização de máquinas",
+  "available": "Disponível",
+  "maintenance": "Manutenção",
+  "slots": "Slots",
+  "rate": "Taxa",
+  "noData": "Sem dados",
+  "mon": "Seg",
+  "tue": "Ter",
+  "wed": "Qua",
+  "thu": "Qui",
+  "fri": "Sex",
+  "sat": "Sáb",
+  "weekNum": "S",
+  "quickAccess": "Acesso rápido",
+  "executive2": "Diretor"
 }

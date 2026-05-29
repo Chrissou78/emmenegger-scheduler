@@ -394,6 +394,26 @@
   "addMachine": "Add Machine",
   "searchMachines": "Search Machines",
   "inUse": "In Use"
-
-
+,
+  "quarter": "Quarter",
+  "export": "Export",
+  "title": "Statistics",
+  "teamOccupation": "Team Occupation",
+  "successRate": "Success Rate",
+  "absenceRate": "Absence Rate",
+  "machineOccupation": "Machine Occupation",
+  "available": "Available",
+  "maintenance": "Maintenance",
+  "slots": "Slots",
+  "rate": "Rate",
+  "noData": "No data",
+  "mon": "Mon",
+  "tue": "Tue",
+  "wed": "Wed",
+  "thu": "Thu",
+  "fri": "Fri",
+  "sat": "Sat",
+  "weekNum": "W",
+  "quickAccess": "Quick Access",
+  "executive2": "Executive"
 }

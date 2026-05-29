@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "nl", "name": "Nederlands", "flag": "🇳🇱" },
-
   "brand": "Emmenegger",
   "sub": "Inroostering & Planning",
-
   "day": "Dag",
   "week": "Week",
   "month": "Maand",
@@ -53,7 +51,6 @@
   "darkMode": "Donkere modus",
   "lightMode": "Lichte modus",
   "language": "Taal",
-
   "navSchedule": "Planning",
   "navMachines": "Machines",
   "navTasks": "Opdrachten",
@@ -66,14 +63,12 @@
   "navSettings": "Instellingen",
   "navHR": "HR",
   "navProfile": "Profiel",
-
   "settings": "Instellingen",
   "roles": "Rollen & Rechten",
   "company": "Bedrijf",
   "vatCrossBorder": "BTW & Grensarbeiders",
   "hierarchy": "Hiërarchie",
   "languages": "Talen",
-
   "roleName": "Rolnaam",
   "roleLabel": "Label",
   "permissions": "Rechten",
@@ -83,7 +78,6 @@
   "editRole": "Rol bewerken",
   "createRole": "Nieuwe rol",
   "deleteRole": "Rol verwijderen",
-
   "companyName": "Bedrijfsnaam",
   "legalForm": "Rechtsvorm",
   "uid": "UID-nr.",
@@ -103,7 +97,6 @@
   "vatPeriod": "BTW-periode",
   "vatRate": "BTW-tarief",
   "fiscalYearStart": "Begin boekjaar",
-
   "configLists": "Configuratielijsten",
   "key": "Sleutel",
   "label": "Label",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Weet u zeker dat u dit item wilt verwijderen?",
   "yes": "Ja",
   "no": "Nee",
-
   "contractTypes": "Contracttypen",
   "salaryTypes": "Salaristypen",
   "scheduleTypes": "Planningtypen",
@@ -122,14 +114,12 @@
   "absenceCodes": "Afwezigheidscodes",
   "machineCategories": "Machinecategorieën",
   "machineOperators": "Machineoperators",
-
   "crossBorder": "Grensarbeiders",
   "countryCode": "Landcode",
   "rateName": "Tariefnaam",
   "rateType": "Tarieftype",
   "percentage": "Percentage",
   "description": "Beschrijving",
-
   "hierarchyDesc": "Organisatorische toewijzingen beheren",
   "teamLeader": "Teamleider",
   "executive": "Directeur",
@@ -142,7 +132,6 @@
   "bulkAssign": "Massa-toewijzing",
   "team": "Team",
   "none": "Geen",
-
   "languageManagement": "Taalbeheer",
   "languageManagementDesc": "Beschikbare talen voor de interface in- of uitschakelen",
   "enabledLanguages": "Ingeschakelde talen",
@@ -153,7 +142,6 @@
   "languageSaved": "Taalinstellingen opgeslagen",
   "atLeastOneLang": "Minstens één taal moet ingeschakeld zijn",
   "cannotDisableDefault": "De standaardtaal kan niet worden uitgeschakeld",
-
   "name": "Naam",
   "firstName": "Voornaam",
   "lastName": "Achternaam",
@@ -181,10 +169,8 @@
   "noExecutive": "Geen directeur",
   "selectTeamLeader": "Teamleider selecteren",
   "selectExecutive": "Directeur selecteren",
-
   "accessDenied": "Toegang geweigerd",
   "noPermission": "U heeft geen toestemming om deze pagina te bekijken",
-
   "saved": "Opgeslagen",
   "error": "Fout",
   "success": "Succes",
@@ -212,7 +198,6 @@
   "tier3": "Directeuren",
   "tier2": "Teamleiders",
   "tier1": "Medewerkers",
-
   "signIn": "Inloggen",
   "signingIn": "Bezig met inloggen...",
   "forgotPassword": "Wachtwoord vergeten?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "U heeft geen toegang tot de planning",
   "noAccessPage": "U heeft geen toegang tot deze pagina",
   "noEmployeesForTL": "Geen medewerkers voor deze teamleider",
-
   "statsGlobal": "Globale statistieken",
   "statsPerimeter": "Perimeterstatistieken",
   "statsTeam": "Teamstatistieken",
@@ -269,12 +253,10 @@
   "taskCompletion": "Taakvoltooiing",
   "attendance": "Aanwezigheid",
   "machineUtilization": "Machinebenutting",
-
   "navMyWeek": "Mijn week",
   "customerMargin": "Klantmarge",
   "teamPerformance": "Teamprestaties",
   "personalStats": "Persoonlijke statistieken",
-
   "crm": "CRM",
   "crmDashboard": "Dashboard",
   "crmMyCustomers": "Mijn klanten",
@@ -343,5 +325,26 @@
   "annual": "Jaarlijks",
   "monthly": "Maandelijks",
   "total": "Totaal",
-  "simulate": "Simulatie"
+  "simulate": "Simulatie",
+  "quarter": "Kwartaal",
+  "export": "Exporteren",
+  "title": "Statistieken",
+  "teamOccupation": "Teambezetting",
+  "successRate": "Slagingspercentage",
+  "absenceRate": "Afwezigheidspercentage",
+  "machineOccupation": "Machinebenutting",
+  "available": "Beschikbaar",
+  "maintenance": "Onderhoud",
+  "slots": "Slots",
+  "rate": "Percentage",
+  "noData": "Geen gegevens",
+  "mon": "Ma",
+  "tue": "Di",
+  "wed": "Wo",
+  "thu": "Do",
+  "fri": "Vr",
+  "sat": "Za",
+  "weekNum": "W",
+  "quickAccess": "Snelle toegang",
+  "executive2": "Directeur"
 }
