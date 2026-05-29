@@ -218,14 +218,17 @@ export function CellDetailModal(props: CellDetailModalProps) {
       return;
     }
 
-    // Find a task to link the machine to (use first task in cell, or none)
     const siteId = cellTasks[0]?.task_id || undefined;
 
     try {
       const r = await fetch(`${apiUrl}/api/v1/machines/allocations`, {
         method: 'POST', headers: authHeaders,
         body: JSON.stringify({
-          machineId, siteId, weekId, dayOfWeek: day,
+          machineId,
+          siteId,
+          weekId,
+          dayOfWeek: day,
+          userId: emp.id,      // ★ ADD THIS — links the machine to the employee
         }),
       });
       if (r.ok) {

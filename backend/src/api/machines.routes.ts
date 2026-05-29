@@ -4,6 +4,137 @@ import { requireRole } from '../middleware/auth';
 
 export const machinesRouter = Router();
 
+/* ================================================================== */
+/*  MACHINE ALLOCATIONS — must be BEFORE /:id routes                   */
+/* ================================================================== */
+
+// ─── GET /api/v1/machines/allocations ───
+machinesRouter.get('/allocations', async (req, res, next) => {
+  try {
+    const { weekId, machineId, machine_id } = req.query;
+    const mid = machineId || machine_id;
+
+    let query = supabase.from('machine_allocations').select(`
+      id,
+      machine_id,
+      site_id,
+      week_id,
+      day_of_week,
+      user_id,
+      created_by_id,
+      created_at,
+      machine:machines(*),
+      site:tasks(id, name, code, location, color)
+    `);
+
+    if (weekId)  query = query.eq('week_id', weekId);
+    if (mid)     query = query.eq('machine_id', mid);
+
+    const { data: allocations, error } = await query.order('day_of_week', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({ data: allocations || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/v1/machines/allocations ───
+machinesRouter.post('/allocations', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+  try {
+    const {
+      machineId, machine_id,
+      siteId, site_id,
+      weekId, week_id,
+      dayOfWeek, day_of_week,
+      userId, user_id,
+    } = req.body;
+
+    const mId  = machineId  || machine_id;
+    const sId  = siteId     || site_id || null;
+    const wId  = weekId     || week_id;
+    const dow  = dayOfWeek  ?? day_of_week;
+    const uId  = userId     || user_id || null;
+
+    if (!mId || !wId || dow === undefined || dow === null) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'machineId, weekId, and dayOfWeek are required',
+      });
+    }
+
+    const { data: existing, error: checkErr } = await supabase
+      .from('machine_allocations')
+      .select('id')
+      .eq('machine_id', mId)
+      .eq('week_id', wId)
+      .eq('day_of_week', dow)
+      .maybeSingle();
+
+    if (checkErr) throw checkErr;
+
+    if (existing) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Machine already allocated on this day',
+      });
+    }
+
+    const insertObj: any = {
+      machine_id:    mId,
+      week_id:       wId,
+      day_of_week:   dow,
+      created_by_id: req.user!.userId,
+    };
+    if (sId) insertObj.site_id = sId;
+    if (uId) insertObj.user_id = uId;
+
+    const { data: allocation, error } = await supabase
+      .from('machine_allocations')
+      .insert([insertObj])
+      .select(`
+        id,
+        machine_id,
+        site_id,
+        week_id,
+        day_of_week,
+        user_id,
+        created_by_id,
+        created_at,
+        machine:machines(*),
+        site:tasks(id, name, code)
+      `)
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({ data: allocation });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── DELETE /api/v1/machines/allocations/:id ───
+machinesRouter.delete('/allocations/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+  try {
+    const { error } = await supabase
+      .from('machine_allocations')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
+
+    res.json({ data: { deleted: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ================================================================== */
+/*  MACHINES CRUD — /:id routes AFTER /allocations                     */
+/* ================================================================== */
+
 // ─── GET /api/v1/machines ───
 machinesRouter.get('/', async (req, res, next) => {
   try {
@@ -34,9 +165,6 @@ machinesRouter.get('/', async (req, res, next) => {
 // ─── GET /api/v1/machines/:id ───
 machinesRouter.get('/:id', async (req, res, next) => {
   try {
-    // Guard: skip if the "id" looks like a sub-route keyword
-    if (req.params.id === 'allocations') return next();
-
     const { data, error } = await supabase
       .from('machines')
       .select('*')
@@ -136,76 +264,7 @@ machinesRouter.delete('/:id', requireRole('GLOBAL_MANAGER'), async (req, res, ne
   }
 });
 
-/* ================================================================== */
-/*  MACHINE ALLOCATIONS                                                */
-/* ================================================================== */
-
-// ─── GET /api/v1/machines/allocations ───
-machinesRouter.post('/allocations', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
-  try {
-    const { machineId, machine_id, siteId, site_id, weekId, week_id, dayOfWeek, day_of_week } = req.body;
-
-    const mId  = machineId  || machine_id;
-    const sId  = siteId     || site_id || null;   // ★ optional — can be null
-    const wId  = weekId     || week_id;
-    const dow  = dayOfWeek  ?? day_of_week;
-
-    // ★ siteId is NOT required — machines can be allocated without a linked task
-    if (!mId || !wId || dow === undefined || dow === null) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'machineId, weekId, and dayOfWeek are required',
-      });
-    }
-
-    const { data: existing, error: checkErr } = await supabase
-      .from('machine_allocations')
-      .select('id')
-      .eq('machine_id', mId)
-      .eq('week_id', wId)
-      .eq('day_of_week', dow)
-      .maybeSingle();
-
-    if (checkErr) throw checkErr;
-
-    if (existing) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Machine already allocated on this day',
-      });
-    }
-
-    const { data: allocation, error } = await supabase
-      .from('machine_allocations')
-      .insert([{
-        machine_id:    mId,
-        site_id:       sId,              // ★ null is OK
-        week_id:       wId,
-        day_of_week:   dow,
-        created_by_id: req.user!.userId,
-      }])
-      .select(`
-        id,
-        machine_id,
-        site_id,
-        week_id,
-        day_of_week,
-        created_by_id,
-        created_at,
-        machine:machines(*),
-        site:tasks(id, name, code)
-      `)
-      .single();
-
-    if (error) throw error;
-
-    res.status(201).json({ data: allocation });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ★ GET /api/v1/machines/:machineId/allocations — per-machine history
+// ─── GET /api/v1/machines/:machineId/allocations — per-machine history ───
 machinesRouter.get('/:machineId/allocations', async (req, res, next) => {
   try {
     const { data, error } = await supabase
@@ -228,89 +287,6 @@ machinesRouter.get('/:machineId/allocations', async (req, res, next) => {
     if (error) throw error;
 
     res.json({ data: data || [] });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ─── POST /api/v1/machines/allocations ── ★ FIXED ───
-machinesRouter.post('/allocations', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
-  try {
-    const { machineId, machine_id, siteId, site_id, weekId, week_id, dayOfWeek, day_of_week } = req.body;
-
-    // Normalize — accept both camelCase and snake_case
-    const mId  = machineId  || machine_id;
-    const sId  = siteId     || site_id;
-    const wId  = weekId     || week_id;
-    const dow  = dayOfWeek  ?? day_of_week;
-
-    if (!mId || !sId || !wId || dow === undefined || dow === null) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'machineId, siteId, weekId, and dayOfWeek are required',
-      });
-    }
-
-    // ★ FIX: Use .maybeSingle() instead of .single() to avoid PGRST116 error
-    //    .single() throws when 0 rows are found; .maybeSingle() returns null.
-    const { data: existing, error: checkErr } = await supabase
-      .from('machine_allocations')
-      .select('id')
-      .eq('machine_id', mId)
-      .eq('week_id', wId)
-      .eq('day_of_week', dow)
-      .maybeSingle();
-
-    if (checkErr) throw checkErr;
-
-    if (existing) {
-      return res.status(409).json({
-        error: 'Conflict',
-        message: 'Machine already allocated on this day',
-      });
-    }
-
-    const { data: allocation, error } = await supabase
-      .from('machine_allocations')
-      .insert([{
-        machine_id:    mId,
-        site_id:       sId,
-        week_id:       wId,
-        day_of_week:   dow,
-        created_by_id: req.user!.userId,
-      }])
-      .select(`
-        id,
-        machine_id,
-        site_id,
-        week_id,
-        day_of_week,
-        created_by_id,
-        created_at,
-        machine:machines(*),
-        site:tasks(id, name, code)
-      `)
-      .single();
-
-    if (error) throw error;
-
-    res.status(201).json({ data: allocation });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ─── DELETE /api/v1/machines/allocations/:id ───
-machinesRouter.delete('/allocations/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
-  try {
-    const { error } = await supabase
-      .from('machine_allocations')
-      .delete()
-      .eq('id', req.params.id);
-
-    if (error) throw error;
-
-    res.json({ data: { deleted: true } });
   } catch (err) {
     next(err);
   }
