@@ -141,31 +141,65 @@ machinesRouter.delete('/:id', requireRole('GLOBAL_MANAGER'), async (req, res, ne
 /* ================================================================== */
 
 // ─── GET /api/v1/machines/allocations ───
-machinesRouter.get('/allocations', async (req, res, next) => {
+machinesRouter.post('/allocations', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
   try {
-    const { weekId, machineId, machine_id } = req.query;
-    const mid = machineId || machine_id;
+    const { machineId, machine_id, siteId, site_id, weekId, week_id, dayOfWeek, day_of_week } = req.body;
 
-    let query = supabase.from('machine_allocations').select(`
-      id,
-      machine_id,
-      site_id,
-      week_id,
-      day_of_week,
-      created_by_id,
-      created_at,
-      machine:machines(*),
-      site:tasks(id, name, code, location, color)
-    `);
+    const mId  = machineId  || machine_id;
+    const sId  = siteId     || site_id || null;   // ★ optional — can be null
+    const wId  = weekId     || week_id;
+    const dow  = dayOfWeek  ?? day_of_week;
 
-    if (weekId)  query = query.eq('week_id', weekId);
-    if (mid)     query = query.eq('machine_id', mid);
+    // ★ siteId is NOT required — machines can be allocated without a linked task
+    if (!mId || !wId || dow === undefined || dow === null) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'machineId, weekId, and dayOfWeek are required',
+      });
+    }
 
-    const { data: allocations, error } = await query.order('day_of_week', { ascending: true });
+    const { data: existing, error: checkErr } = await supabase
+      .from('machine_allocations')
+      .select('id')
+      .eq('machine_id', mId)
+      .eq('week_id', wId)
+      .eq('day_of_week', dow)
+      .maybeSingle();
+
+    if (checkErr) throw checkErr;
+
+    if (existing) {
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Machine already allocated on this day',
+      });
+    }
+
+    const { data: allocation, error } = await supabase
+      .from('machine_allocations')
+      .insert([{
+        machine_id:    mId,
+        site_id:       sId,              // ★ null is OK
+        week_id:       wId,
+        day_of_week:   dow,
+        created_by_id: req.user!.userId,
+      }])
+      .select(`
+        id,
+        machine_id,
+        site_id,
+        week_id,
+        day_of_week,
+        created_by_id,
+        created_at,
+        machine:machines(*),
+        site:tasks(id, name, code)
+      `)
+      .single();
 
     if (error) throw error;
 
-    res.json({ data: allocations || [] });
+    res.status(201).json({ data: allocation });
   } catch (err) {
     next(err);
   }
