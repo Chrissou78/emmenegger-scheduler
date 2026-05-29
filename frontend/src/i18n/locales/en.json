@@ -396,5 +396,15 @@
   "sat": "Sat",
   "weekNum": "W",
   "quickAccess": "Quick Access",
-  "executive2": "Executive"
+  "executive2": "Executive",
+  "jobs": "Jobs",
+  "addJob": "Add Job",
+  "saveJob": "Save Job",
+  "maxJobs": "Maximum 2 jobs per cell",
+  "pickTask": "Select task",
+  "pickCustomer": "Select customer",
+  "pickMachines": "Attach machines",
+  "skipCustomer": "Skip — internal task (no customer)",
+  "intern": "Internal",
+  "searchTasks": "Search tasks..."
 }

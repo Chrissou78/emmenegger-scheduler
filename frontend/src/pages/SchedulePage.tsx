@@ -1,3 +1,4 @@
+// frontend/src/pages/SchedulePage.tsx
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { themes, ABS } from '../i18n/translations';
@@ -13,29 +14,48 @@ import {
   type Permission,
 } from '../../../shared/constants/roles';
 import { getTranslations, type LangCode } from '../i18n';
-import { CellDetailModal } from '../components/CellDetailModal'; // ★ NEW
+import { CellDetailModal } from '../components/CellDetailModal';
 
 /* ─── Theme type ─── */
 type Theme = typeof themes.dark;
 
 /* ─── Types ─── */
-interface Allocation { id: string; user_id: string; task_id: string; day_of_week: number; week_id: string; time_slot: number; }
-interface User { id: string; first_name: string; last_name: string; department: string; departments?: string[]; role?: string; team_leader_id?: string | null; executive_id?: string | null; }
+interface User {
+  id: string; first_name: string; last_name: string; department: string;
+  departments?: string[]; role?: string; team_leader_id?: string | null; executive_id?: string | null;
+}
 interface Week { id: string; week_number: number; year: number; schedule_type: string; status: string; }
-interface Task { id: string; code: string; name: string; color: string; schedule_type: string; status?: string; customer?: { id: string; name: string } | null; }
+interface Task {
+  id: string; code: string; name: string; color: string; schedule_type: string; status?: string;
+  customer_id?: string;
+  customer?: { id: string; name: string; city?: string } | null;
+}
+interface Customer {
+  id: string; name: string; company_name?: string; address?: string;
+  street?: string; city?: string; postal_code?: string;
+  contact_name?: string; contact_phone?: string;
+}
 interface Machine {
   id: string; name: string; category: string; status: string;
   inventory_nr?: string; tonnage?: number; is_active?: boolean;
 }
-
-interface MachineAllocation {
-  id: string; machine_id: string; user_id?: string; task_id?: string;
-  week_id: string;
-  day_of_week: number;
-  date?: string; start_time?: string; end_time?: string;
+interface JobMachine {
+  id: string;
+  machine_id: string;
   machine?: Machine;
 }
-
+interface Job {
+  id: string;
+  week_id: string;
+  user_id: string;
+  day_of_week: number;
+  time_slot: number;
+  task_id: string;
+  customer_id?: string | null;
+  notes?: string | null;
+  task?: Task;
+  machines?: JobMachine[];
+}
 interface AbsenceRecord {
   id: string;
   user_id: string;
@@ -46,9 +66,8 @@ interface AbsenceRecord {
   week_id?: string;
   day_of_week?: number;
 }
-const API = import.meta.env.VITE_API_URL || '';
 
-/* ─── Pagination constant ─── */
+const API = import.meta.env.VITE_API_URL || '';
 const PAGE_SIZE = 20;
 
 /* ─── Color palette ─── */
@@ -113,27 +132,17 @@ export function SchedulePage() {
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [rawAllocs, setRawAllocs] = useState<Allocation[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
 
   const [selectedTeamLeaderId, setSelectedTeamLeaderId] = useState<string | null>(null);
-
-  // ★ Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
-  // ★ NEW — Machines, machine allocations, absences
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [machineAllocs, setMachineAllocs] = useState<MachineAllocation[]>([]);
-  const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
-
-  // ★ NEW — Cell detail modal state (replaces single-cell picker for click)
+  // Cell detail modal
   const [cellModal, setCellModal] = useState<{ userId: string; day: number } | null>(null);
-
-  // Single cell picker (kept for legacy / quick-add via right-click or similar)
-  const [picker, setPicker] = useState<{ userId: string; day: number; rect: DOMRect } | null>(null);
-  const [pickerSearch, setPickerSearch] = useState('');
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   // Bulk picker (column / row)
   const [bulkPicker, setBulkPicker] = useState<{ type: 'day' | 'employee'; day?: number; userId?: string; rect: DOMRect } | null>(null);
@@ -141,9 +150,6 @@ export function SchedulePage() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const bulkRef = useRef<HTMLDivElement>(null);
   const bulkSearchRef = useRef<HTMLInputElement>(null);
-
-  // Absence modal
-  const [absModal, setAbsModal] = useState<{ userId: string; day: number } | null>(null);
 
   const dates = getWeekDates(weekOff);
   const kw = getKW(dates[0]);
@@ -154,6 +160,7 @@ export function SchedulePage() {
     'Content-Type': 'application/json',
   }), [token]);
 
+  /* ─── Derived data ─── */
   const teamLeaders = useMemo(() =>
     allUsers.filter(u => {
       const r = (u.role || '').toUpperCase();
@@ -179,10 +186,8 @@ export function SchedulePage() {
 
   const emps = useMemo(() => users.filter(u => dept === 'all' || u.department === dept), [users, dept]);
 
-  // ★ Reset page to 1 when filters change
   useEffect(() => { setCurrentPage(1); }, [dept, selectedTeamLeaderId, weekOff, scheduleScope]);
 
-  // ★ Pagination derived values
   const totalPages = useMemo(() => Math.max(1, Math.ceil(emps.length / PAGE_SIZE)), [emps.length]);
   const pagedEmps = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -192,42 +197,50 @@ export function SchedulePage() {
   const matchingWeeks = useMemo(() => weeks.filter(w => w.week_number === kw && w.year === year), [weeks, kw, year]);
   const weekIds = useMemo(() => new Set(matchingWeeks.map(w => w.id)), [matchingWeeks]);
 
-  const allocMap = useMemo(() => {
-    const m: Record<string, Record<number, { taskIds: string[]; allocIds: string[] }>> = {};
-    rawAllocs.forEach(a => {
-      if (!weekIds.has(a.week_id)) return;
-      if (!m[a.user_id]) m[a.user_id] = {};
-      if (!m[a.user_id][a.day_of_week]) m[a.user_id][a.day_of_week] = { taskIds: [], allocIds: [] };
-      if (!m[a.user_id][a.day_of_week].taskIds.includes(a.task_id)) {
-        m[a.user_id][a.day_of_week].taskIds.push(a.task_id);
-        m[a.user_id][a.day_of_week].allocIds.push(a.id);
-      }
-    });
-    return m;
-  }, [rawAllocs, weekIds]);
-
   const taskById = useMemo(() => {
     const m: Record<string, Task> = {};
     tasks.forEach(tk => { m[tk.id] = tk; });
     return m;
   }, [tasks]);
 
-  // ★ NEW — machine lookup
-  const machineById = useMemo(() => {
-    const m: Record<string, Machine> = {};
-    machines.forEach(mc => { m[mc.id] = mc; });
+  // ── Job-based maps ──
+  const jobMap = useMemo(() => {
+    const m: Record<string, Record<number, Job[]>> = {};
+    jobs.forEach(j => {
+      if (!weekIds.has(j.week_id)) return;
+      if (!m[j.user_id]) m[j.user_id] = {};
+      if (!m[j.user_id][j.day_of_week]) m[j.user_id][j.day_of_week] = [];
+      m[j.user_id][j.day_of_week].push(j);
+    });
+    // Sort by time_slot
+    Object.values(m).forEach(ud => Object.values(ud).forEach(arr => arr.sort((a, b) => a.time_slot - b.time_slot)));
     return m;
-  }, [machines]);
+  }, [jobs, weekIds]);
+
+  const getCellJobs = useCallback((userId: string, day: number): Job[] => {
+    return jobMap[userId]?.[day] || [];
+  }, [jobMap]);
 
   const totalSlots = useMemo(() =>
-    Object.values(allocMap).reduce((s, u) => s + Object.values(u).reduce((ss, d) => ss + d.taskIds.length, 0), 0),
-  [allocMap]);
+    Object.values(jobMap).reduce((s, u) => s + Object.values(u).reduce((ss, arr) => ss + arr.length, 0), 0),
+  [jobMap]);
 
   const activeTaskIds = useMemo(() => {
     const s = new Set<string>();
-    Object.values(allocMap).forEach(u => Object.values(u).forEach(d => d.taskIds.forEach(id => s.add(id))));
+    Object.values(jobMap).forEach(u => Object.values(u).forEach(arr => arr.forEach(j => s.add(j.task_id))));
     return s;
-  }, [allocMap]);
+  }, [jobMap]);
+
+  const getCellAbsences = useCallback((userId: string, day: number): AbsenceRecord[] => {
+    if (!dates[day]) return [];
+    const dateStr = format(dates[day], 'yyyy-MM-dd');
+    return absenceRecords.filter(ab =>
+      ab.user_id === userId && (
+        ab.date === dateStr ||
+        (ab.day_of_week === day && ab.week_id && weekIds.has(ab.week_id))
+      )
+    );
+  }, [absenceRecords, dates, weekIds]);
 
   const showToast = useCallback((msg: string, err = false) => {
     setToast({ msg, err });
@@ -249,21 +262,14 @@ export function SchedulePage() {
       setAllUsers(d.data || d.items || d || []);
     } catch {}
   };
-  const fetchAllocations = async () => {
-    if (matchingWeeks.length === 0) { setRawAllocs([]); return; }
-    const all: Allocation[] = [];
-    for (const w of matchingWeeks) {
-      try {
-        const r = await fetch(`${API}/api/v1/allocations?week_id=${w.id}`, { headers: authHeaders });
-        if (!r.ok) continue;
-        const d = await r.json();
-        if (Array.isArray(d.data)) all.push(...d.data);
-      } catch {}
-    }
-    setRawAllocs(all);
+  const fetchCustomers = async () => {
+    try {
+      const r = await fetch(`${API}/api/v1/customers?limit=200`, { headers: authHeaders });
+      if (!r.ok) return;
+      const d = await r.json();
+      setCustomers(Array.isArray(d) ? d : d.data || []);
+    } catch {}
   };
-
-  // ★ NEW — fetch machines
   const fetchMachines = async () => {
     try {
       const r = await fetch(`${API}/api/v1/machines`, { headers: authHeaders });
@@ -272,24 +278,19 @@ export function SchedulePage() {
       setMachines(Array.isArray(d) ? d : d.data || []);
     } catch {}
   };
-
-  const fetchMachineAllocations = async () => {
-    if (matchingWeeks.length === 0) { setMachineAllocs([]); return; }
-    const all: MachineAllocation[] = [];
+  const fetchJobs = async () => {
+    if (matchingWeeks.length === 0) { setJobs([]); return; }
+    const all: Job[] = [];
     for (const w of matchingWeeks) {
       try {
-        const r = await fetch(`${API}/api/v1/machines/allocations?weekId=${w.id}`, { headers: authHeaders });
+        const r = await fetch(`${API}/api/v1/jobs?weekId=${w.id}`, { headers: authHeaders });
         if (!r.ok) continue;
         const d = await r.json();
-        const arr = Array.isArray(d) ? d : d.data || [];
-        // Ensure week_id is always set
-        all.push(...arr.map((ma: any) => ({ ...ma, week_id: ma.week_id || w.id })));
+        if (Array.isArray(d.data)) all.push(...d.data);
       } catch {}
     }
-    setMachineAllocs(all);
+    setJobs(all);
   };
-
-  // ★ NEW — fetch absence records for the current week
   const fetchAbsenceRecords = async () => {
     if (dates.length === 0) { setAbsenceRecords([]); return; }
     try {
@@ -302,48 +303,18 @@ export function SchedulePage() {
     } catch {}
   };
 
-  // ★ NEW — refresh all cell-related data (called by modal after changes)
   const refreshCellData = useCallback(async () => {
-    await Promise.all([fetchAllocations(), fetchMachineAllocations(), fetchAbsenceRecords()]);
+    await Promise.all([fetchJobs(), fetchAbsenceRecords()]);
   }, [matchingWeeks, dates, authHeaders]);
 
-  // ★ NEW — helpers to get cell-specific machine allocs and absences
-  const getCellMachineAllocs = useCallback((userId: string, day: number): MachineAllocation[] => {
-    return machineAllocs.filter(ma =>
-      ma.day_of_week === day &&
-      ma.user_id === userId &&
-      (!ma.week_id || weekIds.has(ma.week_id))
-    );
-  }, [machineAllocs, weekIds]);
-
-  const getCellAbsences = useCallback((userId: string, day: number): AbsenceRecord[] => {
-    const dateStr = format(dates[day], 'yyyy-MM-dd');
-    return absenceRecords.filter(ab =>
-      ab.user_id === userId && (
-        ab.date === dateStr ||
-        (ab.day_of_week === day && ab.week_id && weekIds.has(ab.week_id))
-      )
-    );
-  }, [absenceRecords, dates, weekIds]);
-
-  useEffect(() => { fetchWeeks(); fetchTasks(); fetchUsers(); fetchMachines(); }, []); // ★ added fetchMachines
+  /* ─── Initial + week-change fetches ─── */
+  useEffect(() => { fetchWeeks(); fetchTasks(); fetchUsers(); fetchMachines(); fetchCustomers(); }, []);
   useEffect(() => {
-    if (weeks.length > 0) {
-      fetchAllocations();
-      fetchMachineAllocations();  // ★ NEW
-      fetchAbsenceRecords();      // ★ NEW
-    }
+    if (weeks.length > 0) { fetchJobs(); fetchAbsenceRecords(); }
   }, [weekOff, weeks]);
   useEffect(() => { if (toast) { const tm = setTimeout(() => setToast(null), 3000); return () => clearTimeout(tm); } }, [toast]);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPicker(null);
-    };
-    if (picker) { document.addEventListener('mousedown', handler); return () => document.removeEventListener('mousedown', handler); }
-  }, [picker]);
-  useEffect(() => { if (picker && searchRef.current) searchRef.current.focus(); }, [picker]);
-
+  // Close bulk picker on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (bulkRef.current && !bulkRef.current.contains(e.target as Node)) setBulkPicker(null);
@@ -353,68 +324,24 @@ export function SchedulePage() {
   useEffect(() => { if (bulkPicker && bulkSearchRef.current) bulkSearchRef.current.focus(); }, [bulkPicker]);
 
   /* ─── Cell helpers ─── */
-  const getCell = (userId: string, day: number) => allocMap[userId]?.[day] || { taskIds: [], allocIds: [] };
-
   const getTaskColor = (taskId: string) => {
     const task = taskById[taskId];
     return task?.color && task.color !== '#8B7355' ? task.color : hashColor(taskId);
   };
 
-  /* ─── Single cell actions ─── */
-  // ★ CHANGED: cell click now opens the CellDetailModal
   const openCellModal = (userId: string, day: number) => {
     if (!canEdit && !canView) return;
     setBulkPicker(null);
-    setPicker(null);
     setCellModal({ userId, day });
   };
 
-  const assignTask = async (taskId: string) => {
-    if (!picker) return;
-    const { userId, day } = picker;
-    const cell = getCell(userId, day);
-    if (cell.taskIds.includes(taskId)) { setPicker(null); return; }
-    if (cell.taskIds.length >= 2) { showToast(t.max2 ?? 'Max 2', true); setPicker(null); return; }
-
-    const task = taskById[taskId];
-    const week = matchingWeeks.find(w => task && w.schedule_type === task.schedule_type) || matchingWeeks[0];
-    if (!week) { showToast(t.weekNotFound ?? 'Week not found', true); setPicker(null); return; }
-
-    try {
-      const r = await fetch(`${API}/api/v1/allocations`, {
-        method: 'POST', headers: authHeaders,
-        body: JSON.stringify({ user_id: userId, task_id: taskId, day_of_week: day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
-      });
-      if (r.ok) {
-        const empName = allUsers.find(u => u.id === userId)?.first_name || '';
-        showToast(`${task?.name || ''} → ${empName}`);
-        await fetchAllocations();
-      } else { showToast(t.error ?? 'Error', true); }
-    } catch { showToast(t.networkError ?? 'Network error', true); }
-    setPicker(null);
-  };
-
-  const removeAlloc = async (allocId: string) => {
+  /* ─── Remove job (direct from grid × button) ─── */
+  const removeJob = async (jobId: string) => {
     if (!canEdit) return;
     try {
-      const r = await fetch(`${API}/api/v1/allocations/${allocId}`, { method: 'DELETE', headers: authHeaders });
-      if (r.ok) { showToast(t.removed ?? 'Removed'); await fetchAllocations(); }
+      const r = await fetch(`${API}/api/v1/jobs/${jobId}`, { method: 'DELETE', headers: authHeaders });
+      if (r.ok) { showToast(t.removed ?? 'Removed'); await fetchJobs(); }
     } catch { showToast(t.networkError ?? 'Network error', true); }
-  };
-
-  const assignAbsence = async (userId: string, day: number, code: string) => {
-    if (!canEdit) return;
-    try {
-      const r = await fetch(`${API}/api/v1/absences`, {
-        method: 'POST', headers: authHeaders,
-        body: JSON.stringify({ userId, date: format(dates[day], 'yyyy-MM-dd'), absenceCode: parseInt(code), source: 'MANUAL' }),
-      });
-      if (r.ok) {
-        showToast(`${(t.abs as any)?.[code] ?? code} → ${allUsers.find(u => u.id === userId)?.first_name || ''}`);
-      }
-    } catch { showToast(t.networkError ?? 'Network error', true); }
-    setAbsModal(null);
-    setPicker(null);
   };
 
   /* ─── Bulk actions ─── */
@@ -429,31 +356,37 @@ export function SchedulePage() {
 
     if (bulkPicker.type === 'day' && bulkPicker.day !== undefined) {
       for (const emp of emps) {
-        const cell = getCell(emp.id, bulkPicker.day!);
-        if (cell.taskIds.length >= 2 || cell.taskIds.includes(taskId)) { skip++; continue; }
+        const cellJobs = getCellJobs(emp.id, bulkPicker.day!);
+        if (cellJobs.length >= 2 || cellJobs.some(j => j.task_id === taskId)) { skip++; continue; }
         try {
-          const r = await fetch(`${API}/api/v1/allocations`, {
+          const r = await fetch(`${API}/api/v1/jobs`, {
             method: 'POST', headers: authHeaders,
-            body: JSON.stringify({ user_id: emp.id, task_id: taskId, day_of_week: bulkPicker.day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
+            body: JSON.stringify({
+              weekId: week.id, userId: emp.id, dayOfWeek: bulkPicker.day,
+              timeSlot: cellJobs.length + 1, taskId, customerId: task?.customer_id || null,
+            }),
           });
           if (r.ok) success++; else skip++;
         } catch { skip++; }
       }
     } else if (bulkPicker.type === 'employee' && bulkPicker.userId) {
       for (let day = 0; day < 6; day++) {
-        const cell = getCell(bulkPicker.userId, day);
-        if (cell.taskIds.length >= 2 || cell.taskIds.includes(taskId)) { skip++; continue; }
+        const cellJobs = getCellJobs(bulkPicker.userId, day);
+        if (cellJobs.length >= 2 || cellJobs.some(j => j.task_id === taskId)) { skip++; continue; }
         try {
-          const r = await fetch(`${API}/api/v1/allocations`, {
+          const r = await fetch(`${API}/api/v1/jobs`, {
             method: 'POST', headers: authHeaders,
-            body: JSON.stringify({ user_id: bulkPicker.userId, task_id: taskId, day_of_week: day, week_id: week.id, time_slot: cell.taskIds.length + 1 }),
+            body: JSON.stringify({
+              weekId: week.id, userId: bulkPicker.userId, dayOfWeek: day,
+              timeSlot: cellJobs.length + 1, taskId, customerId: task?.customer_id || null,
+            }),
           });
           if (r.ok) success++; else skip++;
         } catch { skip++; }
       }
     }
 
-    await fetchAllocations();
+    await fetchJobs();
     setBulkLoading(false);
     setBulkPicker(null);
     showToast(`${task?.name || ''}: ${success} ✓${skip > 0 ? ` · ${skip} ${t.skipped ?? 'skipped'}` : ''}`);
@@ -486,34 +419,13 @@ export function SchedulePage() {
       }
     }
 
-    await fetchAllocations();
+    await fetchAbsenceRecords();
     setBulkLoading(false);
     setBulkPicker(null);
     showToast(`${(t.abs as any)?.[code] ?? code}: ${success} ✓${skip > 0 ? ` · ${skip} ${t.skipped ?? 'skipped'}` : ''}`);
   };
 
-  /* ─── Filtered picker tasks ─── */
-  const pickerTasks = useMemo(() => {
-    if (!picker) return [];
-    const s = pickerSearch.toLowerCase();
-    let list = tasks.filter(tk => tk.status !== 'CANCELLED');
-    if (s) {
-      list = list.filter(tk =>
-        tk.name.toLowerCase().includes(s) ||
-        tk.code.toLowerCase().includes(s) ||
-        (tk.customer?.name || '').toLowerCase().includes(s)
-      );
-    }
-    const usedIds = activeTaskIds;
-    list.sort((a, b) => {
-      const aUsed = usedIds.has(a.id) ? 0 : 1;
-      const bUsed = usedIds.has(b.id) ? 0 : 1;
-      if (aUsed !== bUsed) return aUsed - bUsed;
-      return a.name.localeCompare(b.name);
-    });
-    return list.slice(0, 50);
-  }, [picker, pickerSearch, tasks, activeTaskIds]);
-
+  /* ─── Bulk picker tasks ─── */
   const bulkPickerTasks = useMemo(() => {
     if (!bulkPicker) return [];
     const s = bulkSearch.toLowerCase();
@@ -525,10 +437,9 @@ export function SchedulePage() {
         (tk.customer?.name || '').toLowerCase().includes(s)
       );
     }
-    const usedIds = activeTaskIds;
     list.sort((a, b) => {
-      const aUsed = usedIds.has(a.id) ? 0 : 1;
-      const bUsed = usedIds.has(b.id) ? 0 : 1;
+      const aUsed = activeTaskIds.has(a.id) ? 0 : 1;
+      const bUsed = activeTaskIds.has(b.id) ? 0 : 1;
       if (aUsed !== bUsed) return aUsed - bUsed;
       return a.name.localeCompare(b.name);
     });
@@ -537,7 +448,7 @@ export function SchedulePage() {
 
   const deptLabel = (d: string) => d === 'garten' ? (t.gartenFull ?? 'Garten & Tiefbau') : d === 'unterhalt' ? (t.unterhaltFull ?? 'Unterhalt') : (t.bothDept ?? 'All');
 
-  /* ═══════════════════════════════════════ ACCESS GUARD ═══════════════════════════════════════ */
+  /* ═══ ACCESS GUARD ═══ */
   if (scheduleScope === 'none' || !canView) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: th.text }}>
@@ -573,6 +484,7 @@ export function SchedulePage() {
       )}
 
       <main style={{ padding: '20px 24px', opacity: bulkLoading ? 0.7 : 1, pointerEvents: bulkLoading ? 'none' : 'auto' }}>
+
         {/* ── Header: week nav + dept filter + TL filter + stats ── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -622,40 +534,33 @@ export function SchedulePage() {
                 >
                   <option value="">{t.allTeamLeaders ?? 'All Team Leaders'}</option>
                   {teamLeaders.map(tl => (
-                    <option key={tl.id} value={tl.id}>
-                      {tl.first_name} {tl.last_name}
-                    </option>
+                    <option key={tl.id} value={tl.id}>{tl.first_name} {tl.last_name}</option>
                   ))}
                 </select>
                 {selectedTeamLeaderId && (
-                  <button
-                    onClick={() => setSelectedTeamLeaderId(null)}
-                    style={{
-                      padding: '4px 8px', borderRadius: 4, border: 'none',
-                      background: 'rgba(239,68,68,.15)', color: '#ef4444',
-                      fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >✕</button>
+                  <button onClick={() => setSelectedTeamLeaderId(null)} style={{
+                    padding: '4px 8px', borderRadius: 4, border: 'none',
+                    background: 'rgba(239,68,68,.15)', color: '#ef4444',
+                    fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                  }}>✕</button>
                 )}
               </div>
             )}
 
-            {/* Scope indicator for team leaders */}
             {scheduleScope === 'team' && (
               <div style={{
                 marginLeft: 12, padding: '4px 10px', borderRadius: 4,
                 background: isDark ? 'rgba(34,197,94,.1)' : 'rgba(34,197,94,.06)',
                 border: '1px solid rgba(34,197,94,.3)',
                 fontSize: 10, fontWeight: 600, color: '#22c55e',
-              }}>
-                {t.myTeam ?? 'My Team'}
-              </div>
+              }}>{t.myTeam ?? 'My Team'}</div>
             )}
           </div>
+
           <div style={{ display: 'flex', gap: 20 }}>
             {[
               { v: emps.length, l: t.employees ?? 'Employees' },
-              { v: totalSlots, l: t.assignments ?? 'Assignments' },
+              { v: totalSlots, l: t.jobs ?? 'Jobs' },
               { v: activeTaskIds.size, l: t.objects ?? 'Objects' },
             ].map((s) => (
               <div key={s.l} style={{ textAlign: 'center' }}>
@@ -666,7 +571,7 @@ export function SchedulePage() {
           </div>
         </div>
 
-        {/* ── Schedule Grid ── */}
+        {/* ══════════════════════════ SCHEDULE GRID ══════════════════════════ */}
         <div style={{ background: th.bgCard, borderRadius: 8, border: `1px solid ${th.border}`, overflow: 'visible', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
@@ -681,20 +586,16 @@ export function SchedulePage() {
                   ...thBase(th), background: th.goldGhost, textAlign: 'left' as const,
                   padding: '8px 14px', fontSize: 11, color: th.goldDim, fontWeight: 700,
                   letterSpacing: 2, textTransform: 'uppercase' as const,
-                }}>
-                  {t.employees ?? 'Employees'}
-                </th>
+                }}>{t.employees ?? 'Employees'}</th>
                 {(t.days as string[]).map((d: string, i: number) => (
-                  <th key={d}
-                    style={{
-                      ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '6px',
-                      cursor: canEdit ? 'pointer' : 'default',
-                    }}
+                  <th key={d} style={{
+                    ...thBase(th), background: th.goldGhost, textAlign: 'center' as const, padding: '6px',
+                    cursor: canEdit ? 'pointer' : 'default',
+                  }}
                     onClick={e => {
                       if (!canEdit) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setPicker(null);
-                      setCellModal(null); // ★ close modal if open
+                      setCellModal(null);
                       setBulkPicker({ type: 'day', day: i, rect });
                       setBulkSearch('');
                     }}
@@ -710,9 +611,7 @@ export function SchedulePage() {
             <tbody>
               {pagedEmps.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{
-                    textAlign: 'center', padding: 40, color: th.textDim, fontSize: 14,
-                  }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: th.textDim, fontSize: 14 }}>
                     {selectedTeamLeaderId
                       ? (t.noEmployeesForTL ?? 'No employees found for this team leader')
                       : (t.noResults ?? 'No results')}
@@ -721,19 +620,17 @@ export function SchedulePage() {
               )}
               {pagedEmps.map((emp, idx) => (
                 <tr key={emp.id} style={{
-                  height: 56,
                   borderTop: idx > 0 ? `1px solid ${th.borderFaint}` : 'none',
                   transition: 'background .15s',
                 }}
                   onMouseEnter={e => (e.currentTarget.style.background = th.rowHover)}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
-                  {/* Role badge */}
+                  {/* Dept badge */}
                   <td style={{
                     textAlign: 'center' as const, borderRight: `1px solid ${th.borderFaint}`,
                     fontSize: 11, fontWeight: 700,
-                    color: emp.department === 'garten' ? th.roleV : th.roleM,
-                    padding: '4px',
+                    color: emp.department === 'garten' ? th.roleV : th.roleM, padding: '4px',
                   }}>
                     <div style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -742,83 +639,125 @@ export function SchedulePage() {
                         ? (isDark ? 'rgba(74,103,65,.2)' : 'rgba(74,103,65,.08)')
                         : (isDark ? 'rgba(125,78,87,.2)' : 'rgba(125,78,87,.08)'),
                       fontSize: 10, fontWeight: 800, letterSpacing: .5,
-                    }}>
-                      {emp.department === 'garten' ? 'GT' : 'UH'}
-                    </div>
+                    }}>{emp.department === 'garten' ? 'GT' : 'UH'}</div>
                   </td>
-                  {/* Name — 2-line layout */}
+
+                  {/* Name */}
                   <td style={{
                     padding: '6px 14px', borderRight: `1px solid ${th.borderFaint}`,
-                    cursor: canEdit ? 'pointer' : 'default',
-                    verticalAlign: 'middle' as const,
+                    cursor: canEdit ? 'pointer' : 'default', verticalAlign: 'middle' as const,
                   }}
                     onClick={e => {
                       if (!canEdit) return;
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setPicker(null);
-                      setCellModal(null); // ★ close modal if open
+                      setCellModal(null);
                       setBulkPicker({ type: 'employee', userId: emp.id, rect });
                       setBulkSearch('');
                     }}
                     title={canEdit ? `${t.bulkEmployee ?? 'Bulk assign employee'}: ${emp.first_name}` : undefined}
                   >
-                    <div style={{ fontSize: 14, fontWeight: 700, color: th.empName, lineHeight: 1.3 }}>
-                      {emp.first_name}
-                    </div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: th.text, lineHeight: 1.3, opacity: 0.7 }}>
-                      {emp.last_name}
-                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: th.empName, lineHeight: 1.3 }}>{emp.first_name}</div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: th.text, lineHeight: 1.3, opacity: 0.7 }}>{emp.last_name}</div>
                     <div style={{
                       fontSize: 9, color: th.textGhost, fontWeight: 500,
                       letterSpacing: 1, textTransform: 'uppercase' as const, marginTop: 2,
-                    }}>
-                      {deptLabel(emp.department)}{canEdit ? ' · ▶' : ''}
-                    </div>
+                    }}>{deptLabel(emp.department)}{canEdit ? ' · ▶' : ''}</div>
                   </td>
-                  {/* Day cells — ★ CHANGED: onClick opens CellDetailModal */}
+
+                  {/* ═══ DAY CELLS ═══ */}
                   {(t.days as string[]).map((_: string, di: number) => {
-                    const cell = getCell(emp.id, di);
-                    const hasTasks = cell.taskIds.length > 0;
-                    const cellMachines = getCellMachineAllocs(emp.id, di);    // ★ NEW
-                    const cellAbs = getCellAbsences(emp.id, di);              // ★ NEW
+                    const cellJobList = getCellJobs(emp.id, di);
+                    const cellAbs = getCellAbsences(emp.id, di);
+                    const hasJobs = cellJobList.length > 0;
+
                     return (
                       <td key={di} style={{
                         borderRight: di < 5 ? `1px solid ${th.borderFaint}` : 'none',
-                        padding: '4px 5px', position: 'relative' as const,
-                        cursor: 'pointer',
-                        verticalAlign: 'middle' as const,
+                        padding: '3px 4px', position: 'relative' as const,
+                        cursor: 'pointer', verticalAlign: 'top' as const,
                       }}
-                        onClick={() => openCellModal(emp.id, di)}  /* ★ CHANGED */
+                        onClick={() => openCellModal(emp.id, di)}
                       >
-                        {hasTasks ? (
-                          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 2, height: '100%', justifyContent: 'center' }}>
-                            {cell.taskIds.map((tid, tidx) => {
-                              const task = taskById[tid];
-                              const color = getTaskColor(tid);
+                        {/* Absence badges */}
+                        {cellAbs.length > 0 && (
+                          <div style={{ display: 'flex', gap: 2, marginBottom: 2, flexWrap: 'wrap' }}>
+                            {cellAbs.map(abs => {
+                              const code = String(abs.absence_code);
+                              const absInfo = ABS[code as unknown as keyof typeof ABS];
                               return (
-                                <div key={tid} style={{
-                                  background: isDark ? `${color}33` : `${color}22`,
+                                <span key={abs.id} style={{
+                                  fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3,
+                                  background: `${absInfo?.bg || '#666'}30`,
+                                  color: isDark ? (absInfo as any)?.textD || '#aaa' : (absInfo as any)?.textL || '#666',
+                                  display: 'inline-flex', alignItems: 'center', gap: 2, lineHeight: 1.4,
+                                }} title={(t.abs as any)?.[code] ?? `Absence ${code}`}>
+                                  <span style={{ fontSize: 9 }}>{absInfo?.icon}</span>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Job cards */}
+                        {hasJobs ? (
+                          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 2 }}>
+                            {cellJobList.map(job => {
+                              const task = job.task || taskById[job.task_id];
+                              const color = getTaskColor(job.task_id);
+                              const customerName = job.task?.customer?.name;
+                              const jm = job.machines || [];
+
+                              return (
+                                <div key={job.id} style={{
+                                  background: isDark ? `${color}28` : `${color}18`,
                                   borderLeft: `3px solid ${color}`,
-                                  borderRadius: 4, padding: '4px 8px',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                  minHeight: 22,
-                                }} title={task?.name || tid}>
-                                  <span style={{
-                                    fontSize: 11, fontWeight: 600, color: isDark ? '#ddd' : '#333',
+                                  borderRadius: 4, padding: '3px 6px', minHeight: 28,
+                                  position: 'relative' as const,
+                                }} title={`${task?.name || '?'}${customerName ? ` · ${customerName}` : ''}`}>
+                                  {/* Task name */}
+                                  <div style={{
+                                    fontSize: 10, fontWeight: 700, color: isDark ? '#ddd' : '#333',
                                     overflow: 'hidden', textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap' as const, flex: 1,
-                                  }}>
-                                    {task?.name || task?.code || '?'}
-                                  </span>
+                                    whiteSpace: 'nowrap' as const,
+                                    paddingRight: canEdit ? 14 : 0, lineHeight: 1.3,
+                                  }}>{task?.name || task?.code || '?'}</div>
+
+                                  {/* Customer */}
+                                  {customerName && (
+                                    <div style={{
+                                      fontSize: 8, fontWeight: 500,
+                                      color: isDark ? 'rgba(200,169,110,.7)' : 'rgba(139,115,85,.7)',
+                                      overflow: 'hidden', textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap' as const, lineHeight: 1.3, marginTop: 1,
+                                    }}>👤 {customerName}</div>
+                                  )}
+
+                                  {/* Machines */}
+                                  {jm.length > 0 && (
+                                    <div style={{ display: 'flex', gap: 2, marginTop: 1, flexWrap: 'wrap' }}>
+                                      {jm.slice(0, 2).map(m => (
+                                        <span key={m.id} style={{
+                                          fontSize: 7, fontWeight: 600, padding: '0px 3px', borderRadius: 2,
+                                          background: isDark ? 'rgba(66,165,245,.15)' : 'rgba(66,165,245,.1)',
+                                          color: '#42a5f5', maxWidth: 55,
+                                          overflow: 'hidden', textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap' as const, lineHeight: 1.4,
+                                        }}>🚜{m.machine?.name?.slice(0, 7) || '?'}</span>
+                                      ))}
+                                      {jm.length > 2 && <span style={{ fontSize: 7, color: '#42a5f5' }}>+{jm.length - 2}</span>}
+                                    </div>
+                                  )}
+
+                                  {/* Remove */}
                                   {canEdit && (
                                     <span style={{
-                                      fontSize: 12, color: th.textDim, cursor: 'pointer',
-                                      marginLeft: 6, lineHeight: 1, flexShrink: 0,
-                                      borderRadius: 3, width: 16, height: 16,
+                                      position: 'absolute' as const, top: 2, right: 3,
+                                      fontSize: 10, color: th.textDim, cursor: 'pointer', lineHeight: 1,
+                                      borderRadius: 3, width: 14, height: 14,
                                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                       transition: 'background .15s',
                                     }}
-                                      onClick={e => { e.stopPropagation(); removeAlloc(cell.allocIds[tidx]); }}
+                                      onClick={e => { e.stopPropagation(); removeJob(job.id); }}
                                       onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.15)'; e.currentTarget.style.color = '#ef4444'; }}
                                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = th.textDim; }}
                                       title={t.remove ?? 'Remove'}
@@ -828,30 +767,12 @@ export function SchedulePage() {
                               );
                             })}
                           </div>
-                        ) : (
+                        ) : cellAbs.length === 0 ? (
                           <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            height: '100%', color: th.textGhost, fontSize: 20, fontWeight: 300,
+                            height: 44, color: th.textGhost, fontSize: 20, fontWeight: 300,
                           }}>{canEdit ? '+' : ''}</div>
-                        )}
-                        {/* ★ NEW — Small indicators for machines & absences */}
-                        {(cellMachines.length > 0 || cellAbs.length > 0) && (
-                          <div style={{
-                            position: 'absolute', bottom: 2, right: 4,
-                            display: 'flex', gap: 3, alignItems: 'center',
-                          }}>
-                            {cellMachines.length > 0 && (
-                              <span style={{ fontSize: 9, opacity: 0.6 }} title={`${cellMachines.length} machine(s)`}>
-                                🚜{cellMachines.length > 1 ? cellMachines.length : ''}
-                              </span>
-                            )}
-                            {cellAbs.length > 0 && (
-                              <span style={{ fontSize: 9, opacity: 0.6 }} title={`${cellAbs.length} absence(s)`}>
-                                🏥{cellAbs.length > 1 ? cellAbs.length : ''}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        ) : null}
                       </td>
                     );
                   })}
@@ -860,19 +781,17 @@ export function SchedulePage() {
             </tbody>
           </table>
 
-          {/* PAGINATION CONTROLS */}
+          {/* Pagination */}
           {totalPages > 1 && (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '14px 20px',
-              borderTop: `1px solid ${th.border}`,
+              padding: '14px 20px', borderTop: `1px solid ${th.border}`,
               background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.015)',
             }}>
               <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1}
                 style={pageBtn(th, isDark, false, currentPage === 1)} title="First">«</button>
               <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
                 style={pageBtn(th, isDark, false, currentPage === 1)} title="Previous">‹</button>
-
               {(() => {
                 const pages: (number | '...')[] = [];
                 if (totalPages <= 7) {
@@ -893,12 +812,10 @@ export function SchedulePage() {
                   )
                 );
               })()}
-
               <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
                 style={pageBtn(th, isDark, false, currentPage === totalPages)} title="Next">›</button>
               <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}
                 style={pageBtn(th, isDark, false, currentPage === totalPages)} title="Last">»</button>
-
               <span style={{ marginLeft: 12, fontSize: 11, color: th.textDim, fontWeight: 500 }}>
                 {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, emps.length)} / {emps.length}
               </span>
@@ -911,16 +828,14 @@ export function SchedulePage() {
           <div style={{
             fontSize: 10, color: th.goldDim, marginBottom: 12, fontWeight: 700,
             letterSpacing: 2, textTransform: 'uppercase' as const,
-          }}>
-            {t.activeTasks ?? 'Active Tasks'} · {t.kw ?? 'KW'} {kw} · {activeTaskIds.size}
-          </div>
+          }}>{t.activeTasks ?? 'Active Tasks'} · {t.kw ?? 'KW'} {kw} · {activeTaskIds.size}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6 }}>
             {Array.from(activeTaskIds).map(tid => {
               const task = taskById[tid];
               if (!task) return null;
               const color = getTaskColor(tid);
-              const count = Object.values(allocMap).reduce((s, u) =>
-                s + Object.values(u).reduce((ss, d) => ss + (d.taskIds.includes(tid) ? 1 : 0), 0), 0);
+              const count = Object.values(jobMap).reduce((s, u) =>
+                s + Object.values(u).reduce((ss, arr) => ss + arr.filter(j => j.task_id === tid).length, 0), 0);
               return (
                 <div key={tid} style={{
                   padding: '8px 12px', background: th.legendItemBg, borderRadius: 6,
@@ -934,6 +849,7 @@ export function SchedulePage() {
                     }}>{task.name}</div>
                     <div style={{ fontSize: 9, color: th.textDim }}>
                       {task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}
+                      {task.customer ? ` · ${task.customer.name}` : ''}
                     </div>
                   </div>
                   <span style={{ fontSize: 13, color: th.gold, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{count}</span>
@@ -948,9 +864,7 @@ export function SchedulePage() {
           <div style={{
             fontSize: 10, color: th.goldDim, marginBottom: 12, fontWeight: 700,
             letterSpacing: 2, textTransform: 'uppercase' as const,
-          }}>
-            {t.absenceLegend ?? 'Absences'}
-          </div>
+          }}>{t.absenceLegend ?? 'Absences'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 4 }}>
             {Object.entries(t.abs || {}).map(([code, label]) => {
               const abs = ABS[code as unknown as keyof typeof ABS];
@@ -969,15 +883,10 @@ export function SchedulePage() {
         </div>
       </main>
 
-      {/* ══════════ ★ NEW — CELL DETAIL MODAL ══════════ */}
+      {/* ══════════ CELL DETAIL MODAL ══════════ */}
       {cellModal && (() => {
         const modalEmp = allUsers.find(u => u.id === cellModal.userId);
         if (!modalEmp) return null;
-        const cell = getCell(cellModal.userId, cellModal.day);
-        const cellAllocations = cell.allocIds.map((aid, i) => {
-          const raw = rawAllocs.find(a => a.id === aid);
-          return raw || { id: aid, user_id: cellModal.userId, task_id: cell.taskIds[i], day_of_week: cellModal.day, week_id: '', time_slot: i + 1 };
-        });
         return (
           <CellDetailModal
             user={modalEmp}
@@ -985,15 +894,14 @@ export function SchedulePage() {
             dayLabel={(t.days as string[])[cellModal.day] ?? ''}
             dateLabel={fmtDate(dates[cellModal.day])}
             dateISO={format(dates[cellModal.day], 'yyyy-MM-dd')}
-            allocations={cellAllocations}
+            jobs={getCellJobs(cellModal.userId, cellModal.day)}
             tasks={tasks}
-            taskById={taskById}
+            customers={customers}
             machines={machines}
-            machineAllocations={getCellMachineAllocs(cellModal.userId, cellModal.day)}
             absences={getCellAbsences(cellModal.userId, cellModal.day)}
             activeTaskIds={activeTaskIds}
             weekIds={Array.from(weekIds)}
-            allWeekMachineAllocations={machineAllocs}   /* ★ ADD THIS */
+            allWeekJobs={jobs}
             canEdit={canEdit}
             isDark={isDark}
             th={th}
@@ -1009,7 +917,7 @@ export function SchedulePage() {
         );
       })()}
 
-      {/* ══════════ BULK TASK PICKER (column / row) ══════════ */}
+      {/* ══════════ BULK PICKER ══════════ */}
       {canEdit && bulkPicker && (
         <div ref={bulkRef} style={{
           position: 'fixed',
@@ -1099,55 +1007,12 @@ export function SchedulePage() {
         </div>
       )}
 
-      {/* ══════════ ABSENCE MODAL (fallback) ══════════ */}
-      {canEdit && absModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: th.modalBg, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', zIndex: 500,
-        }} onClick={() => setAbsModal(null)}>
-          <div style={{
-            background: th.modalCard, border: `1px solid ${th.border}`,
-            borderRadius: 8, padding: 24, width: 280,
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{
-              fontSize: 9, color: th.goldDim, fontWeight: 700, letterSpacing: 2,
-              textTransform: 'uppercase' as const, marginBottom: 6,
-            }}>{t.setAbsence ?? 'Set Absence'}</div>
-            <div style={{ fontSize: 16, fontWeight: 400, color: th.gold, marginBottom: 16 }}>
-              {allUsers.find(u => u.id === absModal.userId)?.first_name} · {(t.days as string[])[absModal.day]}
-            </div>
-            {Object.entries(t.abs || {}).map(([code, label]) => {
-              const abs = ABS[code as unknown as keyof typeof ABS];
-              return (
-                <button key={code} onClick={() => assignAbsence(absModal.userId, absModal.day, code)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                    padding: '9px 12px', marginBottom: 3, borderRadius: 4, border: 'none',
-                    background: th.btnBg, borderLeft: `3px solid ${abs?.bg}`,
-                    color: th.textMuted, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                    textAlign: 'left' as const,
-                  }}
-                ><span style={{ fontSize: 14 }}>{abs?.icon}</span>{label as string}</button>
-              );
-            })}
-            <button onClick={() => setAbsModal(null)} style={{
-              marginTop: 12, width: '100%', padding: 8, borderRadius: 4,
-              border: `1px solid ${th.borderFaint}`, background: 'transparent',
-              color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600,
-              letterSpacing: 1, textTransform: 'uppercase' as const,
-            }}>{t.cancel ?? 'Cancel'}</button>
-          </div>
-        </div>
-      )}
-
       <style>{`
         @keyframes fadeSlide { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes scaleIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         @keyframes bulkProgress { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: ${th.scrollThumb}; border-radius: 2px; }
+        @keyframes cdm-fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes cdm-scaleIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
       `}</style>
     </div>
   );
@@ -1156,27 +1021,24 @@ export function SchedulePage() {
 /* ─── Style helpers ─── */
 function navBtn(th: Theme): React.CSSProperties {
   return {
-    width: 32, height: 32, borderRadius: 4, border: `1px solid ${th.goldFaint}`,
-    background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 36, height: 36, borderRadius: 6, border: `1px solid ${th.border}`,
+    background: 'transparent', color: th.gold, fontSize: 20, cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all .15s', fontWeight: 300,
   };
 }
+
 function thBase(th: Theme): React.CSSProperties {
-  return { padding: 0, borderBottom: `1px solid ${th.border}`, borderRight: `1px solid ${th.borderFaint}` };
+  return { borderBottom: `1px solid ${th.border}`, padding: 0 };
 }
 
 function pageBtn(th: Theme, isDark: boolean, isActive: boolean, isDisabled: boolean): React.CSSProperties {
   return {
-    width: 32, height: 32, borderRadius: 6,
+    width: 32, height: 32, borderRadius: 4, border: `1px solid ${isActive ? th.gold : th.border}`,
+    background: isActive ? (isDark ? 'rgba(200,169,110,.15)' : 'rgba(200,169,110,.1)') : 'transparent',
+    color: isActive ? th.gold : isDisabled ? th.textGhost : th.textDim,
+    fontSize: 13, fontWeight: isActive ? 700 : 500, cursor: isDisabled ? 'default' : 'pointer',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 13, fontWeight: isActive ? 800 : 500,
-    cursor: isDisabled ? 'default' : 'pointer',
-    opacity: isDisabled ? 0.3 : 1,
-    background: isActive
-      ? (isDark ? 'rgba(200,169,110,.2)' : 'rgba(200,169,110,.15)')
-      : 'transparent',
-    color: isActive ? th.gold : th.text,
-    border: isActive ? `1px solid ${th.gold}` : `1px solid transparent`,
-    transition: 'all .15s',
+    transition: 'all .15s', opacity: isDisabled ? 0.4 : 1,
   };
 }
