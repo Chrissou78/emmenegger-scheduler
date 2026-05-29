@@ -310,7 +310,9 @@ export function SchedulePage() {
   // ★ NEW — helpers to get cell-specific machine allocs and absences
   const getCellMachineAllocs = useCallback((userId: string, day: number): MachineAllocation[] => {
     return machineAllocs.filter(ma =>
-      ma.user_id === userId && ma.day_of_week === day && (!ma.week_id || weekIds.has(ma.week_id))
+      ma.day_of_week === day &&
+      ma.user_id === userId &&
+      (!ma.week_id || weekIds.has(ma.week_id))
     );
   }, [machineAllocs, weekIds]);
 
@@ -991,6 +993,7 @@ export function SchedulePage() {
             absences={getCellAbsences(cellModal.userId, cellModal.day)}
             activeTaskIds={activeTaskIds}
             weekIds={Array.from(weekIds)}
+            allWeekMachineAllocations={machineAllocs}   /* ★ ADD THIS */
             canEdit={canEdit}
             isDark={isDark}
             th={th}

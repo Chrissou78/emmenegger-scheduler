@@ -11,7 +11,7 @@ interface Task {
 }
 interface Machine {
   id: string; name: string; category: string; inventory_nr?: string;
-  tonnage?: number; is_active?: boolean;
+  tonnage?: number; is_active?: boolean; status?: string;
 }
 interface Allocation {
   id: string; user_id: string; task_id: string;
@@ -19,6 +19,7 @@ interface Allocation {
 }
 interface MachineAllocation {
   id: string; machine_id: string; site_id?: string;
+  user_id?: string;
   week_id: string; day_of_week: number;
   machine?: Machine;
 }
@@ -34,35 +35,34 @@ type Theme = typeof themes.dark;
 
 export interface CellDetailModalProps {
   user: CellUser;
-  day: number;               // 0-5 (Mon-Sat)
-  dayLabel: string;           // e.g. "Monday"
-  dateLabel: string;          // e.g. "12.5."
-  dateISO: string;            // e.g. "2026-05-12"
+  day: number;
+  dayLabel: string;
+  dateLabel: string;
+  dateISO: string;
 
-  /* Data */
-  allocations: Allocation[];  // this cell's task allocations
-  tasks: Task[];              // all available tasks
+  allocations: Allocation[];
+  tasks: Task[];
   taskById: Record<string, Task>;
-  machines: Machine[];        // all machines
-  machineAllocations: MachineAllocation[];  // this cell's machine allocations
-  absences: Absence[];        // this cell's absences
-  activeTaskIds: Set<string>; // tasks used this week (for sorting)
-  weekIds: string[];          // matching week IDs for this KW
+  machines: Machine[];
+  machineAllocations: MachineAllocation[];
+  absences: Absence[];
+  activeTaskIds: Set<string>;
+  weekIds: string[];
 
-  /* Permissions */
+  /* ★ NEW: all machine allocations for the entire week — for conflict checking */
+  allWeekMachineAllocations: MachineAllocation[];
+
   canEdit: boolean;
   isDark: boolean;
   th: Theme;
   lang: string;
   gold: string;
 
-  /* API */
   authHeaders: Record<string, string>;
   apiUrl: string;
 
-  /* Callbacks */
   onClose: () => void;
-  onRefresh: () => Promise<void>;     // re-fetch allocations + absences
+  onRefresh: () => Promise<void>;
   showToast: (msg: string, err?: boolean) => void;
   getTaskColor: (taskId: string) => string;
 }
@@ -72,6 +72,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
     user: emp, day, dayLabel, dateLabel, dateISO,
     allocations, tasks, taskById, machines, machineAllocations, absences,
     activeTaskIds, weekIds,
+    allWeekMachineAllocations,
     canEdit, isDark, th, lang, gold,
     authHeaders, apiUrl,
     onClose, onRefresh, showToast, getTaskColor,
@@ -88,7 +89,6 @@ export function CellDetailModal(props: CellDetailModalProps) {
   const taskSearchRef = useRef<HTMLInputElement>(null);
   const machSearchRef = useRef<HTMLInputElement>(null);
 
-  // Focus search on tab change
   useEffect(() => {
     if (activeTab === 'tasks') taskSearchRef.current?.focus();
     if (activeTab === 'machines') machSearchRef.current?.focus();
@@ -99,7 +99,18 @@ export function CellDetailModal(props: CellDetailModalProps) {
   const cellMachines = machineAllocations;
   const cellAbsences = absences;
 
-  /* ─── Filtered task list for add ─── */
+  /* ★ Build a set of machine IDs already allocated on this day (any user) */
+  const machinesAllocatedThisDay = useMemo(() => {
+    const set = new Set<string>();
+    for (const ma of allWeekMachineAllocations) {
+      if (ma.day_of_week === day) {
+        set.add(ma.machine_id);
+      }
+    }
+    return set;
+  }, [allWeekMachineAllocations, day]);
+
+  /* ─── Filtered task list ─── */
   const filteredTasks = useMemo(() => {
     const s = taskSearch.toLowerCase();
     let list = tasks.filter(tk => tk.status !== 'CANCELLED');
@@ -123,7 +134,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
     return list.slice(0, 40);
   }, [taskSearch, tasks, cellTasks, activeTaskIds]);
 
-  /* ─── Filtered machine list for add ─── */
+  /* ★ Filtered machine list — shows availability status */
   const filteredMachines = useMemo(() => {
     const s = machineSearch.toLowerCase();
     let list = machines.filter(m => m.is_active !== false);
@@ -134,15 +145,24 @@ export function CellDetailModal(props: CellDetailModalProps) {
         (m.inventory_nr || '').toLowerCase().includes(s)
       );
     }
-    const assignedIds = new Set(cellMachines.map(ma => ma.machine_id));
+
+    // IDs assigned to THIS cell (this user + this day)
+    const assignedToThisCell = new Set(cellMachines.map(ma => ma.machine_id));
+
+    // Sort: assigned to cell first (for display), then available, then taken by others
     list.sort((a, b) => {
-      const aAssigned = assignedIds.has(a.id) ? 1 : 0;
-      const bAssigned = assignedIds.has(b.id) ? 1 : 0;
-      if (aAssigned !== bAssigned) return aAssigned - bAssigned;
+      const aInCell = assignedToThisCell.has(a.id) ? 0 : 1;
+      const bInCell = assignedToThisCell.has(b.id) ? 0 : 1;
+      if (aInCell !== bInCell) return aInCell - bInCell;
+
+      const aTaken = machinesAllocatedThisDay.has(a.id) ? 1 : 0;
+      const bTaken = machinesAllocatedThisDay.has(b.id) ? 1 : 0;
+      if (aTaken !== bTaken) return aTaken - bTaken;
+
       return a.name.localeCompare(b.name);
     });
     return list.slice(0, 40);
-  }, [machineSearch, machines, cellMachines]);
+  }, [machineSearch, machines, cellMachines, machinesAllocatedThisDay]);
 
   /* ─── Actions ─── */
   const addTask = async (taskId: string) => {
@@ -155,10 +175,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
 
     setSaving(true);
     const task = taskById[taskId];
-    const weekId = weekIds.find(wid => {
-      // Try to match schedule_type if possible
-      return true; // simplified — use first matching week
-    }) || weekIds[0];
+    const weekId = weekIds[0];
 
     if (!weekId) {
       showToast(t.weekNotFound ?? 'Week not found', true);
@@ -204,12 +221,17 @@ export function CellDetailModal(props: CellDetailModalProps) {
     setSaving(false);
   };
 
+  /* ★ FIXED addMachine — sends userId, handles all responses with clear feedback */
   const addMachine = async (machineId: string) => {
     if (!canEdit || saving) return;
-    if (cellMachines.some(ma => ma.machine_id === machineId)) {
-      showToast(t.alreadyAssigned ?? 'Already assigned', true);
+
+    // ★ Client-side conflict check — don't even try if already allocated this day
+    if (machinesAllocatedThisDay.has(machineId)) {
+      const machine = machines.find(m => m.id === machineId);
+      showToast(`🚜 ${machine?.name || ''} — ${t.machineConflict ?? 'Already allocated this day'}`, true);
       return;
     }
+
     setSaving(true);
     const weekId = weekIds[0];
     if (!weekId) {
@@ -228,20 +250,28 @@ export function CellDetailModal(props: CellDetailModalProps) {
           siteId,
           weekId,
           dayOfWeek: day,
-          userId: emp.id,      // ★ ADD THIS — links the machine to the employee
+          userId: emp.id,       // ★ FIX #1: link machine to this employee
         }),
       });
+
       if (r.ok) {
         const machine = machines.find(m => m.id === machineId);
         showToast(`🚜 ${machine?.name || ''} → ${emp.first_name}`);
         await onRefresh();
-      } else if (r.status === 409) {
-        showToast(t.machineConflict ?? 'Machine already allocated this day', true);
       } else {
-        const err = await r.json().catch(() => ({}));
-        showToast(err.message || t.error || 'Error', true);
+        // ★ FIX #3: always read and display the error
+        const err = await r.json().catch(() => ({ message: `HTTP ${r.status}` }));
+        if (r.status === 409) {
+          showToast(`🚜 ${t.machineConflict ?? 'Machine already allocated on this day'}`, true);
+        } else if (r.status === 400) {
+          showToast(`⚠️ ${err.message || 'Bad request'}`, true);
+        } else {
+          showToast(`❌ ${err.message || t.error || 'Error'}`, true);
+        }
       }
-    } catch { showToast(t.networkError ?? 'Network error', true); }
+    } catch {
+      showToast(t.networkError ?? 'Network error', true);
+    }
     setSaving(false);
   };
 
@@ -311,7 +341,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
     flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
     fontSize: 13, fontWeight: active ? 700 : 500,
     background: active ? gold : 'transparent',
-    color: active ? (isDark ? '#0a0a0a' : '#fff') : th.textMuted,
+    color: active ? (isDark ? '#0a0a0a' : '#fff') : (th as any).textMuted,
     borderRadius: active ? 8 : 0,
     transition: 'all .2s',
   });
@@ -359,7 +389,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
         style={{
           width: '95%', maxWidth: 520,
           maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-          background: th.bgCard, border: `1px solid ${th.border}`,
+          background: (th as any).bgCard, border: `1px solid ${(th as any).border}`,
           borderRadius: 16,
           boxShadow: isDark
             ? '0 24px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(200,169,110,.08)'
@@ -371,27 +401,27 @@ export function CellDetailModal(props: CellDetailModalProps) {
         {/* ── Header ── */}
         <div style={{
           padding: '18px 20px 14px',
-          borderBottom: `1px solid ${th.border}`,
+          borderBottom: `1px solid ${(th as any).border}`,
           background: isDark ? 'rgba(200,169,110,.04)' : 'rgba(200,169,110,.03)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: th.text, lineHeight: 1.3 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: (th as any).text, lineHeight: 1.3 }}>
                 {emp.first_name} {emp.last_name}
               </div>
               <div style={{ fontSize: 13, color: gold, fontWeight: 600, marginTop: 2 }}>
                 {dayLabel} · {dateLabel}
               </div>
               <div style={{
-                fontSize: 10, color: th.textMuted, fontWeight: 600,
+                fontSize: 10, color: (th as any).textMuted, fontWeight: 600,
                 letterSpacing: 1, textTransform: 'uppercase', marginTop: 4,
               }}>
                 {emp.department === 'garten' ? 'Garten & Tiefbau' : emp.department === 'unterhalt' ? 'Unterhalt' : emp.department}
               </div>
             </div>
             <button onClick={onClose} style={{
-              width: 32, height: 32, borderRadius: 8, border: `1px solid ${th.border}`,
-              background: 'transparent', color: th.textMuted, fontSize: 16,
+              width: 32, height: 32, borderRadius: 8, border: `1px solid ${(th as any).border}`,
+              background: 'transparent', color: (th as any).textMuted, fontSize: 16,
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'all .15s',
             }}>✕</button>
@@ -440,7 +470,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
           </button>
         </div>
 
-        {/* ── Content (scrollable) ── */}
+        {/* ── Content ── */}
         <div style={{
           flex: 1, overflowY: 'auto', padding: '12px 16px',
           opacity: saving ? 0.6 : 1,
@@ -450,11 +480,10 @@ export function CellDetailModal(props: CellDetailModalProps) {
           {/* ═══ TASKS TAB ═══ */}
           {activeTab === 'tasks' && (
             <>
-              {/* Current tasks */}
               {cellTasks.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{
-                    fontSize: 10, fontWeight: 700, color: th.textMuted,
+                    fontSize: 10, fontWeight: 700, color: (th as any).textMuted,
                     letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8,
                   }}>{t.assigned ?? 'Assigned'}</div>
                   {cellTasks.map(alloc => {
@@ -464,11 +493,11 @@ export function CellDetailModal(props: CellDetailModalProps) {
                       <div key={alloc.id} style={itemRow}>
                         <div style={{ width: 4, height: 36, borderRadius: 4, background: color, flexShrink: 0 }} />
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: th.text,
+                          <div style={{ fontSize: 13, fontWeight: 600, color: (th as any).text,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {task?.name || '?'}
                           </div>
-                          <div style={{ fontSize: 10, color: th.textMuted }}>
+                          <div style={{ fontSize: 10, color: (th as any).textMuted }}>
                             {task?.code || ''} · {task?.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}
                             {task?.customer ? ` · ${task.customer.name}` : ''}
                           </div>
@@ -483,7 +512,6 @@ export function CellDetailModal(props: CellDetailModalProps) {
                 </div>
               )}
 
-              {/* Add task */}
               {canEdit && cellTasks.length < 2 && (
                 <div>
                   <div style={{
@@ -497,9 +525,9 @@ export function CellDetailModal(props: CellDetailModalProps) {
                     onChange={e => setTaskSearch(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', borderRadius: 8,
-                      border: `1px solid ${th.border}`,
+                      border: `1px solid ${(th as any).border}`,
                       background: isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.02)',
-                      color: th.text, fontSize: 12, outline: 'none', marginBottom: 8,
+                      color: (th as any).text, fontSize: 12, outline: 'none', marginBottom: 8,
                     }}
                   />
                   <div style={{ maxHeight: 200, overflowY: 'auto' }}>
@@ -520,11 +548,11 @@ export function CellDetailModal(props: CellDetailModalProps) {
                         >
                           <div style={badge(color)} />
                           <div style={{ flex: 1, overflow: 'hidden' }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: th.text,
+                            <div style={{ fontSize: 12, fontWeight: 600, color: (th as any).text,
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {task.name}
                             </div>
-                            <div style={{ fontSize: 9, color: th.textMuted }}>
+                            <div style={{ fontSize: 9, color: (th as any).textMuted }}>
                               {task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}
                               {task.customer ? ` · ${task.customer.name}` : ''}
                             </div>
@@ -532,7 +560,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
                           {isAssigned && <span style={{ color: gold, fontSize: 13 }}>✓</span>}
                           {!isAssigned && activeTaskIds.has(task.id) && (
                             <span style={{
-                              fontSize: 8, color: th.textMuted,
+                              fontSize: 8, color: (th as any).textMuted,
                               background: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)',
                               padding: '2px 6px', borderRadius: 4,
                             }}>KW</span>
@@ -545,7 +573,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
               )}
 
               {canEdit && cellTasks.length >= 2 && (
-                <div style={{ fontSize: 12, color: th.textMuted, textAlign: 'center', padding: 12 }}>
+                <div style={{ fontSize: 12, color: (th as any).textMuted, textAlign: 'center', padding: 12 }}>
                   {t.max2 ?? 'Maximum 2 tasks per cell'}
                 </div>
               )}
@@ -555,11 +583,11 @@ export function CellDetailModal(props: CellDetailModalProps) {
           {/* ═══ MACHINES TAB ═══ */}
           {activeTab === 'machines' && (
             <>
-              {/* Current machines */}
+              {/* ★ Currently assigned to THIS cell */}
               {cellMachines.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{
-                    fontSize: 10, fontWeight: 700, color: th.textMuted,
+                    fontSize: 10, fontWeight: 700, color: (th as any).textMuted,
                     letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8,
                   }}>{t.assigned ?? 'Assigned'}</div>
                   {cellMachines.map(ma => {
@@ -573,11 +601,11 @@ export function CellDetailModal(props: CellDetailModalProps) {
                           fontSize: 16, flexShrink: 0,
                         }}>🚜</div>
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: th.text,
+                          <div style={{ fontSize: 13, fontWeight: 600, color: (th as any).text,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {machine?.name || '?'}
                           </div>
-                          <div style={{ fontSize: 10, color: th.textMuted }}>
+                          <div style={{ fontSize: 10, color: (th as any).textMuted }}>
                             {machine?.category || ''}{machine?.inventory_nr ? ` · #${machine.inventory_nr}` : ''}
                             {machine?.tonnage ? ` · ${machine.tonnage}t` : ''}
                           </div>
@@ -592,7 +620,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
                 </div>
               )}
 
-              {/* Add machine */}
+              {/* ★ Add machine — with availability status */}
               {canEdit && (
                 <div>
                   <div style={{
@@ -606,38 +634,60 @@ export function CellDetailModal(props: CellDetailModalProps) {
                     onChange={e => setMachineSearch(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', borderRadius: 8,
-                      border: `1px solid ${th.border}`,
+                      border: `1px solid ${(th as any).border}`,
                       background: isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.02)',
-                      color: th.text, fontSize: 12, outline: 'none', marginBottom: 8,
+                      color: (th as any).text, fontSize: 12, outline: 'none', marginBottom: 8,
                     }}
                   />
                   <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                     {filteredMachines.map(machine => {
-                      const isAssigned = cellMachines.some(ma => ma.machine_id === machine.id);
+                      const isInThisCell = cellMachines.some(ma => ma.machine_id === machine.id);
+                      const isTakenByOther = !isInThisCell && machinesAllocatedThisDay.has(machine.id);
+                      const isUnavailable = isInThisCell || isTakenByOther;
+
                       return (
                         <div
                           key={machine.id}
-                          onClick={() => !isAssigned && addMachine(machine.id)}
+                          onClick={() => !isUnavailable && addMachine(machine.id)}
                           style={{
                             ...addItemRow,
-                            opacity: isAssigned ? 0.4 : 1,
-                            cursor: isAssigned ? 'default' : 'pointer',
+                            opacity: isUnavailable ? 0.4 : 1,
+                            cursor: isUnavailable ? 'default' : 'pointer',
+                            background: isTakenByOther
+                              ? (isDark ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.04)')
+                              : 'transparent',
                           }}
-                          onMouseEnter={e => { if (!isAssigned) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          onMouseEnter={e => {
+                            if (!isUnavailable) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = isTakenByOther
+                              ? (isDark ? 'rgba(239,68,68,.06)' : 'rgba(239,68,68,.04)')
+                              : 'transparent';
+                          }}
                         >
                           <span style={{ fontSize: 14 }}>🚜</span>
                           <div style={{ flex: 1, overflow: 'hidden' }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: th.text,
+                            <div style={{ fontSize: 12, fontWeight: 600, color: (th as any).text,
                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {machine.name}
                             </div>
-                            <div style={{ fontSize: 9, color: th.textMuted }}>
+                            <div style={{ fontSize: 9, color: (th as any).textMuted }}>
                               {machine.category}{machine.inventory_nr ? ` · #${machine.inventory_nr}` : ''}
                               {machine.tonnage ? ` · ${machine.tonnage}t` : ''}
                             </div>
                           </div>
-                          {isAssigned && <span style={{ color: '#42a5f5', fontSize: 13 }}>✓</span>}
+                          {/* ★ Status indicators */}
+                          {isInThisCell && <span style={{ color: '#42a5f5', fontSize: 13 }}>✓</span>}
+                          {isTakenByOther && (
+                            <span style={{
+                              fontSize: 9, color: '#ef4444', fontWeight: 700,
+                              background: isDark ? 'rgba(239,68,68,.15)' : 'rgba(239,68,68,.1)',
+                              padding: '2px 8px', borderRadius: 4,
+                            }}>
+                              {t.machineInUse ?? 'In Use'}
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -650,11 +700,10 @@ export function CellDetailModal(props: CellDetailModalProps) {
           {/* ═══ ABSENCES TAB ═══ */}
           {activeTab === 'absences' && (
             <>
-              {/* Current absences */}
               {cellAbsences.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{
-                    fontSize: 10, fontWeight: 700, color: th.textMuted,
+                    fontSize: 10, fontWeight: 700, color: (th as any).textMuted,
                     letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8,
                   }}>{t.current ?? 'Current'}</div>
                   {cellAbsences.map(abs => {
@@ -670,8 +719,8 @@ export function CellDetailModal(props: CellDetailModalProps) {
                           fontSize: 16, flexShrink: 0,
                         }}>{absInfo?.icon || '?'}</div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{absLabel}</div>
-                          <div style={{ fontSize: 10, color: th.textMuted }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: (th as any).text }}>{absLabel}</div>
+                          <div style={{ fontSize: 10, color: (th as any).textMuted }}>
                             {abs.source || 'MANUAL'}{abs.notes ? ` · ${abs.notes}` : ''}
                           </div>
                         </div>
@@ -685,7 +734,6 @@ export function CellDetailModal(props: CellDetailModalProps) {
                 </div>
               )}
 
-              {/* Add absence */}
               {canEdit && (
                 <div>
                   <div style={{
@@ -708,17 +756,15 @@ export function CellDetailModal(props: CellDetailModalProps) {
                               ? (isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)')
                               : (isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)'),
                             borderLeft: `4px solid ${absInfo?.bg || '#666'}`,
-                            color: alreadySet ? th.textMuted : th.text,
-                            fontSize: 12, fontWeight: 500, cursor: alreadySet ? 'default' : 'pointer',
-                            textAlign: 'left', transition: 'background .15s',
-                            opacity: alreadySet ? 0.5 : 1,
+                            cursor: alreadySet ? 'default' : 'pointer',
+                            opacity: alreadySet ? 0.4 : 1,
+                            color: (th as any).text, fontSize: 13, fontWeight: 500,
+                            transition: 'background .15s', textAlign: 'left',
                           }}
-                          onMouseEnter={e => { if (!alreadySet) e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.05)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = alreadySet ? (isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.02)') : (isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)'); }}
                         >
-                          <span style={{ fontSize: 16 }}>{absInfo?.icon}</span>
+                          <span style={{ fontSize: 16 }}>{absInfo?.icon || '?'}</span>
                           <span>{label as string}</span>
-                          {alreadySet && <span style={{ marginLeft: 'auto', fontSize: 11, color: gold }}>✓</span>}
+                          {alreadySet && <span style={{ marginLeft: 'auto', fontSize: 12, color: gold }}>✓</span>}
                         </button>
                       );
                     })}
@@ -728,36 +774,7 @@ export function CellDetailModal(props: CellDetailModalProps) {
             </>
           )}
         </div>
-
-        {/* ── Footer ── */}
-        <div style={{
-          padding: '12px 16px', borderTop: `1px solid ${th.border}`,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          {saving && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: gold }}>
-              <span style={{
-                width: 14, height: 14, border: `2px solid ${gold}44`,
-                borderTopColor: gold, borderRadius: '50%',
-                animation: 'cdm-spin .6s linear infinite', display: 'inline-block',
-              }} />
-              {t.saving ?? 'Saving...'}
-            </div>
-          )}
-          {!saving && <div />}
-          <button onClick={onClose} style={{
-            padding: '8px 20px', borderRadius: 8, border: `1px solid ${th.border}`,
-            background: 'transparent', color: th.text, fontSize: 12, fontWeight: 600,
-            cursor: 'pointer', transition: 'all .15s',
-          }}>{t.close ?? 'Close'}</button>
-        </div>
       </div>
-
-      <style>{`
-        @keyframes cdm-fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes cdm-scaleIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes cdm-spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }
