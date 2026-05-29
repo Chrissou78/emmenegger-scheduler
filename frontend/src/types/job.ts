@@ -27,7 +27,6 @@ export interface Machine {
   inventory_nr?: string;
   tonnage?: number;
   is_active?: boolean;
-  status?: string;
 }
 
 export interface JobMachine {

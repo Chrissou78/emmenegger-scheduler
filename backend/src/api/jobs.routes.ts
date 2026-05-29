@@ -5,8 +5,20 @@ import { requireRole } from '../middleware/auth';
 
 export const jobsRouter = Router();
 
+/* ─── Shared select string ─── */
+const JOB_SELECT = `
+  *,
+  task:tasks ( id, code, name, color, schedule_type, status, customer_id,
+    customer:customers ( id, name, company_name, address, city, contact_name, contact_phone )
+  ),
+  machines:job_machines (
+    id,
+    machine_id,
+    machine:machines ( id, name, category, inventory_nr, tonnage, is_active )
+  )
+`;
+
 // ─── GET /api/v1/jobs?weekId=xxx ───
-// Returns all jobs for a week with embedded task, customer, machines
 jobsRouter.get('/', async (req, res, next) => {
   try {
     const { weekId, userId } = req.query;
@@ -14,17 +26,7 @@ jobsRouter.get('/', async (req, res, next) => {
 
     let query = supabase
       .from('jobs')
-      .select(`
-        *,
-        task:tasks ( id, code, name, color, schedule_type, status, customer_id,
-          customer:customers ( id, name, company_name, address, city, contact_name, contact_phone )
-        ),
-        machines:job_machines (
-          id,
-          machine_id,
-          machine:machines ( id, name, category, inventory_nr, tonnage, is_active, status )
-        )
-      `)
+      .select(JOB_SELECT)
       .eq('week_id', weekId as string);
 
     if (userId) query = query.eq('user_id', userId as string);
@@ -43,17 +45,7 @@ jobsRouter.get('/:id', async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        task:tasks ( id, code, name, color, schedule_type, status, customer_id,
-          customer:customers ( id, name, company_name, address, city, contact_name, contact_phone )
-        ),
-        machines:job_machines (
-          id,
-          machine_id,
-          machine:machines ( id, name, category, inventory_nr, tonnage, is_active, status )
-        )
-      `)
+      .select(JOB_SELECT)
       .eq('id', req.params.id)
       .single();
 
@@ -67,7 +59,6 @@ jobsRouter.get('/:id', async (req, res, next) => {
 });
 
 // ─── POST /api/v1/jobs ───
-// Creates a job with optional machines in one go
 jobsRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER'), async (req, res, next) => {
   try {
     const { weekId, userId, dayOfWeek, timeSlot, taskId, customerId, machineIds, notes } = req.body;
@@ -152,17 +143,7 @@ jobsRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER'), 
     // Fetch full job with relations
     const { data: fullJob } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        task:tasks ( id, code, name, color, schedule_type, status, customer_id,
-          customer:customers ( id, name, company_name, address, city, contact_name, contact_phone )
-        ),
-        machines:job_machines (
-          id,
-          machine_id,
-          machine:machines ( id, name, category, inventory_nr, tonnage, is_active, status )
-        )
-      `)
+      .select(JOB_SELECT)
       .eq('id', job.id)
       .single();
 
@@ -173,13 +154,11 @@ jobsRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER'), 
 });
 
 // ─── PUT /api/v1/jobs/:id ───
-// Update task, customer, notes, and/or replace machine list
 jobsRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER'), async (req, res, next) => {
   try {
     const { taskId, customerId, machineIds, notes } = req.body;
     const jobId = req.params.id;
 
-    // Fetch existing job
     const { data: existing, error: fetchErr } = await supabase
       .from('jobs')
       .select('*')
@@ -188,7 +167,6 @@ jobsRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER')
 
     if (fetchErr || !existing) return res.status(404).json({ error: 'Job not found' });
 
-    // Build update
     const update: Record<string, any> = { updated_at: new Date().toISOString() };
     if (taskId !== undefined) update.task_id = taskId;
     if (customerId !== undefined) update.customer_id = customerId || null;
@@ -203,7 +181,6 @@ jobsRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER')
 
     // Replace machines if provided
     if (machineIds !== undefined) {
-      // Check conflicts
       if (machineIds.length > 0) {
         const { data: conflicts } = await supabase
           .from('job_machines')
@@ -223,10 +200,8 @@ jobsRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER')
         }
       }
 
-      // Delete old machines
       await supabase.from('job_machines').delete().eq('job_id', jobId);
 
-      // Insert new
       if (machineIds.length > 0) {
         const rows = machineIds.map((mid: string) => ({ job_id: jobId, machine_id: mid }));
         const { error: machErr } = await supabase.from('job_machines').insert(rows);
@@ -234,20 +209,9 @@ jobsRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER')
       }
     }
 
-    // Fetch full job
     const { data: fullJob } = await supabase
       .from('jobs')
-      .select(`
-        *,
-        task:tasks ( id, code, name, color, schedule_type, status, customer_id,
-          customer:customers ( id, name, company_name, address, city, contact_name, contact_phone )
-        ),
-        machines:job_machines (
-          id,
-          machine_id,
-          machine:machines ( id, name, category, inventory_nr, tonnage, is_active, status )
-        )
-      `)
+      .select(JOB_SELECT)
       .eq('id', jobId)
       .single();
 
@@ -258,14 +222,12 @@ jobsRouter.put('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER')
 });
 
 // ─── POST /api/v1/jobs/:id/machines ───
-// Add a single machine to an existing job
 jobsRouter.post('/:id/machines', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER'), async (req, res, next) => {
   try {
     const jobId = req.params.id;
     const { machineId } = req.body;
     if (!machineId) return res.status(400).json({ error: 'machineId required' });
 
-    // Fetch job
     const { data: job } = await supabase.from('jobs').select('*').eq('id', jobId).single();
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
@@ -289,7 +251,7 @@ jobsRouter.post('/:id/machines', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 
       .select(`
         id,
         machine_id,
-        machine:machines ( id, name, category, inventory_nr, tonnage, is_active, status )
+        machine:machines ( id, name, category, inventory_nr, tonnage, is_active )
       `)
       .single();
 
@@ -319,7 +281,6 @@ jobsRouter.delete('/:jobId/machines/:machineAllocId', requireRole('LOCAL_MANAGER
 // ─── DELETE /api/v1/jobs/:id ───
 jobsRouter.delete('/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER', 'MANAGER'), async (req, res, next) => {
   try {
-    // job_machines cascade-deletes automatically
     const { error } = await supabase
       .from('jobs')
       .delete()
