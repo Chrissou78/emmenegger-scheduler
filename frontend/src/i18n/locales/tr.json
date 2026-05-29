@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "tr", "name": "Türkçe", "flag": "🇹🇷" },
-
   "brand": "Emmenegger",
   "sub": "Planlama & Organizasyon",
-
   "day": "Gün",
   "week": "Hafta",
   "month": "Ay",
@@ -53,7 +51,6 @@
   "darkMode": "Karanlık mod",
   "lightMode": "Aydınlık mod",
   "language": "Dil",
-
   "navSchedule": "Planlama",
   "navMachines": "Makineler",
   "navTasks": "Siparişler",
@@ -66,14 +63,12 @@
   "navSettings": "Ayarlar",
   "navHR": "İnsan Kaynakları",
   "navProfile": "Profil",
-
   "settings": "Ayarlar",
   "roles": "Roller ve İzinler",
   "company": "Şirket",
   "vatCrossBorder": "KDV & Sınır Ötesi Çalışanlar",
   "hierarchy": "Hiyerarşi",
   "languages": "Diller",
-
   "roleName": "Rol adı",
   "roleLabel": "Etiket",
   "permissions": "İzinler",
@@ -83,7 +78,6 @@
   "editRole": "Rolü düzenle",
   "createRole": "Yeni rol",
   "deleteRole": "Rolü sil",
-
   "companyName": "Şirket adı",
   "legalForm": "Hukuki şekil",
   "uid": "IDE No.",
@@ -103,7 +97,6 @@
   "vatPeriod": "KDV dönemi",
   "vatRate": "KDV oranı",
   "fiscalYearStart": "Mali yıl başlangıcı",
-
   "configLists": "Yapılandırma listeleri",
   "key": "Anahtar",
   "label": "Etiket",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Bu öğeyi silmek istediğinizden emin misiniz?",
   "yes": "Evet",
   "no": "Hayır",
-
   "contractTypes": "Sözleşme türleri",
   "salaryTypes": "Maaş türleri",
   "scheduleTypes": "Planlama türleri",
@@ -122,14 +114,12 @@
   "absenceCodes": "Devamsızlık kodları",
   "machineCategories": "Makine kategorileri",
   "machineOperators": "Makine operatörleri",
-
   "crossBorder": "Sınır ötesi çalışanlar",
   "countryCode": "Ülke kodu",
   "rateName": "Oran adı",
   "rateType": "Oran türü",
   "percentage": "Yüzde",
   "description": "Açıklama",
-
   "hierarchyDesc": "Organizasyonel atamaları yönetin",
   "teamLeader": "Takım lideri",
   "executive": "Müdür",
@@ -142,7 +132,6 @@
   "bulkAssign": "Toplu atama",
   "team": "Takım",
   "none": "Yok",
-
   "languageManagement": "Dil yönetimi",
   "languageManagementDesc": "Arayüz için mevcut dilleri etkinleştirin veya devre dışı bırakın",
   "enabledLanguages": "Etkin diller",
@@ -153,7 +142,6 @@
   "languageSaved": "Dil ayarları kaydedildi",
   "atLeastOneLang": "En az bir dil etkin olmalıdır",
   "cannotDisableDefault": "Varsayılan dil devre dışı bırakılamaz",
-
   "name": "Ad",
   "firstName": "Ad",
   "lastName": "Soyad",
@@ -181,10 +169,8 @@
   "noExecutive": "Müdür yok",
   "selectTeamLeader": "Takım lideri seç",
   "selectExecutive": "Müdür seç",
-
   "accessDenied": "Erişim reddedildi",
   "noPermission": "Bu sayfayı görüntüleme izniniz yok",
-
   "saved": "Kaydedildi",
   "error": "Hata",
   "success": "Başarılı",
@@ -212,7 +198,6 @@
   "tier3": "Müdürler",
   "tier2": "Takım liderleri",
   "tier1": "Çalışanlar",
-
   "signIn": "Giriş yap",
   "signingIn": "Giriş yapılıyor...",
   "forgotPassword": "Şifrenizi mi unuttunuz?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Planlamaya erişiminiz yok",
   "noAccessPage": "Bu sayfaya erişiminiz yok",
   "noEmployeesForTL": "Bu takım liderinde çalışan yok",
-
   "statsGlobal": "Genel istatistikler",
   "statsPerimeter": "Bölge istatistikleri",
   "statsTeam": "Takım istatistikleri",
@@ -269,12 +253,10 @@
   "taskCompletion": "Görev tamamlama",
   "attendance": "Katılım",
   "machineUtilization": "Makine kullanımı",
-
   "navMyWeek": "Haftam",
   "customerMargin": "Müşteri marjı",
   "teamPerformance": "Takım performansı",
   "personalStats": "Kişisel istatistikler",
-
   "crm": "CRM",
   "crmDashboard": "Genel bakış",
   "crmMyCustomers": "Müşterilerim",

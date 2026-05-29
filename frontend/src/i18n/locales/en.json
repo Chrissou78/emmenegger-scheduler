@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "en", "name": "English", "flag": "🇬🇧" },
-
   "brand": "Emmenegger",
   "sub": "Scheduling & Planning",
-
   "day": "Day",
   "week": "Week",
   "month": "Month",
@@ -53,7 +51,6 @@
   "darkMode": "Dark mode",
   "lightMode": "Light mode",
   "language": "Language",
-
   "navSchedule": "Schedule",
   "navMachines": "Machines",
   "navTasks": "Tasks",
@@ -66,14 +63,12 @@
   "navSettings": "Settings",
   "navHR": "HR",
   "navProfile": "Profile",
-
   "settings": "Settings",
   "roles": "Roles & Permissions",
   "company": "Company",
   "vatCrossBorder": "VAT & Cross-Border",
   "hierarchy": "Hierarchy",
   "languages": "Languages",
-
   "roleName": "Role Name",
   "roleLabel": "Label",
   "permissions": "Permissions",
@@ -83,7 +78,6 @@
   "editRole": "Edit Role",
   "createRole": "New Role",
   "deleteRole": "Delete Role",
-
   "companyName": "Company Name",
   "legalForm": "Legal Form",
   "uid": "UID No.",
@@ -103,7 +97,6 @@
   "vatPeriod": "VAT Period",
   "vatRate": "VAT Rate",
   "fiscalYearStart": "Fiscal Year Start",
-
   "configLists": "Configuration Lists",
   "key": "Key",
   "label": "Label",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Are you sure you want to delete this item?",
   "yes": "Yes",
   "no": "No",
-
   "contractTypes": "Contract Types",
   "salaryTypes": "Salary Types",
   "scheduleTypes": "Schedule Types",
@@ -122,14 +114,12 @@
   "absenceCodes": "Absence Codes",
   "machineCategories": "Machine Categories",
   "machineOperators": "Machine Operators",
-
   "crossBorder": "Cross-Border",
   "countryCode": "Country Code",
   "rateName": "Rate Name",
   "rateType": "Rate Type",
   "percentage": "Percentage",
   "description": "Description",
-
   "hierarchyDesc": "Manage organizational assignments",
   "teamLeader": "Team Leader",
   "executive": "Executive",
@@ -142,7 +132,6 @@
   "bulkAssign": "Bulk Assign",
   "team": "Team",
   "none": "None",
-
   "languageManagement": "Language Management",
   "languageManagementDesc": "Enable or disable available languages for the user interface",
   "enabledLanguages": "Enabled Languages",
@@ -153,7 +142,6 @@
   "languageSaved": "Language settings saved",
   "atLeastOneLang": "At least one language must be enabled",
   "cannotDisableDefault": "Cannot disable the default language",
-
   "name": "Name",
   "firstName": "First Name",
   "lastName": "Last Name",
@@ -181,10 +169,8 @@
   "noExecutive": "No Executive",
   "selectTeamLeader": "Select Team Leader",
   "selectExecutive": "Select Executive",
-
   "accessDenied": "Access Denied",
   "noPermission": "You do not have permission to view this page",
-
   "saved": "Saved",
   "error": "Error",
   "success": "Success",
@@ -212,7 +198,6 @@
   "tier3": "Executives",
   "tier2": "Team Leaders",
   "tier1": "Employees",
-
   "signIn": "Sign In",
   "signingIn": "Signing in...",
   "forgotPassword": "Forgot password?",
@@ -246,13 +231,12 @@
   "hr": "HR",
   "finance": "Finance",
   "sales": "Sales",
-   "filterByTeamLeader": "Filter by team leader",
+  "filterByTeamLeader": "Filter by team leader",
   "allTeamLeaders": "All team leaders",
   "myTeam": "My Team",
   "noAccessSchedule": "You do not have access to the schedule",
   "noAccessPage": "You do not have access to this page",
   "noEmployeesForTL": "No employees for this team leader",
-
   "statsGlobal": "Global Statistics",
   "statsPerimeter": "Perimeter Statistics",
   "statsTeam": "Team Statistics",
@@ -269,12 +253,10 @@
   "taskCompletion": "Task Completion",
   "attendance": "Attendance",
   "machineUtilization": "Machine Utilization",
-
   "navMyWeek": "My Week",
   "customerMargin": "Customer Margin",
   "teamPerformance": "Team Performance",
   "personalStats": "Personal Statistics",
-
   "crm": "CRM",
   "crmDashboard": "Dashboard",
   "crmMyCustomers": "My Customers",
@@ -393,8 +375,7 @@
   "machineConflict": "Machine Conflict",
   "addMachine": "Add Machine",
   "searchMachines": "Search Machines",
-  "inUse": "In Use"
-,
+  "inUse": "In Use",
   "quarter": "Quarter",
   "export": "Export",
   "title": "Statistics",

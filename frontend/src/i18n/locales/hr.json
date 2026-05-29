@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "hr", "name": "Hrvatski", "flag": "🇭🇷" },
-
   "brand": "Emmenegger",
   "sub": "Dispozicija & Planiranje",
-
   "day": "Dan",
   "week": "Tjedan",
   "month": "Mjesec",
@@ -53,7 +51,6 @@
   "darkMode": "Tamni način",
   "lightMode": "Svijetli način",
   "language": "Jezik",
-
   "navSchedule": "Dispozicija",
   "navMachines": "Strojevi",
   "navTasks": "Nalozi",
@@ -66,14 +63,12 @@
   "navSettings": "Postavke",
   "navHR": "Ljudski resursi",
   "navProfile": "Profil",
-
   "settings": "Postavke",
   "roles": "Uloge i dopuštenja",
   "company": "Tvrtka",
   "vatCrossBorder": "PDV & Prekogranični radnici",
   "hierarchy": "Hijerarhija",
   "languages": "Jezici",
-
   "roleName": "Naziv uloge",
   "roleLabel": "Oznaka",
   "permissions": "Dopuštenja",
@@ -83,7 +78,6 @@
   "editRole": "Uredi ulogu",
   "createRole": "Nova uloga",
   "deleteRole": "Obriši ulogu",
-
   "companyName": "Naziv tvrtke",
   "legalForm": "Pravni oblik",
   "uid": "IDE br.",
@@ -103,7 +97,6 @@
   "vatPeriod": "PDV razdoblje",
   "vatRate": "PDV stopa",
   "fiscalYearStart": "Početak fiskalne godine",
-
   "configLists": "Konfiguracijski popisi",
   "key": "Ključ",
   "label": "Oznaka",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Jeste li sigurni da želite obrisati ovaj unos?",
   "yes": "Da",
   "no": "Ne",
-
   "contractTypes": "Vrste ugovora",
   "salaryTypes": "Vrste plaća",
   "scheduleTypes": "Vrste planiranja",
@@ -122,14 +114,12 @@
   "absenceCodes": "Kodovi odsutnosti",
   "machineCategories": "Kategorije strojeva",
   "machineOperators": "Operateri strojeva",
-
   "crossBorder": "Prekogranični radnici",
   "countryCode": "Kod države",
   "rateName": "Naziv stope",
   "rateType": "Vrsta stope",
   "percentage": "Postotak",
   "description": "Opis",
-
   "hierarchyDesc": "Upravljajte organizacijskim dodjelama",
   "teamLeader": "Voditelj tima",
   "executive": "Direktor",
@@ -142,7 +132,6 @@
   "bulkAssign": "Masovna dodjela",
   "team": "Tim",
   "none": "Ništa",
-
   "languageManagement": "Upravljanje jezicima",
   "languageManagementDesc": "Aktivirajte ili deaktivirajte dostupne jezike sučelja",
   "enabledLanguages": "Aktivirani jezici",
@@ -153,7 +142,6 @@
   "languageSaved": "Postavke jezika spremljene",
   "atLeastOneLang": "Barem jedan jezik mora biti aktiviran",
   "cannotDisableDefault": "Zadani jezik ne može biti deaktiviran",
-
   "name": "Naziv",
   "firstName": "Ime",
   "lastName": "Prezime",
@@ -181,10 +169,8 @@
   "noExecutive": "Bez direktora",
   "selectTeamLeader": "Odaberi voditelja tima",
   "selectExecutive": "Odaberi direktora",
-
   "accessDenied": "Pristup odbijen",
   "noPermission": "Nemate dopuštenje za prikaz ove stranice",
-
   "saved": "Spremljeno",
   "error": "Greška",
   "success": "Uspjeh",
@@ -212,7 +198,6 @@
   "tier3": "Direktori",
   "tier2": "Voditelji timova",
   "tier1": "Zaposlenici",
-
   "signIn": "Prijavi se",
   "signingIn": "Prijava u tijeku...",
   "forgotPassword": "Zaboravljena lozinka?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Nemate pristup dispoziciji",
   "noAccessPage": "Nemate pristup ovoj stranici",
   "noEmployeesForTL": "Nema zaposlenika za ovog voditelja",
-
   "statsGlobal": "Globalne statistike",
   "statsPerimeter": "Statistike perimetra",
   "statsTeam": "Statistike tima",
@@ -269,12 +253,10 @@
   "taskCompletion": "Završenost zadataka",
   "attendance": "Prisutnost",
   "machineUtilization": "Iskorištenost strojeva",
-
   "navMyWeek": "Moj tjedan",
   "customerMargin": "Marža klijenta",
   "teamPerformance": "Učinkovitost tima",
   "personalStats": "Osobne statistike",
-
   "crm": "CRM",
   "crmDashboard": "Pregled",
   "crmMyCustomers": "Moji klijenti",

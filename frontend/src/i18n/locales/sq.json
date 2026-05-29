@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "sq", "name": "Shqip", "flag": "🇦🇱" },
-
   "brand": "Emmenegger",
   "sub": "Dispozitë & Planifikim",
-
   "day": "Ditë",
   "week": "Javë",
   "month": "Muaj",
@@ -53,7 +51,6 @@
   "darkMode": "Mënyra e errët",
   "lightMode": "Mënyra e ndritshme",
   "language": "Gjuha",
-
   "navSchedule": "Dispozita",
   "navMachines": "Makineri",
   "navTasks": "Porosi",
@@ -66,14 +63,12 @@
   "navSettings": "Cilësimet",
   "navHR": "Burime Njerëzore",
   "navProfile": "Profili",
-
   "settings": "Cilësimet",
   "roles": "Rolet & Lejet",
   "company": "Kompania",
   "vatCrossBorder": "TVSH & Punonjës ndërkufitarë",
   "hierarchy": "Hierarkia",
   "languages": "Gjuhët",
-
   "roleName": "Emri i rolit",
   "roleLabel": "Etiketa",
   "permissions": "Lejet",
@@ -83,7 +78,6 @@
   "editRole": "Ndrysho rolin",
   "createRole": "Rol i ri",
   "deleteRole": "Fshi rolin",
-
   "companyName": "Emri i kompanisë",
   "legalForm": "Forma juridike",
   "uid": "Nr. IDE",
@@ -103,7 +97,6 @@
   "vatPeriod": "Periudha TVSH",
   "vatRate": "Norma TVSH",
   "fiscalYearStart": "Fillimi i vitit fiskal",
-
   "configLists": "Lista konfigurimi",
   "key": "Çelësi",
   "label": "Etiketa",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "A jeni i sigurt që dëshironi ta fshini këtë element?",
   "yes": "Po",
   "no": "Jo",
-
   "contractTypes": "Llojet e kontratave",
   "salaryTypes": "Llojet e pagës",
   "scheduleTypes": "Llojet e planifikimit",
@@ -122,14 +114,12 @@
   "absenceCodes": "Kodet e mungesave",
   "machineCategories": "Kategoritë e makinerive",
   "machineOperators": "Operatorët e makinerive",
-
   "crossBorder": "Punonjës ndërkufitarë",
   "countryCode": "Kodi i shtetit",
   "rateName": "Emri i normës",
   "rateType": "Lloji i normës",
   "percentage": "Përqindja",
   "description": "Përshkrimi",
-
   "hierarchyDesc": "Menaxho caktimet organizative",
   "teamLeader": "Drejtues ekipi",
   "executive": "Drejtor",
@@ -142,7 +132,6 @@
   "bulkAssign": "Caktim masiv",
   "team": "Ekipi",
   "none": "Asnjë",
-
   "languageManagement": "Menaxhimi i gjuhëve",
   "languageManagementDesc": "Aktivizo ose çaktivizo gjuhët e disponueshme të ndërfaqes",
   "enabledLanguages": "Gjuhët e aktivizuara",
@@ -153,7 +142,6 @@
   "languageSaved": "Cilësimet e gjuhës u ruajtën",
   "atLeastOneLang": "Të paktën një gjuhë duhet të jetë aktive",
   "cannotDisableDefault": "Gjuha e parazgjedhur nuk mund të çaktivizohet",
-
   "name": "Emri",
   "firstName": "Emri",
   "lastName": "Mbiemri",
@@ -181,10 +169,8 @@
   "noExecutive": "Pa drejtor",
   "selectTeamLeader": "Zgjidh drejtuesin e ekipit",
   "selectExecutive": "Zgjidh drejtorin",
-
   "accessDenied": "Qasja e refuzuar",
   "noPermission": "Nuk keni leje për të parë këtë faqe",
-
   "saved": "U ruajt",
   "error": "Gabim",
   "success": "Sukses",
@@ -212,7 +198,6 @@
   "tier3": "Drejtorë",
   "tier2": "Drejtues ekipesh",
   "tier1": "Punonjës",
-
   "signIn": "Hyni",
   "signingIn": "Duke hyrë...",
   "forgotPassword": "Keni harruar fjalëkalimin?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Nuk keni qasje në dispozitë",
   "noAccessPage": "Nuk keni qasje në këtë faqe",
   "noEmployeesForTL": "Asnjë punonjës për këtë drejtues",
-
   "statsGlobal": "Statistika globale",
   "statsPerimeter": "Statistika të perimetrit",
   "statsTeam": "Statistika të ekipit",
@@ -269,12 +253,10 @@
   "taskCompletion": "Përfundimi i detyrave",
   "attendance": "Prezenca",
   "machineUtilization": "Shfrytëzimi i makinerive",
-
   "navMyWeek": "Java ime",
   "customerMargin": "Marzhi i klientit",
   "teamPerformance": "Performanca e ekipit",
   "personalStats": "Statistika personale",
-
   "crm": "CRM",
   "crmDashboard": "Përmbledhje",
   "crmMyCustomers": "Klientët e mi",

@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "ro", "name": "Română", "flag": "🇷🇴" },
-
   "brand": "Emmenegger",
   "sub": "Dispoziție & Planificare",
-
   "day": "Zi",
   "week": "Săptămână",
   "month": "Lună",
@@ -53,7 +51,6 @@
   "darkMode": "Mod întunecat",
   "lightMode": "Mod luminos",
   "language": "Limbă",
-
   "navSchedule": "Dispoziție",
   "navMachines": "Mașini",
   "navTasks": "Comenzi",
@@ -66,14 +63,12 @@
   "navSettings": "Setări",
   "navHR": "Resurse Umane",
   "navProfile": "Profil",
-
   "settings": "Setări",
   "roles": "Roluri & Permisiuni",
   "company": "Companie",
   "vatCrossBorder": "TVA & Frontalieri",
   "hierarchy": "Ierarhie",
   "languages": "Limbi",
-
   "roleName": "Numele rolului",
   "roleLabel": "Etichetă",
   "permissions": "Permisiuni",
@@ -83,7 +78,6 @@
   "editRole": "Editează rol",
   "createRole": "Rol nou",
   "deleteRole": "Șterge rol",
-
   "companyName": "Numele companiei",
   "legalForm": "Forma juridică",
   "uid": "Nr. IDE",
@@ -103,7 +97,6 @@
   "vatPeriod": "Perioada TVA",
   "vatRate": "Cota TVA",
   "fiscalYearStart": "Începutul anului fiscal",
-
   "configLists": "Liste de configurare",
   "key": "Cheie",
   "label": "Etichetă",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Ești sigur că vrei să ștergi acest element?",
   "yes": "Da",
   "no": "Nu",
-
   "contractTypes": "Tipuri de contract",
   "salaryTypes": "Tipuri de salariu",
   "scheduleTypes": "Tipuri de planificare",
@@ -122,14 +114,12 @@
   "absenceCodes": "Coduri de absență",
   "machineCategories": "Categorii mașini",
   "machineOperators": "Operatori mașini",
-
   "crossBorder": "Frontalieri",
   "countryCode": "Cod țară",
   "rateName": "Numele cotei",
   "rateType": "Tipul cotei",
   "percentage": "Procent",
   "description": "Descriere",
-
   "hierarchyDesc": "Gestionează atribuirile organizaționale",
   "teamLeader": "Șef de echipă",
   "executive": "Director",
@@ -142,7 +132,6 @@
   "bulkAssign": "Atribuire în masă",
   "team": "Echipă",
   "none": "Niciunul",
-
   "languageManagement": "Gestionare limbi",
   "languageManagementDesc": "Activează sau dezactivează limbile disponibile pentru interfață",
   "enabledLanguages": "Limbi activate",
@@ -153,7 +142,6 @@
   "languageSaved": "Setările de limbă salvate",
   "atLeastOneLang": "Cel puțin o limbă trebuie activată",
   "cannotDisableDefault": "Limba implicită nu poate fi dezactivată",
-
   "name": "Nume",
   "firstName": "Prenume",
   "lastName": "Nume de familie",
@@ -181,10 +169,8 @@
   "noExecutive": "Fără director",
   "selectTeamLeader": "Selectează șef de echipă",
   "selectExecutive": "Selectează director",
-
   "accessDenied": "Acces interzis",
   "noPermission": "Nu aveți permisiunea de a vizualiza această pagină",
-
   "saved": "Salvat",
   "error": "Eroare",
   "success": "Succes",
@@ -212,7 +198,6 @@
   "tier3": "Directori",
   "tier2": "Șefi de echipă",
   "tier1": "Angajați",
-
   "signIn": "Autentificare",
   "signingIn": "Se autentifică...",
   "forgotPassword": "Ai uitat parola?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Nu aveți acces la dispoziție",
   "noAccessPage": "Nu aveți acces la această pagină",
   "noEmployeesForTL": "Niciun angajat pentru acest șef de echipă",
-
   "statsGlobal": "Statistici globale",
   "statsPerimeter": "Statistici pe perimetru",
   "statsTeam": "Statistici de echipă",
@@ -269,12 +253,10 @@
   "taskCompletion": "Finalizare sarcini",
   "attendance": "Prezență",
   "machineUtilization": "Utilizare mașini",
-
   "navMyWeek": "Săptămâna mea",
   "customerMargin": "Marja clientului",
   "teamPerformance": "Performanța echipei",
   "personalStats": "Statistici personale",
-
   "crm": "CRM",
   "crmDashboard": "Prezentare generală",
   "crmMyCustomers": "Clienții mei",

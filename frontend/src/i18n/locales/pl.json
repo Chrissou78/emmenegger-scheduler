@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "pl", "name": "Polski", "flag": "🇵🇱" },
-
   "brand": "Emmenegger",
   "sub": "Dyspozycja & Planowanie",
-
   "day": "Dzień",
   "week": "Tydzień",
   "month": "Miesiąc",
@@ -53,7 +51,6 @@
   "darkMode": "Tryb ciemny",
   "lightMode": "Tryb jasny",
   "language": "Język",
-
   "navSchedule": "Dyspozycja",
   "navMachines": "Maszyny",
   "navTasks": "Zlecenia",
@@ -66,14 +63,12 @@
   "navSettings": "Ustawienia",
   "navHR": "Kadry",
   "navProfile": "Profil",
-
   "settings": "Ustawienia",
   "roles": "Role i uprawnienia",
   "company": "Firma",
   "vatCrossBorder": "VAT & Pracownicy transgraniczni",
   "hierarchy": "Hierarchia",
   "languages": "Języki",
-
   "roleName": "Nazwa roli",
   "roleLabel": "Etykieta",
   "permissions": "Uprawnienia",
@@ -83,7 +78,6 @@
   "editRole": "Edytuj rolę",
   "createRole": "Nowa rola",
   "deleteRole": "Usuń rolę",
-
   "companyName": "Nazwa firmy",
   "legalForm": "Forma prawna",
   "uid": "Nr IDE",
@@ -103,7 +97,6 @@
   "vatPeriod": "Okres VAT",
   "vatRate": "Stawka VAT",
   "fiscalYearStart": "Początek roku obrachunkowego",
-
   "configLists": "Listy konfiguracyjne",
   "key": "Klucz",
   "label": "Etykieta",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Czy na pewno chcesz usunąć ten wpis?",
   "yes": "Tak",
   "no": "Nie",
-
   "contractTypes": "Rodzaje umów",
   "salaryTypes": "Rodzaje wynagrodzeń",
   "scheduleTypes": "Rodzaje planowania",
@@ -122,14 +114,12 @@
   "absenceCodes": "Kody nieobecności",
   "machineCategories": "Kategorie maszyn",
   "machineOperators": "Operatorzy maszyn",
-
   "crossBorder": "Pracownicy transgraniczni",
   "countryCode": "Kod kraju",
   "rateName": "Nazwa stawki",
   "rateType": "Rodzaj stawki",
   "percentage": "Procent",
   "description": "Opis",
-
   "hierarchyDesc": "Zarządzaj przypisaniami organizacyjnymi",
   "teamLeader": "Kierownik zespołu",
   "executive": "Dyrektor",
@@ -142,7 +132,6 @@
   "bulkAssign": "Przypisanie masowe",
   "team": "Zespół",
   "none": "Brak",
-
   "languageManagement": "Zarządzanie językami",
   "languageManagementDesc": "Włącz lub wyłącz dostępne języki interfejsu",
   "enabledLanguages": "Włączone języki",
@@ -153,7 +142,6 @@
   "languageSaved": "Ustawienia języka zapisane",
   "atLeastOneLang": "Co najmniej jeden język musi być włączony",
   "cannotDisableDefault": "Język domyślny nie może być wyłączony",
-
   "name": "Nazwa",
   "firstName": "Imię",
   "lastName": "Nazwisko",
@@ -181,10 +169,8 @@
   "noExecutive": "Brak dyrektora",
   "selectTeamLeader": "Wybierz kierownika",
   "selectExecutive": "Wybierz dyrektora",
-
   "accessDenied": "Brak dostępu",
   "noPermission": "Nie masz uprawnień do wyświetlenia tej strony",
-
   "saved": "Zapisano",
   "error": "Błąd",
   "success": "Sukces",
@@ -212,7 +198,6 @@
   "tier3": "Dyrektorzy",
   "tier2": "Kierownicy zespołów",
   "tier1": "Pracownicy",
-
   "signIn": "Zaloguj się",
   "signingIn": "Logowanie...",
   "forgotPassword": "Zapomniałeś hasła?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Nie masz dostępu do dyspozycji",
   "noAccessPage": "Nie masz dostępu do tej strony",
   "noEmployeesForTL": "Brak pracowników dla tego kierownika",
-
   "statsGlobal": "Statystyki globalne",
   "statsPerimeter": "Statystyki obszarowe",
   "statsTeam": "Statystyki zespołu",
@@ -269,12 +253,10 @@
   "taskCompletion": "Realizacja zadań",
   "attendance": "Frekwencja",
   "machineUtilization": "Wykorzystanie maszyn",
-
   "navMyWeek": "Mój tydzień",
   "customerMargin": "Marża klienta",
   "teamPerformance": "Wydajność zespołu",
   "personalStats": "Statystyki osobiste",
-
   "crm": "CRM",
   "crmDashboard": "Przegląd",
   "crmMyCustomers": "Moi klienci",
@@ -328,7 +310,6 @@
   "weekNum": "T",
   "quickAccess": "Szybki dostęp",
   "executive2": "Dyrektor",
-
   "editActivity": "Edytuj działanie",
   "editOpportunity": "Edytuj szansę",
   "exportCsv": "Eksport CSV",

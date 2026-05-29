@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "fr", "name": "Français", "flag": "🇫🇷" },
-
   "brand": "Emmenegger",
   "sub": "Disposition & Planification",
-
   "day": "Jour",
   "week": "Semaine",
   "month": "Mois",
@@ -53,7 +51,6 @@
   "darkMode": "Mode sombre",
   "lightMode": "Mode clair",
   "language": "Langue",
-
   "navSchedule": "Disposition",
   "navMachines": "Machines",
   "navTasks": "Tâches",
@@ -66,14 +63,12 @@
   "navSettings": "Paramètres",
   "navHR": "RH",
   "navProfile": "Profil",
-
   "settings": "Paramètres",
   "roles": "Rôles & Permissions",
   "company": "Entreprise",
   "vatCrossBorder": "TVA & Frontaliers",
   "hierarchy": "Hiérarchie",
   "languages": "Langues",
-
   "roleName": "Nom du rôle",
   "roleLabel": "Libellé",
   "permissions": "Permissions",
@@ -83,7 +78,6 @@
   "editRole": "Modifier le rôle",
   "createRole": "Nouveau rôle",
   "deleteRole": "Supprimer le rôle",
-
   "companyName": "Nom de l'entreprise",
   "legalForm": "Forme juridique",
   "uid": "N° IDE",
@@ -103,7 +97,6 @@
   "vatPeriod": "Période TVA",
   "vatRate": "Taux TVA",
   "fiscalYearStart": "Début exercice fiscal",
-
   "configLists": "Listes de configuration",
   "key": "Clé",
   "label": "Libellé",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Voulez-vous vraiment supprimer cet élément?",
   "yes": "Oui",
   "no": "Non",
-
   "contractTypes": "Types de contrat",
   "salaryTypes": "Types de salaire",
   "scheduleTypes": "Types de planification",
@@ -122,14 +114,12 @@
   "absenceCodes": "Codes d'absence",
   "machineCategories": "Catégories de machines",
   "machineOperators": "Opérateurs de machines",
-
   "crossBorder": "Frontaliers",
   "countryCode": "Code pays",
   "rateName": "Nom du taux",
   "rateType": "Type de taux",
   "percentage": "Pourcentage",
   "description": "Description",
-
   "hierarchyDesc": "Gérer les affectations organisationnelles",
   "teamLeader": "Chef d'équipe",
   "executive": "Direction",
@@ -142,7 +132,6 @@
   "bulkAssign": "Attribution en masse",
   "team": "Équipe",
   "none": "Aucun",
-
   "languageManagement": "Gestion des langues",
   "languageManagementDesc": "Activer ou désactiver les langues disponibles pour l'interface",
   "enabledLanguages": "Langues activées",
@@ -153,7 +142,6 @@
   "languageSaved": "Paramètres de langue enregistrés",
   "atLeastOneLang": "Au moins une langue doit être activée",
   "cannotDisableDefault": "La langue par défaut ne peut pas être désactivée",
-
   "name": "Nom",
   "firstName": "Prénom",
   "lastName": "Nom de famille",
@@ -181,10 +169,8 @@
   "noExecutive": "Pas de directeur",
   "selectTeamLeader": "Choisir un chef d'équipe",
   "selectExecutive": "Choisir un directeur",
-
   "accessDenied": "Accès refusé",
   "noPermission": "Vous n'avez pas la permission de voir cette page",
-
   "saved": "Enregistré",
   "error": "Erreur",
   "success": "Succès",
@@ -212,7 +198,6 @@
   "tier3": "Directeurs",
   "tier2": "Chefs d'équipe",
   "tier1": "Employés",
-
   "signIn": "Se connecter",
   "signingIn": "Connexion en cours...",
   "forgotPassword": "Mot de passe oublié?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Vous n'avez pas accès à la planification",
   "noAccessPage": "Vous n'avez pas accès à cette page",
   "noEmployeesForTL": "Aucun employé pour ce chef d'équipe",
-
   "statsGlobal": "Statistiques globales",
   "statsPerimeter": "Statistiques du périmètre",
   "statsTeam": "Statistiques d'équipe",
@@ -269,12 +253,10 @@
   "taskCompletion": "Achèvement des tâches",
   "attendance": "Présence",
   "machineUtilization": "Utilisation des machines",
-
   "navMyWeek": "Ma semaine",
   "customerMargin": "Marge client",
   "teamPerformance": "Performance d'équipe",
   "personalStats": "Statistiques personnelles",
-
   "crm": "CRM",
   "crmDashboard": "Tableau de bord",
   "crmMyCustomers": "Mes clients",
@@ -408,5 +390,11 @@
   "sat": "Sa",
   "weekNum": "S",
   "quickAccess": "Accès rapide",
-  "executive2": "Directeur"
+  "executive2": "Directeur",
+  "machineNeedsSite": "Attribuez d'abord une tâche à cette cellule — un site de livraison est requis avant d'allouer des machines.",
+  "noMachinesAssigned": "Aucune machine attribuée",
+  "machineConflict": "Conflit de machine",
+  "addMachine": "Ajouter une machine",
+  "searchMachines": "Rechercher des machines...",
+  "inUse": "En service"
 }

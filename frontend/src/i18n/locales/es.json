@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "es", "name": "Español", "flag": "🇪🇸" },
-
   "brand": "Emmenegger",
   "sub": "Planificación & Programación",
-
   "day": "Día",
   "week": "Semana",
   "month": "Mes",
@@ -53,7 +51,6 @@
   "darkMode": "Modo oscuro",
   "lightMode": "Modo claro",
   "language": "Idioma",
-
   "navSchedule": "Programación",
   "navMachines": "Máquinas",
   "navTasks": "Tareas",
@@ -66,14 +63,12 @@
   "navSettings": "Configuración",
   "navHR": "RRHH",
   "navProfile": "Perfil",
-
   "settings": "Configuración",
   "roles": "Roles & Permisos",
   "company": "Empresa",
   "vatCrossBorder": "IVA & Transfronterizos",
   "hierarchy": "Jerarquía",
   "languages": "Idiomas",
-
   "roleName": "Nombre del rol",
   "roleLabel": "Etiqueta",
   "permissions": "Permisos",
@@ -83,7 +78,6 @@
   "editRole": "Editar rol",
   "createRole": "Nuevo rol",
   "deleteRole": "Eliminar rol",
-
   "companyName": "Nombre de la empresa",
   "legalForm": "Forma jurídica",
   "uid": "N° IDE",
@@ -103,7 +97,6 @@
   "vatPeriod": "Período IVA",
   "vatRate": "Tasa IVA",
   "fiscalYearStart": "Inicio año fiscal",
-
   "configLists": "Listas de configuración",
   "key": "Clave",
   "label": "Etiqueta",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "¿Estás seguro de que quieres eliminar este elemento?",
   "yes": "Sí",
   "no": "No",
-
   "contractTypes": "Tipos de contrato",
   "salaryTypes": "Tipos de salario",
   "scheduleTypes": "Tipos de programación",
@@ -122,14 +114,12 @@
   "absenceCodes": "Códigos de ausencia",
   "machineCategories": "Categorías de máquinas",
   "machineOperators": "Operadores de máquinas",
-
   "crossBorder": "Transfronterizos",
   "countryCode": "Código de país",
   "rateName": "Nombre de la tasa",
   "rateType": "Tipo de tasa",
   "percentage": "Porcentaje",
   "description": "Descripción",
-
   "hierarchyDesc": "Gestionar asignaciones organizativas",
   "teamLeader": "Líder de equipo",
   "executive": "Director",
@@ -142,7 +132,6 @@
   "bulkAssign": "Asignación masiva",
   "team": "Equipo",
   "none": "Ninguno",
-
   "languageManagement": "Gestión de idiomas",
   "languageManagementDesc": "Activar o desactivar los idiomas disponibles para la interfaz",
   "enabledLanguages": "Idiomas activados",
@@ -153,7 +142,6 @@
   "languageSaved": "Configuración de idioma guardada",
   "atLeastOneLang": "Al menos un idioma debe estar activado",
   "cannotDisableDefault": "El idioma predeterminado no se puede desactivar",
-
   "name": "Nombre",
   "firstName": "Nombre",
   "lastName": "Apellido",
@@ -181,10 +169,8 @@
   "noExecutive": "Sin director",
   "selectTeamLeader": "Seleccionar líder de equipo",
   "selectExecutive": "Seleccionar director",
-
   "accessDenied": "Acceso denegado",
   "noPermission": "No tienes permiso para ver esta página",
-
   "saved": "Guardado",
   "error": "Error",
   "success": "Éxito",
@@ -212,7 +198,6 @@
   "tier3": "Directores",
   "tier2": "Líderes de equipo",
   "tier1": "Empleados",
-
   "signIn": "Iniciar sesión",
   "signingIn": "Iniciando sesión...",
   "forgotPassword": "¿Olvidaste la contraseña?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "No tiene acceso a la planificación",
   "noAccessPage": "No tiene acceso a esta página",
   "noEmployeesForTL": "Sin empleados para este jefe de equipo",
-
   "statsGlobal": "Estadísticas globales",
   "statsPerimeter": "Estadísticas de perímetro",
   "statsTeam": "Estadísticas de equipo",
@@ -269,12 +253,10 @@
   "taskCompletion": "Cumplimiento de tareas",
   "attendance": "Asistencia",
   "machineUtilization": "Utilización de máquinas",
-
   "navMyWeek": "Mi semana",
   "customerMargin": "Margen de cliente",
   "teamPerformance": "Rendimiento del equipo",
   "personalStats": "Estadísticas personales",
-
   "crm": "CRM",
   "crmDashboard": "Panel",
   "crmMyCustomers": "Mis clientes",

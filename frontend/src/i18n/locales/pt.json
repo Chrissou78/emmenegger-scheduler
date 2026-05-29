@@ -390,5 +390,11 @@
   "sat": "Sáb",
   "weekNum": "S",
   "quickAccess": "Acesso rápido",
-  "executive2": "Diretor"
+  "executive2": "Diretor",
+  "machineNeedsSite": "Atribua primeiro uma tarefa a esta célula — um local de entrega é necessário antes de alocar máquinas.",
+  "noMachinesAssigned": "Nenhuma máquina atribuída",
+  "machineConflict": "Conflito de máquina",
+  "addMachine": "Adicionar máquina",
+  "searchMachines": "Pesquisar máquinas...",
+  "inUse": "Em uso"
 }

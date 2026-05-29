@@ -1,9 +1,7 @@
 {
   "_meta": { "code": "de", "name": "Deutsch", "flag": "🇩🇪" },
-
   "brand": "Emmenegger",
   "sub": "Disposition & Planung",
-
   "day": "Tag",
   "week": "Woche",
   "month": "Monat",
@@ -53,7 +51,6 @@
   "darkMode": "Dunkelmodus",
   "lightMode": "Hellmodus",
   "language": "Sprache",
-
   "navSchedule": "Disposition",
   "navMachines": "Maschinen",
   "navTasks": "Aufträge",
@@ -66,14 +63,12 @@
   "navSettings": "Einstellungen",
   "navHR": "Personal",
   "navProfile": "Profil",
-
   "settings": "Einstellungen",
   "roles": "Rollen & Berechtigungen",
   "company": "Unternehmen",
   "vatCrossBorder": "MwSt & Grenzgänger",
   "hierarchy": "Hierarchie",
   "languages": "Sprachen",
-
   "roleName": "Rollenname",
   "roleLabel": "Bezeichnung",
   "permissions": "Berechtigungen",
@@ -83,7 +78,6 @@
   "editRole": "Rolle bearbeiten",
   "createRole": "Neue Rolle",
   "deleteRole": "Rolle löschen",
-
   "companyName": "Firmenname",
   "legalForm": "Rechtsform",
   "uid": "UID-Nr.",
@@ -103,7 +97,6 @@
   "vatPeriod": "MwSt-Periode",
   "vatRate": "MwSt-Satz",
   "fiscalYearStart": "Geschäftsjahr Beginn",
-
   "configLists": "Konfigurationslisten",
   "key": "Schlüssel",
   "label": "Bezeichnung",
@@ -114,7 +107,6 @@
   "confirmDeleteMsg": "Möchten Sie diesen Eintrag wirklich löschen?",
   "yes": "Ja",
   "no": "Nein",
-
   "contractTypes": "Vertragsarten",
   "salaryTypes": "Lohnarten",
   "scheduleTypes": "Planungsarten",
@@ -122,14 +114,12 @@
   "absenceCodes": "Absenzcodes",
   "machineCategories": "Maschinenkategorien",
   "machineOperators": "Maschinenführer",
-
   "crossBorder": "Grenzgänger",
   "countryCode": "Ländercode",
   "rateName": "Satzname",
   "rateType": "Satztyp",
   "percentage": "Prozentsatz",
   "description": "Beschreibung",
-
   "hierarchyDesc": "Organisatorische Zuordnungen verwalten",
   "teamLeader": "Teamleiter",
   "executive": "Geschäftsführer",
@@ -142,7 +132,6 @@
   "bulkAssign": "Massenzuweisung",
   "team": "Team",
   "none": "Keine",
-
   "languageManagement": "Sprachverwaltung",
   "languageManagementDesc": "Verfügbare Sprachen für die Benutzeroberfläche aktivieren oder deaktivieren",
   "enabledLanguages": "Aktivierte Sprachen",
@@ -153,7 +142,6 @@
   "languageSaved": "Spracheinstellungen gespeichert",
   "atLeastOneLang": "Mindestens eine Sprache muss aktiviert sein",
   "cannotDisableDefault": "Die Standardsprache kann nicht deaktiviert werden",
-
   "name": "Name",
   "firstName": "Vorname",
   "lastName": "Nachname",
@@ -181,10 +169,8 @@
   "noExecutive": "Kein Geschäftsführer",
   "selectTeamLeader": "Teamleiter wählen",
   "selectExecutive": "Geschäftsführer wählen",
-
   "accessDenied": "Zugriff verweigert",
   "noPermission": "Sie haben keine Berechtigung, diese Seite zu sehen",
-
   "saved": "Gespeichert",
   "error": "Fehler",
   "success": "Erfolg",
@@ -212,7 +198,6 @@
   "tier3": "Geschäftsführer",
   "tier2": "Teamleiter",
   "tier1": "Mitarbeiter",
-
   "signIn": "Anmelden",
   "signingIn": "Wird angemeldet...",
   "forgotPassword": "Passwort vergessen?",
@@ -252,7 +237,6 @@
   "noAccessSchedule": "Sie haben keinen Zugriff auf die Disposition",
   "noAccessPage": "Sie haben keinen Zugriff auf diese Seite",
   "noEmployeesForTL": "Keine Mitarbeiter für diesen Teamleiter",
-
   "statsGlobal": "Globale Statistiken",
   "statsPerimeter": "Bereichsstatistiken",
   "statsTeam": "Teamstatistiken",
@@ -269,12 +253,10 @@
   "taskCompletion": "Aufgabenerfüllung",
   "attendance": "Anwesenheit",
   "machineUtilization": "Maschinenauslastung",
-
   "navMyWeek": "Meine Woche",
   "customerMargin": "Kundenmarge",
   "teamPerformance": "Teamleistung",
   "personalStats": "Persönliche Statistiken",
-
   "crm": "CRM",
   "crmDashboard": "Übersicht",
   "crmMyCustomers": "Meine Kunden",
@@ -388,7 +370,7 @@
   "logNoTransactions": "Keine Buchungen",
   "logStockTabHint": "Verwenden Sie die Verbrauch-/Einkauf-Buttons um Lagerbewegungen zu erfassen. Bearbeiten für Schwellenwerte.",
   "logQtyRequired": "Menge ist erforderlich",
-    "noMachinesAssigned": "Keine Maschinen zugewiesen",
+  "noMachinesAssigned": "Keine Maschinen zugewiesen",
   "machineConflict": "Maschinenkonflikt",
   "addMachine": "Maschine hinzufügen",
   "searchMachines": "Maschinen suchen...",
@@ -413,5 +395,6 @@
   "sat": "Sa",
   "weekNum": "KW",
   "quickAccess": "Schnellzugriff",
-  "executive2": "Geschäftsführer"
+  "executive2": "Geschäftsführer",
+  "machineNeedsSite": "Weisen Sie zuerst einen Auftrag dieser Zelle zu — ein Lieferort ist erforderlich, bevor Maschinen zugewiesen werden können."
 }
