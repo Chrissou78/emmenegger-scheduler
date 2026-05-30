@@ -75,6 +75,16 @@ function isToday(d: Date) {
   const now = new Date();
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
+
+/** ★ NEW — Check if a date is strictly in the past (before today at midnight) */
+function isDateInPast(d: Date): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+  return target.getTime() < today.getTime();
+}
+
 function timeToHours(time: string): number {
   const [h, m] = time.split(':').map(Number); return h + (m || 0) / 60;
 }
@@ -338,6 +348,25 @@ export function ReportsPage() {
     const dateStr = format(dates[dayIndex], 'yyyy-MM-dd');
     return reports.find(r => r.task_id === job.task_id && r.date === dateStr && r.user_id === (user?.id || '')) || null;
   }, [dates, reports, user]);
+
+  /** ★ NEW — Check if a specific job on a specific day is overdue (past day + no report) */
+  const isJobOverdue = useCallback((job: Job, dayIndex: number): boolean => {
+    if (!isDateInPast(dates[dayIndex])) return false;
+    const report = getReportForJob(job, dayIndex);
+    return !report;
+  }, [dates, getReportForJob]);
+
+  /** ★ NEW — Total overdue count across the week */
+  const totalOverdue = useMemo(() => {
+    let count = 0;
+    for (let di = 0; di < 6; di++) {
+      const dayJobs = myDayJobs[di] || [];
+      for (const job of dayJobs) {
+        if (isJobOverdue(job, di)) count++;
+      }
+    }
+    return count;
+  }, [myDayJobs, isJobOverdue]);
 
   const openReportModal = useCallback((job: Job, dayIndex: number) => {
     const dateStr = format(dates[dayIndex], 'yyyy-MM-dd');
@@ -626,7 +655,13 @@ export function ReportsPage() {
           <button onClick={() => setWeekOff(0)} style={{ padding: '8px 14px', borderRadius: 2, border: 'none', background: th.switchActive, color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase' }}>{t.today ?? 'Today'}</button>
         </div>
         <div style={{ display: 'flex', gap: 24 }}>
-          {[{ v: totalJobs, l: t.jobs ?? 'Jobs', c: th.gold }, { v: totalReported, l: t.reported ?? 'Reported', c: '#42a5f5' }, { v: totalAbs, l: t.absences ?? 'Absences', c: '#7D4E57' }].map(s => (
+          {/* ★ UPDATED — Added overdue counter next to existing stats */}
+          {[
+            { v: totalJobs, l: t.jobs ?? 'Jobs', c: th.gold },
+            { v: totalReported, l: t.reported ?? 'Reported', c: '#42a5f5' },
+            { v: totalAbs, l: t.absences ?? 'Absences', c: '#7D4E57' },
+            ...(totalOverdue > 0 ? [{ v: totalOverdue, l: t.overdue ?? 'Overdue', c: '#dc2626' }] : []),
+          ].map(s => (
             <div key={s.l} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 300, color: s.c, lineHeight: 1 }}>{s.v}</div>
               <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{s.l}</div>
@@ -648,20 +683,47 @@ export function ReportsPage() {
             const dayReportedCount = dayJobs.filter(j => getReportForJob(j, di)).length;
             const canAddJob = dayJobs.length < 2;
 
+            /* ★ NEW — Count overdue jobs for this specific day */
+            const dayOverdueCount = dayJobs.filter(j => isJobOverdue(j, di)).length;
+            const dayHasOverdue = dayOverdueCount > 0;
+
             return (
               <div key={di} style={{
-                background: th.bgCard, borderRadius: 2, border: `1px solid ${isTodayDay ? th.gold : th.border}`, overflow: 'hidden',
-                boxShadow: isTodayDay ? (isDark ? '0 0 12px rgba(0,229,160,0.15)' : '0 0 12px rgba(5,150,105,0.1)') : 'none',
+                background: th.bgCard, borderRadius: 2,
+                /* ★ UPDATED — Red border for days with overdue jobs */
+                border: `1px solid ${dayHasOverdue ? '#dc2626' : isTodayDay ? th.gold : th.border}`,
+                overflow: 'hidden',
+                boxShadow: dayHasOverdue
+                  ? (isDark ? '0 0 12px rgba(220,38,38,0.2)' : '0 0 12px rgba(220,38,38,0.1)')
+                  : isTodayDay ? (isDark ? '0 0 12px rgba(0,229,160,0.15)' : '0 0 12px rgba(5,150,105,0.1)') : 'none',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: isTodayDay ? th.goldGhost : 'transparent', borderBottom: hasContent ? `1px solid ${th.borderFaint}` : 'none' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px',
+                  /* ★ UPDATED — Red tint for overdue day headers */
+                  background: dayHasOverdue ? (isDark ? 'rgba(220,38,38,0.06)' : 'rgba(220,38,38,0.04)') : isTodayDay ? th.goldGhost : 'transparent',
+                  borderBottom: hasContent ? `1px solid ${th.borderFaint}` : 'none',
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 2, background: isTodayDay ? th.gold : th.switchBg, color: isTodayDay ? (isDark ? '#0a0a0a' : '#fff') : th.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{date.getDate()}</div>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 2,
+                      /* ★ UPDATED — Red date badge for overdue days */
+                      background: dayHasOverdue ? '#dc2626' : isTodayDay ? th.gold : th.switchBg,
+                      color: dayHasOverdue ? '#fff' : isTodayDay ? (isDark ? '#0a0a0a' : '#fff') : th.textDim,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600,
+                    }}>{date.getDate()}</div>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 400, color: isTodayDay ? th.gold : th.text }}>{(t.days as string[])?.[di] ?? ''}</div>
+                      <div style={{ fontSize: 14, fontWeight: 400, color: dayHasOverdue ? '#dc2626' : isTodayDay ? th.gold : th.text }}>{(t.days as string[])?.[di] ?? ''}</div>
                       <div style={{ fontSize: 9, color: th.textDim }}>{fmtDate(date)}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {/* ★ NEW — Overdue badge in day header */}
+                    {dayHasOverdue && (
+                      <span title={`${dayOverdueCount} ${t.overdueJobs ?? 'overdue job(s) — no report filed'}`}
+                        style={{ fontSize: 9, fontWeight: 700, color: '#dc2626', background: isDark ? 'rgba(220,38,38,.12)' : 'rgba(220,38,38,.08)', padding: '3px 8px', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 3, border: `1px solid ${isDark ? 'rgba(220,38,38,.25)' : 'rgba(220,38,38,.15)'}` }}>
+                        🚩 {dayOverdueCount}
+                      </span>
+                    )}
                     {dayJobs.length > 0 && <span style={{ fontSize: 9, fontWeight: 600, color: th.textDim }}>{dayReportedCount}/{dayJobs.length}</span>}
                     {canAddJob && (
                       <button onClick={() => openAddJobModal(di)} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${th.border}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 700, transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 4 }}
@@ -689,14 +751,41 @@ export function ReportsPage() {
                       const task = job.task; const color = getTaskColor(task, job.task_id);
                       const customerName = resolveCustomerName(job); const jm = job.machines || [];
                       const report = getReportForJob(job, di); const hasCustomer = !!resolveCustomer(job);
+
+                      /* ★ NEW — Determine if this specific job is overdue */
+                      const overdue = isJobOverdue(job, di);
+
                       return (
-                        <div key={job.id} style={{ background: isDark ? `${color}28` : `${color}18`, borderLeft: `4px solid ${color}`, borderRadius: 2, overflow: 'hidden' }}>
+                        <div key={job.id} style={{
+                          /* ★ UPDATED — Red tint background + red left border for overdue jobs */
+                          background: overdue
+                            ? (isDark ? 'rgba(220,38,38,0.1)' : 'rgba(220,38,38,0.06)')
+                            : (isDark ? `${color}28` : `${color}18`),
+                          borderLeft: `4px solid ${overdue ? '#dc2626' : color}`,
+                          borderRadius: 2, overflow: 'hidden',
+                          /* ★ NEW — Subtle red glow for overdue */
+                          boxShadow: overdue ? (isDark ? '0 0 8px rgba(220,38,38,0.15)' : '0 0 8px rgba(220,38,38,0.08)') : 'none',
+                        }}>
                           <div onClick={() => openReportModal(job, di)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer', transition: 'transform .15s' }}
                             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(3px)'; }}
                             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(0)'; }}>
-                            <div style={{ width: 32, height: 32, borderRadius: 4, flexShrink: 0, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{(task?.code || '?').slice(0, 3).toUpperCase()}</div>
+                            <div style={{
+                              width: 32, height: 32, borderRadius: 4, flexShrink: 0,
+                              /* ★ UPDATED — Red badge for overdue job code */
+                              background: overdue ? '#dc2626' : color,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff',
+                            }}>{overdue ? '!' : (task?.code || '?').slice(0, 3).toUpperCase()}</div>
                             <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#ddd' : '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task?.name || task?.code || '?'}</div>
+                              <div style={{
+                                fontSize: 13, fontWeight: 600,
+                                /* ★ UPDATED — Red task name for overdue */
+                                color: overdue ? '#dc2626' : (isDark ? '#ddd' : '#333'),
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>
+                                {task?.name || task?.code || '?'}
+                                {/* ★ NEW — Inline overdue flag */}
+                                {overdue && <span style={{ marginLeft: 6, fontSize: 10 }} title={t.overdueTooltip ?? 'Overdue — no time report filed for this past job'}>🚩</span>}
+                              </div>
                               {customerName && <div style={{ fontSize: 10, fontWeight: 500, color: isDark ? 'rgba(0,229,160,.6)' : 'rgba(5,150,105,.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>&#x1F3E2; {customerName}</div>}
                               {jm.length > 0 && (
                                 <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
@@ -705,10 +794,22 @@ export function ReportsPage() {
                                 </div>
                               )}
                               <div style={{ fontSize: 9, opacity: 0.7, fontWeight: 400, marginTop: 2, color: isDark ? '#aaa' : '#666' }}>
-                                {report ? `${t.reported ?? 'Reported'} · ${hoursToDisplay(report.actual_hours || 0)} · ${statusLabel(report.status)}` : (t.clickToReport ?? 'Click to report time')}
+                                {/* ★ UPDATED — Overdue message instead of generic "click to report" */}
+                                {report
+                                  ? `${t.reported ?? 'Reported'} · ${hoursToDisplay(report.actual_hours || 0)} · ${statusLabel(report.status)}`
+                                  : overdue
+                                    ? (t.overdueNoReport ?? '⚠ Overdue — click to file report')
+                                    : (t.clickToReport ?? 'Click to report time')}
                               </div>
                             </div>
-                            <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: report ? statusColor(report.status) : 'transparent', border: report ? 'none' : `1px dashed ${th.textDim}` }} />
+                            <div style={{
+                              width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                              /* ★ UPDATED — Pulsing red dot for overdue, normal dot otherwise */
+                              background: report ? statusColor(report.status) : overdue ? '#dc2626' : 'transparent',
+                              border: report ? 'none' : overdue ? 'none' : `1px dashed ${th.textDim}`,
+                              /* ★ NEW — Pulsing animation for overdue dot */
+                              animation: overdue && !report ? 'overduePulse 2s ease-in-out infinite' : 'none',
+                            }} />
                           </div>
                           {hasCustomer && (
                             <div style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)'}`, padding: '4px 14px 6px' }}>
@@ -741,6 +842,26 @@ export function ReportsPage() {
         </div>
       )}
 
+      {/* ★ NEW — Overdue legend banner (shown when there are overdue jobs) */}
+      {!loading && totalOverdue > 0 && (
+        <div style={{
+          marginTop: 12, padding: '10px 16px', borderRadius: 2,
+          background: isDark ? 'rgba(220,38,38,0.08)' : 'rgba(220,38,38,0.04)',
+          border: `1px solid ${isDark ? 'rgba(220,38,38,0.2)' : 'rgba(220,38,38,0.12)'}`,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 16 }}>🚩</span>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#dc2626' }}>
+              {totalOverdue} {totalOverdue === 1 ? (t.overdueJobSingular ?? 'overdue job') : (t.overdueJobPlural ?? 'overdue jobs')}
+            </div>
+            <div style={{ fontSize: 10, color: th.textDim, marginTop: 1 }}>
+              {t.overdueExplanation ?? 'These jobs are in the past and have no time report. Click on them to file a report.'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════════════════ REPORT MODAL ═══════════════════════ */}
       {modalType === 'report' && reportData && (
         <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }} onClick={() => setModalType(null)}>
@@ -754,6 +875,20 @@ export function ReportsPage() {
                   <div style={{ fontSize: 10, color: th.textDim }}>{(t.days as string[])?.[reportData.dayIndex] ?? ''}, {fmtDate(dates[reportData.dayIndex])}{reportData.customerName ? ` · ${reportData.customerName}` : ''}</div>
                 </div>
               </div>
+              {/* ★ NEW — Overdue warning banner inside modal */}
+              {!reportData.existingReport && isDateInPast(dates[reportData.dayIndex]) && (
+                <div style={{
+                  marginTop: 10, padding: '8px 12px', borderRadius: 2,
+                  background: isDark ? 'rgba(220,38,38,0.1)' : 'rgba(220,38,38,0.06)',
+                  border: `1px solid ${isDark ? 'rgba(220,38,38,0.25)' : 'rgba(220,38,38,0.15)'}`,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ fontSize: 14 }}>🚩</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#dc2626' }}>
+                    {t.overdueModalWarning ?? 'This job is overdue — please file your time report.'}
+                  </span>
+                </div>
+              )}
             </div>
             {formErrors.length > 0 && (
               <div style={{ margin: '12px 24px 0', padding: '10px 14px', borderRadius: 2, background: isDark ? 'rgba(248,113,113,.1)' : 'rgba(220,38,38,.06)', border: `1px solid ${isDark ? 'rgba(248,113,113,.2)' : 'rgba(220,38,38,.15)'}` }}>
@@ -1158,6 +1293,7 @@ export function ReportsPage() {
         @keyframes fadeSlide { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes overduePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(220,38,38,0.4); } 50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(220,38,38,0); } }
       `}</style>
     </div>
   );
