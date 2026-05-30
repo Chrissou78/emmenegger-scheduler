@@ -336,3 +336,94 @@ quotationsRouter.post('/:id/convert-to-invoice', requireRole('LOCAL_MANAGER', 'G
     next(err);
   }
 });
+
+quotationsRouter.post('/field', async (req, res, next) => {
+  try {
+    const {
+      customer_id, title, description, notes,
+      items, signature_data, job_id,
+    } = req.body;
+
+    if (!customer_id) return res.status(400).json({ error: 'customer_id is required' });
+    if (!items || items.length === 0) return res.status(400).json({ error: 'At least one item is required' });
+
+    // Generate quote number
+    const { data: numResult } = await supabase.rpc('next_quote_number');
+    const quote_number = numResult || `OFF-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+
+    // Calculate totals
+    const lineItems = items || [];
+    const subtotal = lineItems.reduce((sum: number, it: any) => {
+      const qty = parseFloat(it.quantity) || 0;
+      const price = parseFloat(it.unit_price) || 0;
+      const disc = parseFloat(it.discount_percent) || 0;
+      return sum + (qty * price * (1 - disc / 100));
+    }, 0);
+
+    const totalVat = lineItems.reduce((sum: number, it: any) => {
+      const qty = parseFloat(it.quantity) || 0;
+      const price = parseFloat(it.unit_price) || 0;
+      const disc = parseFloat(it.discount_percent) || 0;
+      const vatRate = parseFloat(it.vat_rate) || 8.1;
+      const lineTotal = qty * price * (1 - disc / 100);
+      return sum + (lineTotal * vatRate / 100);
+    }, 0);
+
+    // Insert quotation
+    const { data: quotation, error: qError } = await supabase
+      .from('quotations')
+      .insert([{
+        quote_number,
+        customer_id,
+        title: title || `Offerte ${quote_number}`,
+        description: description || null,
+        status: signature_data ? 'ACCEPTED' : 'DRAFT',
+        quote_date: new Date().toISOString().split('T')[0],
+        valid_until: null,
+        subtotal: Math.round(subtotal * 100) / 100,
+        vat_amount: Math.round(totalVat * 100) / 100,
+        total_gross: Math.round((subtotal + totalVat) * 100) / 100,
+        discount_amount: 0,
+        currency: 'CHF',
+        payment_terms: 30,
+        notes: notes || null,
+        created_by: req.user?.userId,
+        signature_data: signature_data || null,
+        accepted_date: signature_data ? new Date().toISOString().split('T')[0] : null,
+        source: 'FIELD',
+        job_id: job_id || null,
+      }])
+      .select()
+      .single();
+
+    if (qError) throw qError;
+
+    // Insert items
+    if (lineItems.length > 0 && quotation) {
+      const itemRows = lineItems.map((it: any, idx: number) => ({
+        quotation_id: quotation.id,
+        sort_order: idx + 1,
+        description: it.description || '',
+        detail: it.detail || null,
+        quantity: parseFloat(it.quantity) || 1,
+        unit: it.unit || 'Std',
+        unit_price: parseFloat(it.unit_price) || 0,
+        discount_percent: parseFloat(it.discount_percent) || 0,
+        vat_rate: parseFloat(it.vat_rate) || 8.1,
+        total: Math.round(
+          (parseFloat(it.quantity) || 1) *
+          (parseFloat(it.unit_price) || 0) *
+          (1 - (parseFloat(it.discount_percent) || 0) / 100) * 100
+        ) / 100,
+        task_id: it.task_id || null,
+      }));
+
+      const { error: iError } = await supabase.from('quotation_items').insert(itemRows);
+      if (iError) throw iError;
+    }
+
+    res.status(201).json({ data: quotation });
+  } catch (err) {
+    next(err);
+  }
+});
