@@ -12,6 +12,9 @@ export interface User {
     add?: Permission[];
     remove?: Permission[];
   };
+  team_leader_id?: string | null;
+  executive_id?: string | null;
+  manager_id?: string | null;
 }
 
 export interface AuthState {

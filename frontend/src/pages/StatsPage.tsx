@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTheme } from '../contexts/themeContext';
 import { useAuthStore } from '../contexts/authStore';
 import { useRolesStore } from '../store/rolesStore';
@@ -594,7 +594,8 @@ function RankingList({ items, title, icon, color, isFlop, th }: {
    ══════════════════════════════════════════════════════ */
 export function StatsPage() {
   const { isDark, th, lang } = useTheme();
-  const { token, user } = useAuthStore();
+  const { token, user: rawUser } = useAuthStore();
+  const user = rawUser as (typeof rawUser & { team_leader_id?: string | null; executive_id?: string | null; departments?: string[] });
   const { permissionMap } = useRolesStore();
   const L = getTranslations(lang as LangCode);
 
