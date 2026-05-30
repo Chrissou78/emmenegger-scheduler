@@ -57,7 +57,7 @@ reportsRouter.post('/', async (req, res, next) => {
           work_description: workDescription,
           notes,
           photos: photos || [],
-          status: 'PLANNED',
+          status: req.body.status || 'PLANNED',
           submitted_at: new Date().toISOString(),
         },
       ])

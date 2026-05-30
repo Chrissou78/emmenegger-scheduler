@@ -1,6 +1,7 @@
+// frontend/src/pages/ReportsPage.tsx
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTheme } from '../contexts/themeContext';
-import { themes, JOB_COLORS, ABS } from '../i18n/translations';
+import { themes, ABS } from '../i18n/translations';
 import { format } from 'date-fns';
 import { useAuthStore } from '../contexts/authStore';
 import { supabase } from '../lib/supabaseClient';
@@ -9,16 +10,7 @@ import { getTranslations, type LangCode } from '../i18n';
 
 const API = import.meta.env.VITE_API_URL || '';
 
-// ─── INTERFACES ───
-
-interface Allocation {
-  id: string;
-  user_id: string;
-  task_id: string;
-  day_of_week: number;
-  week_id: string;
-  time_slot: number;
-}
+/* ─── Types ─── */
 
 interface Week {
   id: string;
@@ -32,6 +24,44 @@ interface Task {
   id: string;
   code: string;
   name: string;
+  color: string;
+  schedule_type: string;
+  status?: string;
+  customer_id?: string;
+  customer?: { id: string; name: string; city?: string } | null;
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  company_name?: string;
+  city?: string;
+}
+
+interface Machine {
+  id: string;
+  name: string;
+  category: string;
+  inventory_nr?: string;
+}
+
+interface JobMachine {
+  id: string;
+  machine_id: string;
+  machine?: Machine;
+}
+
+interface Job {
+  id: string;
+  week_id: string;
+  user_id: string;
+  day_of_week: number;
+  time_slot: number;
+  task_id: string;
+  customer_id?: string | null;
+  notes?: string | null;
+  task?: Task;
+  machines?: JobMachine[];
 }
 
 interface AbsenceRecord {
@@ -56,15 +86,16 @@ interface TimeReport {
 }
 
 interface ReportModal {
-  taskCode: string;
-  taskId: string;
-  taskLabel: string;
+  job: Job;
+  taskName: string;
+  taskColor: string;
+  customerName: string | null;
   dayIndex: number;
   date: string;
   existingReport: TimeReport | null;
 }
 
-// ─── HELPERS ───
+/* ─── Helpers ─── */
 
 function getWeekDates(off: number) {
   const n = new Date();
@@ -98,7 +129,7 @@ function isToday(d: Date) {
 
 function timeToHours(time: string): number {
   const [h, m] = time.split(':').map(Number);
-  return h + m / 60;
+  return h + (m || 0) / 60;
 }
 
 function hoursToDisplay(h: number): string {
@@ -107,7 +138,18 @@ function hoursToDisplay(h: number): string {
   return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
 }
 
-// ─── COMPONENT ───
+/* ─── Color palette (for tasks without explicit color) ─── */
+const PALETTE = [
+  '#B8860B','#4A6741','#5B6E82','#7D4E57','#8E6F3E','#4A4063','#704241','#3B4F64',
+  '#6B8E23','#8B4513','#556B2F','#483D8B','#2F4F4F','#8B0000','#006400','#4682B4',
+];
+function hashColor(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return PALETTE[Math.abs(h) % PALETTE.length];
+}
+
+/* ─── Component ─── */
 
 export function ReportsPage() {
   const { isDark, lang } = useTheme();
@@ -115,14 +157,14 @@ export function ReportsPage() {
   const t = getTranslations(lang as LangCode);
   const { user, token } = useAuthStore();
 
-  /* ── permissions ── */
+  /* ── Permissions ── */
   const perms = useMemo(() => {
     const role: Role = (user?.role as Role) || 'EMPLOYEE';
     return resolvePermissions(role, user?.custom_permissions);
   }, [user]);
   const canView = perms.has('reports.own' as Permission);
 
-  /* ── memoized auth headers ── */
+  /* ── Auth headers ── */
   const authHeaders = useMemo(() => ({
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
@@ -132,11 +174,12 @@ export function ReportsPage() {
     Authorization: `Bearer ${token}`,
   }), [token]);
 
+  /* ── State ── */
   const [weekOff, setWeekOff] = useState(0);
   const [weeks, setWeeks] = useState<Week[]>([]);
-  const [taskMap, setTaskMap] = useState<Record<string, { code: string; name: string }>>({});
-  const [mySlots, setMySlots] = useState<Record<number, string[]>>({});
-  const [myAbsences, setMyAbsences] = useState<Record<number, string[]>>({});
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [myAbsences, setMyAbsences] = useState<Record<number, AbsenceRecord[]>>({});
   const [reports, setReports] = useState<TimeReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ReportModal | null>(null);
@@ -150,22 +193,87 @@ export function ReportsPage() {
   const [formNotes, setFormNotes] = useState('');
   const [formPhotos, setFormPhotos] = useState<string[]>([]);
   const [formStatus, setFormStatus] = useState('COMPLETED');
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const dates = getWeekDates(weekOff);
   const kw = getKW(dates[0]);
-
-  const totalTasks = Object.values(mySlots).reduce((s, arr) => s + arr.length, 0);
-  const totalAbs = Object.values(myAbsences).reduce((s, arr) => s + arr.length, 0);
+  const year = dates[0].getFullYear();
 
   const showToast = useCallback((msg: string, type: 'ok' | 'err') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2800);
   }, []);
 
-  // ─── DATA FETCHING ───
+  /* ── Derived ── */
+  const matchingWeeks = useMemo(
+    () => weeks.filter(w => w.week_number === kw && w.year === year),
+    [weeks, kw, year]
+  );
+  const weekIds = useMemo(() => new Set(matchingWeeks.map(w => w.id)), [matchingWeeks]);
+
+  const customerById = useMemo(() => {
+    const m: Record<string, Customer> = {};
+    customers.forEach(c => { m[c.id] = c; });
+    return m;
+  }, [customers]);
+
+  /* ── Task color helper ── */
+  const getTaskColor = useCallback((task?: Task | null, taskId?: string) => {
+    if (task?.color && task.color !== '#8B7355') return task.color;
+    return hashColor(taskId || task?.id || '');
+  }, []);
+
+  /* ── Resolve customer name from a job ── */
+  const resolveCustomerName = useCallback((job: Job): string | null => {
+    const rawCust = job.task?.customer;
+    const customerObj = (rawCust && !Array.isArray(rawCust)) ? rawCust
+      : (Array.isArray(rawCust) && rawCust.length > 0) ? (rawCust as any)[0]
+      : null;
+    if (customerObj?.name) return customerObj.name;
+    if (job.customer_id) {
+      const c = customerById[job.customer_id];
+      if (c?.name) return c.name;
+    }
+    if (job.task?.customer_id) {
+      const c = customerById[job.task.customer_id];
+      if (c?.name) return c.name;
+    }
+    return null;
+  }, [customerById]);
+
+  /* ── Build my day → jobs map ── */
+  const myDayJobs = useMemo(() => {
+    const m: Record<number, Job[]> = {};
+    if (!user) return m;
+    jobs.forEach(j => {
+      if (j.user_id !== user.id) return;
+      if (!weekIds.has(j.week_id)) return;
+      if (!m[j.day_of_week]) m[j.day_of_week] = [];
+      m[j.day_of_week].push(j);
+    });
+    // Sort by time_slot
+    Object.values(m).forEach(arr => arr.sort((a, b) => a.time_slot - b.time_slot));
+    return m;
+  }, [jobs, user, weekIds]);
+
+  /* ── Stats ── */
+  const totalJobs = useMemo(
+    () => Object.values(myDayJobs).reduce((s, arr) => s + arr.length, 0),
+    [myDayJobs]
+  );
+  const totalAbs = useMemo(
+    () => Object.values(myAbsences).reduce((s, arr) => s + arr.length, 0),
+    [myAbsences]
+  );
+  const totalReported = useMemo(
+    () => reports.filter(r => r.user_id === user?.id).length,
+    [reports, user]
+  );
+
+  /* ── Data fetching ── */
 
   useEffect(() => {
     if (!token) return;
@@ -175,65 +283,42 @@ export function ReportsPage() {
         const data = await resp.json();
         setWeeks(Array.isArray(data.data) ? data.data : []);
       } catch (err) {
-        console.error('❌ Error fetching weeks:', err);
+        console.error('Error fetching weeks:', err);
       }
+    };
+    const fetchCustomers = async () => {
+      try {
+        const resp = await fetch(`${API}/api/v1/customers?limit=200`, { headers: authHeadersSimple });
+        const data = await resp.json();
+        setCustomers(Array.isArray(data) ? data : data.data || []);
+      } catch {}
     };
     fetchWeeks();
+    fetchCustomers();
   }, [token, authHeadersSimple]);
 
   useEffect(() => {
-    if (!token) return;
-    const fetchTasks = async () => {
-      try {
-        const resp = await fetch(`${API}/api/v1/tasks`, { headers: authHeadersSimple });
-        const data = await resp.json();
-        const map: Record<string, { code: string; name: string }> = {};
-        if (Array.isArray(data.data)) {
-          data.data.forEach((task: Task) => {
-            map[task.id] = { code: task.code.toLowerCase(), name: task.name };
-          });
-        }
-        setTaskMap(map);
-      } catch (err) {
-        console.error('❌ Error fetching tasks:', err);
-      }
-    };
-    fetchTasks();
-  }, [token, authHeadersSimple]);
-
-  useEffect(() => {
-    if (!user || !token || weeks.length === 0 || Object.keys(taskMap).length === 0) return;
+    if (!user || !token || weeks.length === 0) return;
 
     const fetchMyData = async () => {
       setLoading(true);
-      const currentKW = getKW(dates[0]);
-      const currentYear = dates[0].getFullYear();
-      const currentWeek = weeks.find(w => w.week_number === currentKW && w.year === currentYear);
 
-      // Allocations
-      const slots: Record<number, string[]> = {};
-      try {
-        const resp = await fetch(`${API}/api/v1/allocations?user_id=${user.id}`, {
-          headers: authHeadersSimple,
-        });
-        const data = await resp.json();
-        if (Array.isArray(data.data)) {
-          data.data.forEach((a: Allocation) => {
-            if (a.week_id !== currentWeek?.id) return;
-            if (!slots[a.day_of_week]) slots[a.day_of_week] = [];
-            const task = taskMap[a.task_id];
-            if (task && !slots[a.day_of_week].includes(task.code)) {
-              slots[a.day_of_week].push(task.code);
-            }
-          });
+      // ── Fetch jobs from all matching weeks (GARTEN + UNTERHALT) ──
+      const allJobs: Job[] = [];
+      for (const w of matchingWeeks) {
+        try {
+          const resp = await fetch(`${API}/api/v1/jobs?weekId=${w.id}`, { headers: authHeadersSimple });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          if (Array.isArray(data.data)) allJobs.push(...data.data);
+        } catch (err) {
+          console.error('Error fetching jobs:', err);
         }
-      } catch (err) {
-        console.error('❌ Error fetching allocations:', err);
       }
-      setMySlots(slots);
+      setJobs(allJobs);
 
-      // Absences
-      const absences: Record<number, string[]> = {};
+      // ── Fetch absences for the week ──
+      const absences: Record<number, AbsenceRecord[]> = {};
       const startDate = format(dates[0], 'yyyy-MM-dd');
       const endDate = format(dates[5], 'yyyy-MM-dd');
       try {
@@ -242,27 +327,25 @@ export function ReportsPage() {
           { headers: authHeadersSimple }
         );
         const data = await resp.json();
-        if (Array.isArray(data.data)) {
-          data.data.forEach((abs: AbsenceRecord) => {
-            if (abs.user_id !== user.id) return;
-            const absDate = new Date(abs.date + 'T00:00:00');
-            const dayIndex = dates.findIndex(
-              d => d.getFullYear() === absDate.getFullYear() &&
-                  d.getMonth() === absDate.getMonth() &&
-                  d.getDate() === absDate.getDate()
-            );
-            if (dayIndex === -1) return;
-            if (!absences[dayIndex]) absences[dayIndex] = [];
-            const code = String(abs.absence_code);
-            if (!absences[dayIndex].includes(code)) absences[dayIndex].push(code);
-          });
-        }
+        const absList: AbsenceRecord[] = Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+        absList.forEach(abs => {
+          if (abs.user_id !== user.id) return;
+          const absDate = new Date(abs.date + 'T00:00:00');
+          const dayIndex = dates.findIndex(
+            d => d.getFullYear() === absDate.getFullYear() &&
+                d.getMonth() === absDate.getMonth() &&
+                d.getDate() === absDate.getDate()
+          );
+          if (dayIndex === -1) return;
+          if (!absences[dayIndex]) absences[dayIndex] = [];
+          absences[dayIndex].push(abs);
+        });
       } catch (err) {
-        console.error('❌ Error fetching absences:', err);
+        console.error('Error fetching absences:', err);
       }
       setMyAbsences(absences);
 
-      // Time reports for the week
+      // ── Fetch time reports for the week ──
       try {
         const resp = await fetch(
           `${API}/api/v1/reports?startDate=${startDate}&endDate=${endDate}`,
@@ -271,36 +354,50 @@ export function ReportsPage() {
         const data = await resp.json();
         setReports(Array.isArray(data.data) ? data.data : []);
       } catch (err) {
-        console.error('❌ Error fetching reports:', err);
+        console.error('Error fetching reports:', err);
       }
 
       setLoading(false);
     };
 
     fetchMyData();
-  }, [weekOff, weeks, taskMap, user, token, authHeadersSimple]);
+  }, [weekOff, weeks, user, token, authHeadersSimple]);
 
-  // ─── REPORT HELPERS ───
+  useEffect(() => {
+    if (toast) {
+      const tm = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(tm);
+    }
+  }, [toast]);
 
-  const getReportForTaskDay = useCallback((taskCode: string, dayIndex: number): TimeReport | null => {
+  /* ── Report helpers ── */
+
+  const getReportForJob = useCallback((job: Job, dayIndex: number): TimeReport | null => {
     const dateStr = format(dates[dayIndex], 'yyyy-MM-dd');
-    const taskId = Object.entries(taskMap).find(([_, v]) => v.code === taskCode)?.[0];
-    if (!taskId) return null;
-    return reports.find(r => r.task_id === taskId && r.date === dateStr) || null;
-  }, [dates, taskMap, reports]);
+    return reports.find(r =>
+      r.task_id === job.task_id &&
+      r.date === dateStr &&
+      r.user_id === (user?.id || '')
+    ) || null;
+  }, [dates, reports, user]);
 
-  const openReportModal = useCallback((taskCode: string, dayIndex: number) => {
-    const taskEntry = Object.entries(taskMap).find(([_, v]) => v.code === taskCode);
-    if (!taskEntry) return;
-    const [taskId, taskInfo] = taskEntry;
+  const openReportModal = useCallback((job: Job, dayIndex: number) => {
     const dateStr = format(dates[dayIndex], 'yyyy-MM-dd');
-    const existing = reports.find(r => r.task_id === taskId && r.date === dateStr) || null;
-    const job = JOB_COLORS[taskCode as keyof typeof JOB_COLORS];
+    const existing = reports.find(r =>
+      r.task_id === job.task_id &&
+      r.date === dateStr &&
+      r.user_id === (user?.id || '')
+    ) || null;
+
+    const task = job.task;
+    const color = getTaskColor(task, job.task_id);
+    const customerName = resolveCustomerName(job);
 
     setModal({
-      taskCode,
-      taskId,
-      taskLabel: job?.label || taskInfo.name,
+      job,
+      taskName: task?.name || task?.code || '?',
+      taskColor: color,
+      customerName,
       dayIndex,
       date: dateStr,
       existingReport: existing,
@@ -329,7 +426,8 @@ export function ReportsPage() {
       setFormPhotos([]);
       setFormStatus('COMPLETED');
     }
-  }, [dates, taskMap, reports]);
+    setFormErrors([]);
+  }, [dates, reports, user, getTaskColor, resolveCustomerName]);
 
   const computeActualHours = (): number => {
     const start = timeToHours(formStartTime);
@@ -337,7 +435,33 @@ export function ReportsPage() {
     return Math.max(0, Math.round((end - start) * 100) / 100);
   };
 
-  // ─── PHOTO UPLOAD ───
+  /* ── Validation ── */
+  const validateForm = (): string[] => {
+    const errors: string[] = [];
+    const start = timeToHours(formStartTime);
+    const end = timeToHours(formEndTime);
+    const planned = parseFloat(formPlannedHours);
+
+    if (end <= start) {
+      errors.push(t.validationEndAfterStart ?? 'End time must be after start time');
+    }
+    if (end - start > 16) {
+      errors.push(t.validationMaxHours ?? 'Work duration cannot exceed 16 hours');
+    }
+    if (isNaN(planned) || planned < 0) {
+      errors.push(t.validationPlannedPositive ?? 'Planned hours must be a positive number');
+    }
+    if (planned > 24) {
+      errors.push(t.validationPlannedMax ?? 'Planned hours cannot exceed 24');
+    }
+    if (!formStatus) {
+      errors.push(t.validationStatusRequired ?? 'Status is required');
+    }
+
+    return errors;
+  };
+
+  /* ── Photo upload ── */
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -360,8 +484,8 @@ export function ReportsPage() {
 
       setFormPhotos(prev => [...prev, urlData.publicUrl]);
     } catch (err) {
-      console.error('❌ Photo upload error:', err);
-      showToast(t.uploadFailed, 'err');
+      console.error('Photo upload error:', err);
+      showToast(t.uploadFailed ?? 'Upload failed', 'err');
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -371,15 +495,22 @@ export function ReportsPage() {
     setFormPhotos(prev => prev.filter(p => p !== url));
   }, []);
 
-  // ─── SAVE REPORT ───
+  /* ── Save report ── */
 
   const saveReport = async () => {
     if (!modal || !user || !canView) return;
+
+    const errors = validateForm();
+    if (errors.length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors([]);
     setSaving(true);
 
     const actualHours = computeActualHours();
     const payload = {
-      taskId: modal.taskId,
+      taskId: modal.job.task_id,
       date: modal.date,
       plannedHours: parseFloat(formPlannedHours) || 8,
       actualHours,
@@ -409,33 +540,24 @@ export function ReportsPage() {
         const result = await resp.json();
         if (modal.existingReport) {
           setReports(prev => prev.map(r => r.id === modal.existingReport!.id ? result.data : r));
-          showToast(t.updated, 'ok');
+          showToast(t.updated ?? 'Updated', 'ok');
         } else {
           setReports(prev => [...prev, result.data]);
-          showToast(t.saved, 'ok');
+          showToast(t.saved ?? 'Saved', 'ok');
         }
         setModal(null);
       } else {
         const err = await resp.json();
-        showToast(`${t.error}: ${err.message || ''}`, 'err');
+        showToast(`${t.error ?? 'Error'}: ${err.message || err.error || ''}`, 'err');
       }
     } catch (err) {
-      console.error('❌ Error saving report:', err);
-      showToast(t.error, 'err');
+      console.error('Error saving report:', err);
+      showToast(t.error ?? 'Error', 'err');
     }
     setSaving(false);
   };
 
-  // ─── RENDER HELPERS ───
-
-  const getJobColor = useCallback((code: string) => {
-    const job = JOB_COLORS[code as keyof typeof JOB_COLORS];
-    return {
-      bg: isDark ? job?.bgD : job?.bgL,
-      text: isDark ? job?.textD : job?.textL,
-      label: job?.label || code,
-    };
-  }, [isDark]);
+  /* ── Status helpers ── */
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -443,37 +565,44 @@ export function ReportsPage() {
       case 'PARTIAL': return '#B8860B';
       case 'NOT_DONE': return '#8B4513';
       case 'ADDED': return '#5B6E82';
+      case 'PLANNED': return '#483D8B';
       default: return th.textDim;
     }
   };
 
-  /* ── ACCESS GUARD ── */
+  const statusLabel = (status: string): string => {
+    const statusMap = (t as any).status;
+    if (statusMap && typeof statusMap === 'object' && statusMap[status]) return statusMap[status];
+    return status;
+  };
+
+  /* ── Access guard ── */
   if (!canView) {
     return (
       <div style={{ maxWidth: 800, margin: '0 auto', padding: 60, textAlign: 'center' }}>
         <h2 style={{ fontSize: 20, fontWeight: 300, color: th.gold, letterSpacing: 1 }}>
-          {t.accessDenied}
+          {t.accessDenied ?? 'Access Denied'}
         </h2>
       </div>
     );
   }
 
+  /* ═══════════════════════════════════════ RENDER ═══════════════════════════════════════ */
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       {/* Toast */}
       {toast && (
-        <div
-          style={{
-            position: 'fixed', top: 24, right: 24, zIndex: 1000,
-            background: toast.type === 'err' ? th.toastErrBg : th.toastBg,
-            color: toast.type === 'err' ? th.toastErrText : th.toastText,
-            padding: '12px 20px', borderRadius: 2, fontSize: 12,
-            fontFamily: "'Outfit',sans-serif", fontWeight: 500,
-            border: `1px solid ${toast.type === 'err' ? th.toastErrBorder : th.toastBorder}`,
-            backdropFilter: 'blur(20px)', boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-            animation: 'fadeSlide 0.35s cubic-bezier(0.16,1,0.3,1)',
-          }}
-        >
+        <div style={{
+          position: 'fixed', top: 24, right: 24, zIndex: 1000,
+          background: toast.type === 'err' ? th.toastErrBg : th.toastBg,
+          color: toast.type === 'err' ? th.toastErrText : th.toastText,
+          padding: '12px 20px', borderRadius: 2, fontSize: 12,
+          fontFamily: "'Outfit',sans-serif", fontWeight: 500,
+          border: `1px solid ${toast.type === 'err' ? th.toastErrBorder : th.toastBorder}`,
+          backdropFilter: 'blur(20px)', boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+          animation: 'fadeSlide 0.35s cubic-bezier(0.16,1,0.3,1)',
+        }}>
           {toast.msg}
         </div>
       )}
@@ -481,133 +610,252 @@ export function ReportsPage() {
       {/* Greeting */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 28, fontWeight: 300, color: th.gold, letterSpacing: 1 }}>
-          {t.greeting}, {user?.first_name || 'User'}
+          {t.greeting ?? 'Hello'}, {user?.first_name || 'User'}
         </div>
         <div style={{ fontSize: 11, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontWeight: 400, letterSpacing: 0.5, marginTop: 4 }}>
-          {t.yourWeek}
+          {t.yourWeek ?? 'Your week at a glance'}
         </div>
       </div>
 
       {/* Week nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setWeekOff(w => w - 1)} style={{ width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
+          <button onClick={() => setWeekOff(w => w - 1)} style={{
+            width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`,
+            background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease',
+          }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = th.switchActive; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}>‹</button>
 
           <div style={{ textAlign: 'center', minWidth: 140 }}>
-            <div style={{ fontSize: 36, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>{t.kw} {kw}</div>
+            <div style={{ fontSize: 36, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>
+              {t.kw ?? 'KW'} {kw}
+            </div>
             <div style={{ fontSize: 11, color: th.textDim, marginTop: 4, fontFamily: "'Outfit',sans-serif", fontWeight: 400, letterSpacing: 0.5 }}>
-              {fmtDate(dates[0])} — {fmtDate(dates[5])}
+              {fmtDate(dates[0])} — {fmtDate(dates[5])} {year}
             </div>
           </div>
 
-          <button onClick={() => setWeekOff(w => w + 1)} style={{ width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
+          <button onClick={() => setWeekOff(w => w + 1)} style={{
+            width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`,
+            background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease',
+          }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = th.switchActive; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}>›</button>
 
-          <button onClick={() => setWeekOff(0)} style={{ padding: '8px 14px', borderRadius: 2, border: 'none', background: th.switchActive, color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', fontFamily: "'Outfit',sans-serif" }}>
-            {t.today}
+          <button onClick={() => setWeekOff(0)} style={{
+            padding: '8px 14px', borderRadius: 2, border: 'none', background: th.switchActive,
+            color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1.5,
+            textTransform: 'uppercase', fontFamily: "'Outfit',sans-serif",
+          }}>
+            {t.today ?? 'Today'}
           </button>
         </div>
 
         <div style={{ display: 'flex', gap: 24 }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 300, color: th.gold, lineHeight: 1 }}>{totalTasks}</div>
-            <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{t.tasks}</div>
+            <div style={{ fontSize: 22, fontWeight: 300, color: th.gold, lineHeight: 1 }}>{totalJobs}</div>
+            <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+              {t.jobs ?? 'Jobs'}
+            </div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 300, color: '#42a5f5', lineHeight: 1 }}>{totalReported}</div>
+            <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+              {t.reported ?? 'Reported'}
+            </div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 22, fontWeight: 300, color: '#7D4E57', lineHeight: 1 }}>{totalAbs}</div>
-            <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{t.absences}</div>
+            <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+              {t.absences ?? 'Absences'}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Loading */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: 40, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>{t.loading}</div>
+        <div style={{ textAlign: 'center', padding: 40, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontSize: 12 }}>
+          {t.loading ?? 'Loading...'}
+        </div>
       )}
 
       {/* Day cards */}
       {!loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {dates.map((date, di) => {
-            const daySlots = mySlots[di] || [];
+            const dayJobs = myDayJobs[di] || [];
             const dayAbs = myAbsences[di] || [];
-            const hasContent = daySlots.length > 0 || dayAbs.length > 0;
+            const hasContent = dayJobs.length > 0 || dayAbs.length > 0;
             const isTodayDay = isToday(date);
 
+            // Count how many jobs have reports
+            const dayReportedCount = dayJobs.filter(j => getReportForJob(j, di)).length;
+
             return (
-              <div
-                key={di}
-                style={{
-                  background: th.bgCard, borderRadius: 2,
-                  border: `1px solid ${isTodayDay ? th.gold : th.border}`,
-                  overflow: 'hidden',
-                  boxShadow: isTodayDay ? (isDark ? '0 0 12px rgba(200,169,110,0.15)' : '0 0 12px rgba(150,120,60,0.1)') : 'none',
-                }}
-              >
+              <div key={di} style={{
+                background: th.bgCard, borderRadius: 2,
+                border: `1px solid ${isTodayDay ? th.gold : th.border}`,
+                overflow: 'hidden',
+                boxShadow: isTodayDay
+                  ? (isDark ? '0 0 12px rgba(0,229,160,0.15)' : '0 0 12px rgba(5,150,105,0.1)')
+                  : 'none',
+              }}>
                 {/* Day header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: isTodayDay ? th.goldGhost : 'transparent', borderBottom: hasContent ? `1px solid ${th.borderFaint}` : 'none' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px',
+                  background: isTodayDay ? th.goldGhost : 'transparent',
+                  borderBottom: hasContent ? `1px solid ${th.borderFaint}` : 'none',
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 2, background: isTodayDay ? th.gold : th.switchBg, color: isTodayDay ? (isDark ? '#0a0a0a' : '#fff') : th.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, fontFamily: "'Outfit',sans-serif" }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 2,
+                      background: isTodayDay ? th.gold : th.switchBg,
+                      color: isTodayDay ? (isDark ? '#0a0a0a' : '#fff') : th.textDim,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, fontWeight: 600, fontFamily: "'Outfit',sans-serif",
+                    }}>
                       {date.getDate()}
                     </div>
                     <div>
-                      <div style={{ fontSize: 14, fontWeight: 400, color: isTodayDay ? th.gold : th.text, letterSpacing: 0.3 }}>{t.days[di]}</div>
-                      <div style={{ fontSize: 9, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontWeight: 400 }}>{fmtDate(date)}</div>
+                      <div style={{ fontSize: 14, fontWeight: 400, color: isTodayDay ? th.gold : th.text, letterSpacing: 0.3 }}>
+                        {(t.days as string[])?.[di] ?? ['Mo','Di','Mi','Do','Fr','Sa'][di]}
+                      </div>
+                      <div style={{ fontSize: 9, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontWeight: 400 }}>
+                        {fmtDate(date)}
+                      </div>
                     </div>
                   </div>
-                  {isTodayDay && (
-                    <div style={{ fontSize: 8, color: th.gold, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', background: th.switchActive, padding: '4px 10px', borderRadius: 2 }}>
-                      {t.today}
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {dayJobs.length > 0 && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, color: th.textDim,
+                        fontFamily: "'Outfit',sans-serif",
+                      }}>
+                        {dayReportedCount}/{dayJobs.length} {t.reported ?? 'reported'}
+                      </span>
+                    )}
+                    {isTodayDay && (
+                      <div style={{
+                        fontSize: 8, color: th.gold, fontFamily: "'Outfit',sans-serif",
+                        fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase',
+                        background: th.switchActive, padding: '4px 10px', borderRadius: 2,
+                      }}>
+                        {t.today ?? 'Today'}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Content */}
                 {hasContent ? (
                   <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+
                     {/* Absences */}
-                    {dayAbs.map((absCode, idx) => {
-                      const abs = ABS[absCode as unknown as keyof typeof ABS];
+                    {dayAbs.map((abs, idx) => {
+                      const code = String(abs.absence_code);
+                      const absInfo = ABS[code as unknown as keyof typeof ABS];
                       return (
-                        <div key={`abs-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: abs?.bg, color: isDark ? abs?.textD : abs?.textL, borderRadius: 2, fontSize: 12, fontWeight: 600, fontFamily: "'Outfit',sans-serif" }}>
-                          <span style={{ fontSize: 16 }}>{abs?.icon}</span>
-                          <span>{t.abs[absCode]}</span>
+                        <div key={`abs-${abs.id || idx}`} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '8px 12px', background: absInfo?.bg || '#666',
+                          color: isDark ? (absInfo as any)?.textD || '#fff' : (absInfo as any)?.textL || '#fff',
+                          borderRadius: 2, fontSize: 12, fontWeight: 600, fontFamily: "'Outfit',sans-serif",
+                        }}>
+                          <span style={{ fontSize: 16 }}>{absInfo?.icon || '●'}</span>
+                          <span>{(t.abs as any)?.[code] ?? `Absence ${code}`}</span>
                         </div>
                       );
                     })}
 
-                    {/* Tasks (clickable for time reporting) */}
-                    {daySlots.map((code, idx) => {
-                      const job = getJobColor(code);
-                      const report = getReportForTaskDay(code, di);
+                    {/* Jobs (clickable for time reporting) */}
+                    {dayJobs.map((job, idx) => {
+                      const task = job.task;
+                      const color = getTaskColor(task, job.task_id);
+                      const customerName = resolveCustomerName(job);
+                      const machines = job.machines || [];
+                      const report = getReportForJob(job, di);
                       const hasReport = !!report;
 
                       return (
                         <div
-                          key={`task-${idx}`}
-                          onClick={() => openReportModal(code, di)}
+                          key={job.id}
+                          onClick={() => openReportModal(job, di)}
                           style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '10px 12px', background: job.bg, color: job.text,
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '10px 14px',
+                            background: isDark ? `${color}28` : `${color}18`,
+                            borderLeft: `4px solid ${color}`,
                             borderRadius: 2, cursor: 'pointer',
                             transition: 'transform 0.15s ease, box-shadow 0.15s ease',
                             position: 'relative',
                           }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(3px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(0)'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+                          onMouseEnter={e => {
+                            (e.currentTarget as HTMLElement).style.transform = 'translateX(3px)';
+                            (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                          }}
+                          onMouseLeave={e => {
+                            (e.currentTarget as HTMLElement).style.transform = 'translateX(0)';
+                            (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                          }}
                         >
-                          <span style={{ width: 28, height: 28, borderRadius: 2, background: 'rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-                            {code.toUpperCase()}
-                          </span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Outfit',sans-serif" }}>{job.label}</div>
-                            <div style={{ fontSize: 9, opacity: 0.8, fontFamily: "'Outfit',sans-serif", fontWeight: 400, marginTop: 1 }}>
+                          {/* Color dot */}
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 4, flexShrink: 0,
+                            background: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 11, fontWeight: 700, color: '#fff',
+                          }}>
+                            {(task?.code || '?').slice(0, 3).toUpperCase()}
+                          </div>
+
+                          {/* Info */}
+                          <div style={{ flex: 1, overflow: 'hidden' }}>
+                            <div style={{
+                              fontSize: 13, fontWeight: 600, color: isDark ? '#ddd' : '#333',
+                              fontFamily: "'Outfit',sans-serif",
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {task?.name || task?.code || '?'}
+                            </div>
+
+                            {/* Customer */}
+                            {customerName && (
+                              <div style={{
+                                fontSize: 10, fontWeight: 500,
+                                color: isDark ? 'rgba(0,229,160,.6)' : 'rgba(5,150,105,.7)',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                marginTop: 1,
+                              }}>&#x1F3E2; {customerName}</div>
+                            )}
+
+                            {/* Machines */}
+                            {machines.length > 0 && (
+                              <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                                {machines.slice(0, 3).map(m => (
+                                  <span key={m.id} style={{
+                                    fontSize: 8, fontWeight: 600, padding: '1px 4px', borderRadius: 2,
+                                    background: isDark ? 'rgba(66,165,245,.15)' : 'rgba(66,165,245,.1)',
+                                    color: '#42a5f5',
+                                  }}>&#x1F69C; {m.machine?.name?.slice(0, 10) || '?'}</span>
+                                ))}
+                                {machines.length > 3 && (
+                                  <span style={{ fontSize: 8, color: '#42a5f5' }}>+{machines.length - 3}</span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Report status line */}
+                            <div style={{
+                              fontSize: 9, opacity: 0.7, fontFamily: "'Outfit',sans-serif",
+                              fontWeight: 400, marginTop: 2, color: isDark ? '#aaa' : '#666',
+                            }}>
                               {hasReport
-                                ? `${t.reported} · ${hoursToDisplay(report!.actual_hours || 0)} · ${t.status[report!.status] || report!.status}`
-                                : t.clickToReport
+                                ? `${t.reported ?? 'Reported'} · ${hoursToDisplay(report!.actual_hours || 0)} · ${statusLabel(report!.status)}`
+                                : (t.clickToReport ?? 'Click to report time')
                               }
                             </div>
                           </div>
@@ -615,17 +863,20 @@ export function ReportsPage() {
                           {/* Report status indicator */}
                           <div style={{
                             width: 10, height: 10, borderRadius: '50%',
-                            background: hasReport ? statusColor(report!.status) : 'rgba(255,255,255,0.2)',
-                            border: hasReport ? 'none' : '1px dashed rgba(255,255,255,0.4)',
+                            background: hasReport ? statusColor(report!.status) : 'transparent',
+                            border: hasReport ? 'none' : `1px dashed ${th.textDim}`,
                             flexShrink: 0,
-                          }} title={hasReport ? t.reported : t.notReported} />
+                          }} title={hasReport ? (t.reported ?? 'Reported') : (t.notReported ?? 'Not reported')} />
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div style={{ padding: '12px 16px', color: th.textDim, fontSize: 11, fontFamily: "'Outfit',sans-serif", fontWeight: 400, fontStyle: 'italic' }}>
-                    {t.free}
+                  <div style={{
+                    padding: '12px 16px', color: th.textDim, fontSize: 11,
+                    fontFamily: "'Outfit',sans-serif", fontWeight: 400, fontStyle: 'italic',
+                  }}>
+                    {t.free ?? 'Free'}
                   </div>
                 )}
               </div>
@@ -637,12 +888,17 @@ export function ReportsPage() {
       {/* ─── TIME REPORT MODAL ─── */}
       {modal && (
         <div
-          style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn 0.2s ease' }}
+          style={{
+            position: 'fixed', inset: 0, background: th.modalBg,
+            backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', zIndex: 500, animation: 'fadeIn 0.2s ease',
+          }}
           onClick={() => setModal(null)}
         >
           <div
             style={{
-              background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, padding: 0, width: 420, maxHeight: '90vh', overflow: 'auto',
+              background: th.modalCard, border: `1px solid ${th.border}`,
+              borderRadius: 2, padding: 0, width: 440, maxHeight: '90vh', overflow: 'auto',
               boxShadow: isDark ? '0 16px 48px rgba(0,0,0,0.5)' : '0 16px 48px rgba(0,0,0,0.1)',
               animation: 'scaleIn 0.25s cubic-bezier(0.16,1,0.3,1)',
             }}
@@ -650,26 +906,49 @@ export function ReportsPage() {
           >
             {/* Modal header */}
             <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${th.borderFaint}` }}>
-              <div style={{ fontSize: 8, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>
-                {t.reportTime}
+              <div style={{
+                fontSize: 8, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6,
+              }}>
+                {t.reportTime ?? 'Report Time'}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{
-                  width: 28, height: 28, borderRadius: 2,
-                  background: isDark ? JOB_COLORS[modal.taskCode as keyof typeof JOB_COLORS]?.bgD : JOB_COLORS[modal.taskCode as keyof typeof JOB_COLORS]?.bgL,
-                  color: isDark ? JOB_COLORS[modal.taskCode as keyof typeof JOB_COLORS]?.textD : JOB_COLORS[modal.taskCode as keyof typeof JOB_COLORS]?.textL,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+                <div style={{
+                  width: 32, height: 32, borderRadius: 4, flexShrink: 0,
+                  background: modal.taskColor,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, color: '#fff',
                 }}>
-                  {modal.taskCode.toUpperCase()}
-                </span>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 400, color: th.gold }}>{modal.taskLabel}</div>
+                  {(modal.job.task?.code || '?').slice(0, 3).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 16, fontWeight: 400, color: th.gold }}>
+                    {modal.taskName}
+                  </div>
                   <div style={{ fontSize: 10, color: th.textDim, fontFamily: "'Outfit',sans-serif" }}>
-                    {t.days[modal.dayIndex]}, {fmtDate(dates[modal.dayIndex])}
+                    {(t.days as string[])?.[modal.dayIndex] ?? ''}, {fmtDate(dates[modal.dayIndex])}
+                    {modal.customerName ? ` · ${modal.customerName}` : ''}
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Validation errors */}
+            {formErrors.length > 0 && (
+              <div style={{
+                margin: '12px 24px 0', padding: '10px 14px', borderRadius: 2,
+                background: isDark ? 'rgba(248,113,113,.1)' : 'rgba(220,38,38,.06)',
+                border: `1px solid ${isDark ? 'rgba(248,113,113,.2)' : 'rgba(220,38,38,.15)'}`,
+              }}>
+                {formErrors.map((err, i) => (
+                  <div key={i} style={{
+                    fontSize: 11, color: isDark ? '#f87171' : '#dc2626',
+                    fontFamily: "'Outfit',sans-serif", fontWeight: 500,
+                    lineHeight: 1.6,
+                  }}>⚠ {err}</div>
+                ))}
+              </div>
+            )}
 
             {/* Form */}
             <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -677,44 +956,86 @@ export function ReportsPage() {
               {/* Time inputs */}
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                    {t.startTime}
+                  <label style={{
+                    fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                    fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                  }}>
+                    {t.startTime ?? 'Start Time'}
                   </label>
-                  <input type="time" value={formStartTime} onChange={e => setFormStartTime(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 14, fontFamily: "'Outfit',sans-serif", outline: 'none' }} />
+                  <input type="time" value={formStartTime}
+                    onChange={e => { setFormStartTime(e.target.value); setFormErrors([]); }}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 2,
+                      border: `1px solid ${th.border}`, background: th.btnBg,
+                      color: th.text, fontSize: 14, fontFamily: "'Outfit',sans-serif", outline: 'none',
+                      boxSizing: 'border-box',
+                    }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                    {t.endTime}
+                  <label style={{
+                    fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                    fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                  }}>
+                    {t.endTime ?? 'End Time'}
                   </label>
-                  <input type="time" value={formEndTime} onChange={e => setFormEndTime(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 14, fontFamily: "'Outfit',sans-serif", outline: 'none' }} />
+                  <input type="time" value={formEndTime}
+                    onChange={e => { setFormEndTime(e.target.value); setFormErrors([]); }}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 2,
+                      border: `1px solid ${timeToHours(formEndTime) <= timeToHours(formStartTime) ? (isDark ? '#f87171' : '#dc2626') : th.border}`,
+                      background: th.btnBg, color: th.text, fontSize: 14,
+                      fontFamily: "'Outfit',sans-serif", outline: 'none',
+                      boxSizing: 'border-box',
+                    }} />
                 </div>
               </div>
 
               {/* Hours summary */}
               <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1, padding: '10px 12px', background: th.goldGhost, borderRadius: 2, textAlign: 'center' }}>
-                  <div style={{ fontSize: 8, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>{t.actualHours}</div>
-                  <div style={{ fontSize: 20, fontWeight: 300, color: th.gold }}>{hoursToDisplay(computeActualHours())}</div>
+                <div style={{
+                  flex: 1, padding: '10px 12px', background: th.goldGhost,
+                  borderRadius: 2, textAlign: 'center',
+                }}>
+                  <div style={{
+                    fontSize: 8, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                    fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4,
+                  }}>{t.actualHours ?? 'Actual Hours'}</div>
+                  <div style={{
+                    fontSize: 20, fontWeight: 300,
+                    color: computeActualHours() > 0 ? th.gold : (isDark ? '#f87171' : '#dc2626'),
+                  }}>
+                    {computeActualHours() > 0 ? hoursToDisplay(computeActualHours()) : '—'}
+                  </div>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                    {t.plannedHours}
+                  <label style={{
+                    fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                    fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                  }}>
+                    {t.plannedHours ?? 'Planned Hours'}
                   </label>
-                  <input type="number" min="0" max="24" step="0.5" value={formPlannedHours} onChange={e => setFormPlannedHours(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 14, fontFamily: "'Outfit',sans-serif", outline: 'none' }} />
+                  <input type="number" min="0" max="24" step="0.5" value={formPlannedHours}
+                    onChange={e => { setFormPlannedHours(e.target.value); setFormErrors([]); }}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 2,
+                      border: `1px solid ${th.border}`, background: th.btnBg,
+                      color: th.text, fontSize: 14, fontFamily: "'Outfit',sans-serif", outline: 'none',
+                      boxSizing: 'border-box',
+                    }} />
                 </div>
               </div>
 
               {/* Status */}
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
+                <label style={{
+                  fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                  fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                }}>
                   Status
                 </label>
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {['COMPLETED', 'PARTIAL', 'NOT_DONE', 'ADDED'].map(s => (
-                    <button key={s} onClick={() => setFormStatus(s)}
+                    <button key={s} onClick={() => { setFormStatus(s); setFormErrors([]); }}
                       style={{
                         padding: '6px 12px', borderRadius: 2, border: 'none', cursor: 'pointer',
                         background: formStatus === s ? statusColor(s) : th.btnBg,
@@ -722,7 +1043,7 @@ export function ReportsPage() {
                         fontSize: 10, fontWeight: 600, fontFamily: "'Outfit',sans-serif",
                         transition: 'all 0.15s ease',
                       }}>
-                      {t.status[s]}
+                      {statusLabel(s)}
                     </button>
                   ))}
                 </div>
@@ -730,39 +1051,63 @@ export function ReportsPage() {
 
               {/* Description */}
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                  {t.description}
+                <label style={{
+                  fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                  fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                }}>
+                  {t.description ?? 'Description'}
                 </label>
-                <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} rows={3} placeholder={t.descriptionPlaceholder}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 12, fontFamily: "'Outfit',sans-serif", outline: 'none', resize: 'vertical' }} />
+                <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)}
+                  rows={3} placeholder={t.descriptionPlaceholder ?? 'What was done...'}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 2,
+                    border: `1px solid ${th.border}`, background: th.btnBg,
+                    color: th.text, fontSize: 12, fontFamily: "'Outfit',sans-serif", outline: 'none',
+                    resize: 'vertical', boxSizing: 'border-box',
+                  }} />
               </div>
 
               {/* Notes */}
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                  {t.notes}
+                <label style={{
+                  fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                  fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                }}>
+                  {t.notes ?? 'Notes'}
                 </label>
-                <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} placeholder={t.notesPlaceholder}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`, background: th.btnBg, color: th.text, fontSize: 12, fontFamily: "'Outfit',sans-serif", outline: 'none', resize: 'vertical' }} />
+                <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)}
+                  rows={2} placeholder={t.notesPlaceholder ?? 'Additional notes...'}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 2,
+                    border: `1px solid ${th.border}`, background: th.btnBg,
+                    color: th.text, fontSize: 12, fontFamily: "'Outfit',sans-serif", outline: 'none',
+                    resize: 'vertical', boxSizing: 'border-box',
+                  }} />
               </div>
 
               {/* Photos */}
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>
-                  {t.photos}
+                <label style={{
+                  fontSize: 9, color: th.goldDim, fontFamily: "'Outfit',sans-serif",
+                  fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6,
+                }}>
+                  {t.photos ?? 'Photos'}
                 </label>
 
-                {/* Photo grid */}
                 {formPhotos.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 8 }}>
                     {formPhotos.map((url, idx) => (
-                      <div key={idx} style={{ position: 'relative', aspectRatio: '1', borderRadius: 2, overflow: 'hidden', border: `1px solid ${th.borderFaint}` }}>
+                      <div key={idx} style={{
+                        position: 'relative', aspectRatio: '1', borderRadius: 2,
+                        overflow: 'hidden', border: `1px solid ${th.borderFaint}`,
+                      }}>
                         <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <button onClick={() => removePhoto(url)} title={t.removePhoto}
+                        <button onClick={() => removePhoto(url)} title={t.removePhoto ?? 'Remove'}
                           style={{
-                            position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%',
-                            background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer',
-                            fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            position: 'absolute', top: 4, right: 4, width: 20, height: 20,
+                            borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff',
+                            border: 'none', cursor: 'pointer', fontSize: 12,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>×</button>
                       </div>
                     ))}
@@ -772,38 +1117,44 @@ export function ReportsPage() {
                 <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoUpload} style={{ display: 'none' }} />
                 <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                   style={{
-                    width: '100%', padding: '10px', borderRadius: 2, border: `1px dashed ${th.border}`,
-                    background: 'transparent', color: th.textDim, cursor: uploading ? 'wait' : 'pointer',
+                    width: '100%', padding: '10px', borderRadius: 2,
+                    border: `1px dashed ${th.border}`, background: 'transparent',
+                    color: th.textDim, cursor: uploading ? 'wait' : 'pointer',
                     fontSize: 11, fontFamily: "'Outfit',sans-serif", fontWeight: 500,
-                    transition: 'all 0.15s ease',
+                    transition: 'all 0.15s ease', boxSizing: 'border-box',
                   }}
                   onMouseEnter={e => { if (!uploading) (e.currentTarget as HTMLButtonElement).style.borderColor = th.gold; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = th.border; }}
                 >
-                  {uploading ? t.uploadingPhoto : `+ ${t.addPhoto}`}
+                  {uploading ? (t.uploadingPhoto ?? 'Uploading...') : `+ ${t.addPhoto ?? 'Add photo'}`}
                 </button>
               </div>
             </div>
 
             {/* Footer */}
-            <div style={{ padding: '16px 24px', borderTop: `1px solid ${th.borderFaint}`, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{
+              padding: '16px 24px', borderTop: `1px solid ${th.borderFaint}`,
+              display: 'flex', gap: 8, justifyContent: 'flex-end',
+            }}>
               <button onClick={() => setModal(null)}
                 style={{
                   padding: '10px 20px', borderRadius: 2, border: `1px solid ${th.borderFaint}`,
                   background: 'transparent', color: th.textDim, cursor: 'pointer',
-                  fontSize: 10, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase',
+                  fontSize: 10, fontFamily: "'Outfit',sans-serif", fontWeight: 600,
+                  letterSpacing: 1, textTransform: 'uppercase',
                 }}>
-                {t.cancel}
+                {t.cancel ?? 'Cancel'}
               </button>
               <button onClick={saveReport} disabled={saving}
                 style={{
                   padding: '10px 24px', borderRadius: 2, border: 'none',
                   background: th.gold, color: isDark ? '#0a0a0a' : '#fff',
                   cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1,
-                  fontSize: 10, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase',
+                  fontSize: 10, fontFamily: "'Outfit',sans-serif", fontWeight: 600,
+                  letterSpacing: 1, textTransform: 'uppercase',
                   transition: 'opacity 0.15s ease',
                 }}>
-                {saving ? '...' : t.save}
+                {saving ? '...' : (modal.existingReport ? (t.update ?? 'Update') : (t.save ?? 'Save'))}
               </button>
             </div>
           </div>
