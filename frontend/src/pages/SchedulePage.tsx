@@ -704,7 +704,17 @@ export function SchedulePage() {
                             {cellJobList.map(job => {
                               const task = job.task || taskById[job.task_id];
                               const color = getTaskColor(job.task_id);
-                              const customerName = job.task?.customer?.name;
+
+                              // ★ Resolve customer from multiple sources
+                              const rawCust = job.task?.customer;
+                              const customerObj = (rawCust && !Array.isArray(rawCust)) ? rawCust
+                                : (Array.isArray(rawCust) && rawCust.length > 0) ? rawCust[0]
+                                : null;
+                              const customerName = customerObj?.name
+                                || (job.customer_id ? customers.find(c => c.id === job.customer_id)?.name : null)
+                                || (task?.customer_id ? customers.find(c => c.id === task.customer_id)?.name : null)
+                                || null;
+
                               const jm = job.machines || [];
 
                               return (
@@ -748,7 +758,7 @@ export function SchedulePage() {
                                     </div>
                                   )}
 
-                                  {/* Remove */}
+                                  {/* Remove button */}
                                   {canEdit && (
                                     <span style={{
                                       position: 'absolute' as const, top: 2, right: 3,

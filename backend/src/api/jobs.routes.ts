@@ -8,8 +8,8 @@ export const jobsRouter = Router();
 /* ─── Shared select string ─── */
 const JOB_SELECT = `
   *,
-  task:tasks ( id, code, name, color, schedule_type, status, customer_id,
-    customer:customers ( id, name, company_name, address, city, contact_name, contact_phone )
+  task:tasks!task_id ( id, code, name, color, schedule_type, status, customer_id,
+    customer:customers!customer_id ( id, name, company_name, address, city, contact_name, contact_phone )
   ),
   machines:job_machines (
     id,
