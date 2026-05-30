@@ -96,6 +96,16 @@ function getKW(d: Date) {
   return 1 + Math.round(((date.getTime() - w1.getTime()) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7);
 }
 
+/* ─── Department helper (case-insensitive) ─── */
+function isGarten(dept?: string): boolean {
+  const d = (dept || '').toLowerCase();
+  return d === 'garten' || d === 'garten & tiefbau' || d.startsWith('garten');
+}
+function isUnterhalt(dept?: string): boolean {
+  const d = (dept || '').toLowerCase();
+  return d === 'unterhalt' || d.startsWith('unterhalt');
+}
+
 export function SchedulePage() {
   const { isDark, lang } = useTheme();
   const th: Theme = isDark ? themes.dark : themes.light;
@@ -129,6 +139,7 @@ export function SchedulePage() {
   /* ─── State ─── */
   const [weekOff, setWeekOff] = useState(0);
   const [dept, setDept] = useState('all');
+  const [empSearch, setEmpSearch] = useState('');
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -184,9 +195,32 @@ export function SchedulePage() {
     return list;
   }, [allUsers, scheduleScope, selectedTeamLeaderId, user?.id]);
 
-  const emps = useMemo(() => users.filter(u => dept === 'all' || u.department === dept), [users, dept]);
+  const emps = useMemo(() => {
+    let list = users;
 
-  useEffect(() => { setCurrentPage(1); }, [dept, selectedTeamLeaderId, weekOff, scheduleScope]);
+    // Department filter (case-insensitive)
+    if (dept !== 'all') {
+      list = list.filter(u => {
+        if (dept === 'garten') return isGarten(u.department);
+        if (dept === 'unterhalt') return isUnterhalt(u.department);
+        return (u.department || '').toLowerCase() === dept;
+      });
+    }
+
+    // Employee name search
+    if (empSearch.trim()) {
+      const s = empSearch.toLowerCase().trim();
+      list = list.filter(u =>
+        u.first_name.toLowerCase().includes(s) ||
+        u.last_name.toLowerCase().includes(s) ||
+        `${u.first_name} ${u.last_name}`.toLowerCase().includes(s)
+      );
+    }
+
+    return list;
+  }, [users, dept, empSearch]);
+
+  useEffect(() => { setCurrentPage(1); }, [dept, selectedTeamLeaderId, weekOff, scheduleScope, empSearch]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(emps.length / PAGE_SIZE)), [emps.length]);
   const pagedEmps = useMemo(() => {
@@ -212,7 +246,6 @@ export function SchedulePage() {
       if (!m[j.user_id][j.day_of_week]) m[j.user_id][j.day_of_week] = [];
       m[j.user_id][j.day_of_week].push(j);
     });
-    // Sort by time_slot
     Object.values(m).forEach(ud => Object.values(ud).forEach(arr => arr.sort((a, b) => a.time_slot - b.time_slot)));
     return m;
   }, [jobs, weekIds]);
@@ -335,6 +368,25 @@ export function SchedulePage() {
     setCellModal({ userId, day });
   };
 
+  /* ─── Resolve customer for a job (handles all edge cases) ─── */
+  const resolveCustomerName = (job: Job): string | null => {
+    const rawCust = job.task?.customer;
+    const customerObj = (rawCust && !Array.isArray(rawCust)) ? rawCust
+      : (Array.isArray(rawCust) && rawCust.length > 0) ? (rawCust as any)[0]
+      : null;
+    if (customerObj?.name) return customerObj.name;
+    if (job.customer_id) {
+      const c = customers.find(c => c.id === job.customer_id);
+      if (c?.name) return c.name;
+    }
+    const task = job.task || taskById[job.task_id];
+    if (task?.customer_id) {
+      const c = customers.find(c => c.id === task.customer_id);
+      if (c?.name) return c.name;
+    }
+    return null;
+  };
+
   /* ─── Remove job (direct from grid × button) ─── */
   const removeJob = async (jobId: string) => {
     if (!canEdit) return;
@@ -446,7 +498,11 @@ export function SchedulePage() {
     return list.slice(0, 50);
   }, [bulkPicker, bulkSearch, tasks, activeTaskIds]);
 
-  const deptLabel = (d: string) => d === 'garten' ? (t.gartenFull ?? 'Garten & Tiefbau') : d === 'unterhalt' ? (t.unterhaltFull ?? 'Unterhalt') : (t.bothDept ?? 'All');
+  const deptLabel = (d: string) => {
+    if (isGarten(d)) return t.gartenFull ?? 'Garten & Tiefbau';
+    if (isUnterhalt(d)) return t.unterhaltFull ?? 'Unterhalt';
+    return t.bothDept ?? 'All';
+  };
 
   /* ═══ ACCESS GUARD ═══ */
   if (scheduleScope === 'none' || !canView) {
@@ -485,7 +541,7 @@ export function SchedulePage() {
 
       <main style={{ padding: '20px 24px', opacity: bulkLoading ? 0.7 : 1, pointerEvents: bulkLoading ? 'none' : 'auto' }}>
 
-        {/* ── Header: week nav + dept filter + TL filter + stats ── */}
+        {/* ── Header: week nav + dept filter + search + TL filter + stats ── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <button onClick={() => setWeekOff(w => w - 1)} style={navBtn(th)}>‹</button>
@@ -500,6 +556,8 @@ export function SchedulePage() {
               padding: '6px 12px', borderRadius: 4, border: 'none', background: th.switchActive,
               color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const,
             }}>{t.today ?? 'Today'}</button>
+
+            {/* Department filter */}
             <div style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
               {(['all', 'garten', 'unterhalt'] as const).map(d => (
                 <button key={d} onClick={() => setDept(d)} style={{
@@ -508,6 +566,38 @@ export function SchedulePage() {
                   color: dept === d ? th.gold : th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600,
                 }}>{d === 'all' ? (t.bothDept ?? 'All') : d === 'garten' ? 'GT' : 'UH'}</button>
               ))}
+            </div>
+
+            {/* Employee Search */}
+            <div style={{ marginLeft: 12, position: 'relative' as const }}>
+              <input
+                placeholder={t.searchEmployee ?? 'Search employee...'}
+                value={empSearch}
+                onChange={e => setEmpSearch(e.target.value)}
+                style={{
+                  padding: '6px 30px 6px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500,
+                  border: `1px solid ${empSearch ? th.gold : th.border}`,
+                  background: empSearch
+                    ? (isDark ? 'rgba(200,169,110,.1)' : 'rgba(200,169,110,.06)')
+                    : (isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.03)'),
+                  color: th.text, outline: 'none', width: 170,
+                  transition: 'border-color .15s, background .15s',
+                }}
+              />
+              {empSearch ? (
+                <span
+                  onClick={() => setEmpSearch('')}
+                  style={{
+                    position: 'absolute' as const, right: 8, top: '50%', transform: 'translateY(-50%)',
+                    fontSize: 12, color: '#ef4444', cursor: 'pointer', fontWeight: 700, lineHeight: 1,
+                  }}
+                >✕</span>
+              ) : (
+                <span style={{
+                  position: 'absolute' as const, right: 8, top: '50%', transform: 'translateY(-50%)',
+                  fontSize: 12, color: th.textGhost, pointerEvents: 'none', lineHeight: 1,
+                }}>&#x1F50D;</span>
+              )}
             </div>
 
             {/* Team Leader Filter */}
@@ -612,9 +702,11 @@ export function SchedulePage() {
               {pagedEmps.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: th.textDim, fontSize: 14 }}>
-                    {selectedTeamLeaderId
-                      ? (t.noEmployeesForTL ?? 'No employees found for this team leader')
-                      : (t.noResults ?? 'No results')}
+                    {empSearch
+                      ? (t.noSearchResults ?? `No employees matching "${empSearch}"`)
+                      : selectedTeamLeaderId
+                        ? (t.noEmployeesForTL ?? 'No employees found for this team leader')
+                        : (t.noResults ?? 'No results')}
                   </td>
                 </tr>
               )}
@@ -630,16 +722,16 @@ export function SchedulePage() {
                   <td style={{
                     textAlign: 'center' as const, borderRight: `1px solid ${th.borderFaint}`,
                     fontSize: 11, fontWeight: 700,
-                    color: emp.department === 'garten' ? th.roleV : th.roleM, padding: '4px',
+                    color: isGarten(emp.department) ? th.roleV : th.roleM, padding: '4px',
                   }}>
                     <div style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       width: 28, height: 28, borderRadius: 6,
-                      background: emp.department === 'garten'
+                      background: isGarten(emp.department)
                         ? (isDark ? 'rgba(74,103,65,.2)' : 'rgba(74,103,65,.08)')
                         : (isDark ? 'rgba(125,78,87,.2)' : 'rgba(125,78,87,.08)'),
                       fontSize: 10, fontWeight: 800, letterSpacing: .5,
-                    }}>{emp.department === 'garten' ? 'GT' : 'UH'}</div>
+                    }}>{isGarten(emp.department) ? 'GT' : 'UH'}</div>
                   </td>
 
                   {/* Name */}
@@ -704,17 +796,7 @@ export function SchedulePage() {
                             {cellJobList.map(job => {
                               const task = job.task || taskById[job.task_id];
                               const color = getTaskColor(job.task_id);
-
-                              // ★ Resolve customer from multiple sources
-                              const rawCust = job.task?.customer;
-                              const customerObj = (rawCust && !Array.isArray(rawCust)) ? rawCust
-                                : (Array.isArray(rawCust) && rawCust.length > 0) ? rawCust[0]
-                                : null;
-                              const customerName = customerObj?.name
-                                || (job.customer_id ? customers.find(c => c.id === job.customer_id)?.name : null)
-                                || (task?.customer_id ? customers.find(c => c.id === task.customer_id)?.name : null)
-                                || null;
-
+                              const customerName = resolveCustomerName(job);
                               const jm = job.machines || [];
 
                               return (
@@ -739,7 +821,7 @@ export function SchedulePage() {
                                       color: isDark ? 'rgba(200,169,110,.7)' : 'rgba(139,115,85,.7)',
                                       overflow: 'hidden', textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap' as const, lineHeight: 1.3, marginTop: 1,
-                                    }}>👤 {customerName}</div>
+                                    }}>&#x1F464; {customerName}</div>
                                   )}
 
                                   {/* Machines */}
@@ -752,7 +834,7 @@ export function SchedulePage() {
                                           color: '#42a5f5', maxWidth: 55,
                                           overflow: 'hidden', textOverflow: 'ellipsis',
                                           whiteSpace: 'nowrap' as const, lineHeight: 1.4,
-                                        }}>🚜{m.machine?.name?.slice(0, 7) || '?'}</span>
+                                        }}>&#x1F69C;{m.machine?.name?.slice(0, 7) || '?'}</span>
                                       ))}
                                       {jm.length > 2 && <span style={{ fontSize: 7, color: '#42a5f5' }}>+{jm.length - 2}</span>}
                                     </div>
@@ -959,6 +1041,7 @@ export function SchedulePage() {
               style={{
                 width: '100%', padding: '8px 10px', borderRadius: 4, border: `1px solid ${th.border}`,
                 background: th.bg, color: th.text, fontSize: 12, outline: 'none',
+                boxSizing: 'border-box' as const,
               }}
             />
           </div>
