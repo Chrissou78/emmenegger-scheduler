@@ -139,6 +139,15 @@ function isUnterhalt(dept?: string): boolean {
   return d === 'unterhalt' || d.startsWith('unterhalt');
 }
 
+/* ─── Overdue helper: is a given date in the past (before today)? ─── */
+function isDateInPast(d: Date): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const check = new Date(d);
+  check.setHours(0, 0, 0, 0);
+  return check < today;
+}
+
 export function SchedulePage() {
   const { isDark, lang } = useTheme();
   const th: Theme = isDark ? themes.dark : themes.light;
@@ -335,6 +344,31 @@ export function SchedulePage() {
     const key = `${job.user_id}|${job.task_id}|${dateStr}`;
     return reportMap[key] || null;
   }, [reportMap, dates]);
+
+  /* ─── ★ Overdue detection: job is in the past and has NO report at all ─── */
+  const isJobOverdue = useCallback((job: Job, dayIndex: number): boolean => {
+    if (!dates[dayIndex]) return false;
+    // Only past days can be overdue
+    if (!isDateInPast(dates[dayIndex])) return false;
+    // Check if there is any report for this job on this day
+    const report = getJobReportStatus(job, dayIndex);
+    // Overdue = no report exists at all
+    return !report;
+  }, [dates, getJobReportStatus]);
+
+  /* ─── ★ Overdue stats for the header ─── */
+  const overdueCount = useMemo(() => {
+    let count = 0;
+    jobs.forEach(j => {
+      if (!weekIds.has(j.week_id)) return;
+      if (!dates[j.day_of_week]) return;
+      if (!isDateInPast(dates[j.day_of_week])) return;
+      const dateStr = format(dates[j.day_of_week], 'yyyy-MM-dd');
+      const key = `${j.user_id}|${j.task_id}|${dateStr}`;
+      if (!reportMap[key]) count++;
+    });
+    return count;
+  }, [jobs, weekIds, dates, reportMap]);
 
   const showToast = useCallback((msg: string, err = false) => {
     setToast({ msg, err });
@@ -761,11 +795,22 @@ export function SchedulePage() {
                 </div>
               </div>
             )}
+            {/* ★ Overdue counter */}
+            {overdueCount > 0 && (
+              <div style={{ textAlign: 'center' }} title={`${overdueCount} ${t.overdueJobs ?? 'jobs with no report (past days)'}`}>
+                <div style={{ fontSize: 20, fontWeight: 300, color: '#ef4444', lineHeight: 1 }}>
+                  {overdueCount}
+                </div>
+                <div style={{ fontSize: 8, color: '#ef4444', marginTop: 3, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const, opacity: 0.7 }}>
+                  {t.overdue ?? 'Overdue'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* ── Report Status Legend (mini) ── */}
-        {reportStats.reported > 0 && (
+        {(reportStats.reported > 0 || overdueCount > 0) && (
           <div style={{
             display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap',
           }}>
@@ -786,6 +831,11 @@ export function SchedulePage() {
                 <span style={{ fontSize: 9, color: th.textDim, fontWeight: 500 }}>{item.label}</span>
               </span>
             ))}
+            {/* ★ Overdue flag legend item */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 10, lineHeight: 1 }}>🚩</span>
+              <span style={{ fontSize: 9, color: '#ef4444', fontWeight: 500 }}>{t.overdue ?? 'Overdue'}</span>
+            </span>
           </div>
         )}
 
@@ -890,11 +940,18 @@ export function SchedulePage() {
                     const cellAbs = getCellAbsences(emp.id, di);
                     const hasJobs = cellJobList.length > 0;
 
+                    /* ★ Check if ANY job in this cell is overdue (past day, no report) */
+                    const cellHasOverdue = hasJobs && cellJobList.some(j => isJobOverdue(j, di));
+
                     return (
                       <td key={di} style={{
                         borderRight: di < 5 ? `1px solid ${th.borderFaint}` : 'none',
                         padding: '3px 4px', position: 'relative' as const,
                         cursor: 'pointer', verticalAlign: 'top' as const,
+                        /* ★ Subtle red background tint for cells with overdue jobs */
+                        background: cellHasOverdue
+                          ? (isDark ? 'rgba(239,68,68,0.04)' : 'rgba(239,68,68,0.03)')
+                          : 'transparent',
                       }}
                         onClick={() => openCellModal(emp.id, di)}
                       >
@@ -930,17 +987,24 @@ export function SchedulePage() {
                               const reportStatus = report?.status || null;
                               const reportColor = reportStatus ? (REPORT_STATUS_COLORS[reportStatus] || null) : null;
                               const isCompleted = reportStatus === 'COMPLETED';
+                              const overdue = isJobOverdue(job, di);
 
                               return (
                                 <div key={job.id} style={{
                                   background: isDark ? `${color}28` : `${color}18`,
-                                  borderLeft: `3px solid ${color}`,
+                                  borderLeft: `3px solid ${overdue ? '#ef4444' : color}`,
                                   borderRadius: 4, padding: '3px 6px', minHeight: 28,
                                   position: 'relative' as const,
                                   // Grey out completed jobs slightly
                                   opacity: isCompleted ? 0.65 : 1,
                                   transition: 'opacity .2s',
-                                }} title={`${task?.name || '?'}${customerName ? ` · ${customerName}` : ''}${reportStatus ? ` · ${(t.status as any)?.[reportStatus] ?? REPORT_STATUS_LABELS[reportStatus] ?? reportStatus}` : ''}`}>
+                                  // ★ Overdue: subtle red border glow
+                                  ...(overdue ? {
+                                    boxShadow: isDark
+                                      ? 'inset 0 0 0 1px rgba(239,68,68,0.25), 0 0 6px rgba(239,68,68,0.15)'
+                                      : 'inset 0 0 0 1px rgba(239,68,68,0.2), 0 0 4px rgba(239,68,68,0.1)',
+                                  } : {}),
+                                }} title={`${task?.name || '?'}${customerName ? ` · ${customerName}` : ''}${reportStatus ? ` · ${(t.status as any)?.[reportStatus] ?? REPORT_STATUS_LABELS[reportStatus] ?? reportStatus}` : ''}${overdue ? ` · ⚠ ${t.overdue ?? 'Overdue — no report'}` : ''}`}>
 
                                   {/* ── Report status dot (top-right corner) ── */}
                                   {reportColor && (
@@ -958,15 +1022,31 @@ export function SchedulePage() {
                                     }} />
                                   )}
 
+                                  {/* ★ Overdue red flag (top-left corner) — only when no report dot exists */}
+                                  {overdue && !reportColor && (
+                                    <span style={{
+                                      position: 'absolute' as const,
+                                      top: 1,
+                                      right: canEdit ? 17 : 3,
+                                      fontSize: 9,
+                                      lineHeight: 1,
+                                      zIndex: 2,
+                                      pointerEvents: 'none',
+                                      filter: 'drop-shadow(0 0 2px rgba(239,68,68,0.6))',
+                                    }} title={t.overdueNoReport ?? 'No report submitted'}>🚩</span>
+                                  )}
+
                                   {/* Task name */}
                                   <div style={{
                                     fontSize: 10, fontWeight: 700,
                                     color: isCompleted
                                       ? (isDark ? '#999' : '#888')
-                                      : (isDark ? '#ddd' : '#333'),
+                                      : overdue
+                                        ? (isDark ? '#f87171' : '#dc2626')
+                                        : (isDark ? '#ddd' : '#333'),
                                     overflow: 'hidden', textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap' as const,
-                                    paddingRight: canEdit ? 20 : (reportColor ? 12 : 0),
+                                    paddingRight: canEdit ? 20 : (reportColor || overdue ? 12 : 0),
                                     lineHeight: 1.3,
                                     textDecoration: isCompleted ? 'line-through' : 'none',
                                   }}>{task?.name || task?.code || '?'}</div>
