@@ -40,15 +40,13 @@ interface TimeReport {
   submitted_at: string | null;
 }
 
-/* ── Quotation line ── */
 interface QuoteLine {
   id: string; description: string; quantity: number; unit: string;
-  unit_price: number; discount_percent: number; vat_rate: number;
-  task_id?: string;
+  unit_price: number; vat_rate: number; task_id?: string;
 }
 
-/* ── Modal types ── */
 type ModalType = 'report' | 'add-job' | 'quotation' | null;
+
 interface ReportModalData {
   job: Job; taskName: string; taskColor: string; customerName: string | null;
   dayIndex: number; date: string; existingReport: TimeReport | null;
@@ -78,8 +76,7 @@ function isToday(d: Date) {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 function timeToHours(time: string): number {
-  const [h, m] = time.split(':').map(Number);
-  return h + (m || 0) / 60;
+  const [h, m] = time.split(':').map(Number); return h + (m || 0) / 60;
 }
 function hoursToDisplay(h: number): string {
   const hrs = Math.floor(h); const mins = Math.round((h - hrs) * 60);
@@ -95,12 +92,15 @@ const PALETTE = [
   '#6B8E23','#8B4513','#556B2F','#483D8B','#2F4F4F','#8B0000','#006400','#4682B4',
 ];
 function hashColor(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
   return PALETTE[Math.abs(h) % PALETTE.length];
 }
 
 const UNIT_OPTIONS = ['Std', 'Stk', 'm²', 'm³', 'Pauschale', 'Tage', 'lfm', 'kg'];
+const UNIT_LABELS: Record<string, string> = {
+  Std: 'Hours', Stk: 'Pieces', 'm²': 'm²', 'm³': 'm³',
+  Pauschale: 'Flat Rate', Tage: 'Days', lfm: 'lm', kg: 'kg',
+};
 
 /* ═══════════════════════════════════ SIGNATURE PAD ═══════════════════════════════════ */
 
@@ -115,81 +115,45 @@ function SignaturePad({
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
   const getPos = (e: React.MouseEvent | React.TouchEvent): { x: number; y: number } => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    if ('touches' in e) {
-      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-    }
+    const canvas = canvasRef.current!; const rect = canvas.getBoundingClientRect();
+    if ('touches' in e) return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
     return { x: (e as React.MouseEvent).clientX - rect.left, y: (e as React.MouseEvent).clientY - rect.top };
   };
 
   const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
-    isDrawing.current = true;
-    lastPos.current = getPos(e);
+    e.preventDefault(); isDrawing.current = true; lastPos.current = getPos(e);
   };
-
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing.current || !lastPos.current) return;
-    e.preventDefault();
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return;
+    if (!isDrawing.current || !lastPos.current) return; e.preventDefault();
+    const ctx = canvasRef.current?.getContext('2d'); if (!ctx) return;
     const pos = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.beginPath(); ctx.moveTo(lastPos.current.x, lastPos.current.y);
     ctx.lineTo(pos.x, pos.y);
     ctx.strokeStyle = isDark ? '#d0d4e0' : '#1a1d2e';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
     lastPos.current = pos;
   };
-
   const endDraw = () => {
-    isDrawing.current = false;
-    lastPos.current = null;
-    if (canvasRef.current) {
-      onSave(canvasRef.current.toDataURL('image/png'));
-    }
+    isDrawing.current = false; lastPos.current = null;
+    if (canvasRef.current) onSave(canvasRef.current.toDataURL('image/png'));
   };
-
   const clear = () => {
     const ctx = canvasRef.current?.getContext('2d');
-    if (ctx && canvasRef.current) {
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    }
+    if (ctx && canvasRef.current) ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     onClear();
   };
 
   return (
     <div>
-      <div style={{
-        border: `1px solid ${th.border}`, borderRadius: 4, overflow: 'hidden',
-        background: isDark ? '#0f1117' : '#fff', position: 'relative',
-      }}>
-        <canvas
-          ref={canvasRef}
-          width={380}
-          height={160}
+      <div style={{ border: `1px solid ${th.border}`, borderRadius: 4, overflow: 'hidden', background: isDark ? '#0f1117' : '#fff', position: 'relative' }}>
+        <canvas ref={canvasRef} width={380} height={160}
           style={{ display: 'block', width: '100%', height: 160, cursor: 'crosshair', touchAction: 'none' }}
           onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
-          onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
-        />
-        <div style={{
-          position: 'absolute', bottom: 30, left: 20, right: 20,
-          borderBottom: `1px dashed ${isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'}`,
-          pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', bottom: 8, left: 20, fontSize: 8, color: th.textGhost,
-          fontWeight: 500, letterSpacing: 1, textTransform: 'uppercase', pointerEvents: 'none',
-        }}>Signature</div>
+          onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw} />
+        <div style={{ position: 'absolute', bottom: 30, left: 20, right: 20, borderBottom: `1px dashed ${isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)'}`, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: 8, left: 20, fontSize: 8, color: th.textGhost, fontWeight: 500, letterSpacing: 1, textTransform: 'uppercase', pointerEvents: 'none' }}>Signature</div>
       </div>
-      <button onClick={clear} style={{
-        marginTop: 6, padding: '4px 10px', borderRadius: 3, border: `1px solid ${th.border}`,
-        background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600,
-      }}>
+      <button onClick={clear} style={{ marginTop: 6, padding: '4px 10px', borderRadius: 3, border: `1px solid ${th.border}`, background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
         ✕ Clear
       </button>
     </div>
@@ -210,9 +174,7 @@ export function ReportsPage() {
   }, [user]);
   const canView = perms.has('reports.own' as Permission);
 
-  const authHeaders = useMemo(() => ({
-    'Content-Type': 'application/json', Authorization: `Bearer ${token}`,
-  }), [token]);
+  const authHeaders = useMemo(() => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }), [token]);
   const authHeadersSimple = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   /* ── State ── */
@@ -246,9 +208,13 @@ export function ReportsPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* ── Add-job form ── */
+  /* ── Add-job form (wizard: task → customer → machines) ── */
+  const [jobStep, setJobStep] = useState<'task' | 'customer' | 'machines'>('task');
   const [jobTaskSearch, setJobTaskSearch] = useState('');
   const [jobSelectedTask, setJobSelectedTask] = useState<Task | null>(null);
+  const [jobCustomerSearch, setJobCustomerSearch] = useState('');
+  const [jobSelectedCustomer, setJobSelectedCustomer] = useState<Customer | null>(null);
+  const [jobMachineSearch, setJobMachineSearch] = useState('');
   const [jobMachineIds, setJobMachineIds] = useState<string[]>([]);
   const [jobNotes, setJobNotes] = useState('');
   const [jobSaving, setJobSaving] = useState(false);
@@ -273,13 +239,11 @@ export function ReportsPage() {
   const weekIds = useMemo(() => new Set(matchingWeeks.map(w => w.id)), [matchingWeeks]);
 
   const customerById = useMemo(() => {
-    const m: Record<string, Customer> = {};
-    customers.forEach(c => { m[c.id] = c; }); return m;
+    const m: Record<string, Customer> = {}; customers.forEach(c => { m[c.id] = c; }); return m;
   }, [customers]);
 
   const taskById = useMemo(() => {
-    const m: Record<string, Task> = {};
-    tasks.forEach(tk => { m[tk.id] = tk; }); return m;
+    const m: Record<string, Task> = {}; tasks.forEach(tk => { m[tk.id] = tk; }); return m;
   }, [tasks]);
 
   const getTaskColor = useCallback((task?: Task | null, taskId?: string) => {
@@ -323,7 +287,7 @@ export function ReportsPage() {
     if (!token) return;
     (async () => {
       try { const r = await fetch(`${API}/api/v1/weeks`, { headers: authHeadersSimple }); const d = await r.json(); setWeeks(Array.isArray(d.data) ? d.data : []); } catch {}
-      try { const r = await fetch(`${API}/api/v1/customers?limit=200`, { headers: authHeadersSimple }); const d = await r.json(); setCustomers(Array.isArray(d) ? d : d.data || []); } catch {}
+      try { const r = await fetch(`${API}/api/v1/customers?limit=500`, { headers: authHeadersSimple }); const d = await r.json(); setCustomers(Array.isArray(d) ? d : d.data || []); } catch {}
       try { const r = await fetch(`${API}/api/v1/tasks`, { headers: authHeadersSimple }); const d = await r.json(); setTasks(d.data || []); } catch {}
       try { const r = await fetch(`${API}/api/v1/machines`, { headers: authHeadersSimple }); const d = await r.json(); setMachines(Array.isArray(d) ? d : d.data || []); } catch {}
     })();
@@ -338,10 +302,8 @@ export function ReportsPage() {
         try { const r = await fetch(`${API}/api/v1/jobs?weekId=${w.id}`, { headers: authHeadersSimple }); if (!r.ok) continue; const d = await r.json(); if (Array.isArray(d.data)) allJobs.push(...d.data); } catch {}
       }
       setJobs(allJobs);
-
       const absences: Record<number, AbsenceRecord[]> = {};
-      const startDate = format(dates[0], 'yyyy-MM-dd');
-      const endDate = format(dates[5], 'yyyy-MM-dd');
+      const startDate = format(dates[0], 'yyyy-MM-dd'); const endDate = format(dates[5], 'yyyy-MM-dd');
       try {
         const r = await fetch(`${API}/api/v1/absences?startDate=${startDate}&endDate=${endDate}`, { headers: authHeadersSimple });
         const d = await r.json(); const list: AbsenceRecord[] = Array.isArray(d.data) ? d.data : Array.isArray(d) ? d : [];
@@ -355,11 +317,7 @@ export function ReportsPage() {
         });
       } catch {}
       setMyAbsences(absences);
-
-      try {
-        const r = await fetch(`${API}/api/v1/reports?startDate=${startDate}&endDate=${endDate}`, { headers: authHeadersSimple });
-        const d = await r.json(); setReports(Array.isArray(d.data) ? d.data : []);
-      } catch {}
+      try { const r = await fetch(`${API}/api/v1/reports?startDate=${startDate}&endDate=${endDate}`, { headers: authHeadersSimple }); const d = await r.json(); setReports(Array.isArray(d.data) ? d.data : []); } catch {}
       setLoading(false);
     })();
   }, [weekOff, weeks, user, token, authHeadersSimple]);
@@ -390,10 +348,9 @@ export function ReportsPage() {
       customerName: resolveCustomerName(job), dayIndex, date: dateStr, existingReport: existing,
     });
     if (existing) {
-      const actualH = existing.actual_hours || 0;
-      const endH = 7 + actualH; const endHrs = Math.floor(endH); const endMins = Math.round((endH - endHrs) * 60);
+      const actualH = existing.actual_hours || 0; const endH = 7 + actualH;
       setFormStartTime('07:00');
-      setFormEndTime(`${String(endHrs).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`);
+      setFormEndTime(`${String(Math.floor(endH)).padStart(2, '0')}:${String(Math.round((endH - Math.floor(endH)) * 60)).padStart(2, '0')}`);
       setFormPlannedHours(String(existing.planned_hours || 8));
       setFormDescription(existing.work_description || ''); setFormNotes(existing.notes || '');
       setFormPhotos(existing.photos || []); setFormStatus(existing.status || 'COMPLETED');
@@ -406,17 +363,16 @@ export function ReportsPage() {
   }, [dates, reports, user, getTaskColor, resolveCustomerName]);
 
   const computeActualHours = (): number => {
-    const start = timeToHours(formStartTime); const end = timeToHours(formEndTime);
-    return Math.max(0, Math.round((end - start) * 100) / 100);
+    const s = timeToHours(formStartTime); const e = timeToHours(formEndTime);
+    return Math.max(0, Math.round((e - s) * 100) / 100);
   };
 
   const validateReportForm = (): string[] => {
     const errors: string[] = [];
-    const start = timeToHours(formStartTime); const end = timeToHours(formEndTime);
+    if (timeToHours(formEndTime) <= timeToHours(formStartTime)) errors.push(t.validationEndAfterStart ?? 'End time must be after start time');
+    if (timeToHours(formEndTime) - timeToHours(formStartTime) > 16) errors.push(t.validationMaxHours ?? 'Work duration cannot exceed 16 hours');
     const planned = parseFloat(formPlannedHours);
-    if (end <= start) errors.push(t.validationEndAfterStart ?? 'End time must be after start time');
-    if (end - start > 16) errors.push(t.validationMaxHours ?? 'Work duration cannot exceed 16 hours');
-    if (isNaN(planned) || planned < 0) errors.push(t.validationPlannedPositive ?? 'Planned hours must be a positive number');
+    if (isNaN(planned) || planned < 0) errors.push(t.validationPlannedPositive ?? 'Planned hours must be positive');
     if (planned > 24) errors.push(t.validationPlannedMax ?? 'Planned hours cannot exceed 24');
     return errors;
   };
@@ -426,10 +382,9 @@ export function ReportsPage() {
     setUploading(true);
     try {
       const ext = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from('report-photos').upload(fileName, file, { cacheControl: '3600', upsert: false });
+      const { error } = await supabase.storage.from('report-photos').upload(`${user.id}/${Date.now()}.${ext}`, file, { cacheControl: '3600', upsert: false });
       if (error) throw error;
-      const { data: urlData } = supabase.storage.from('report-photos').getPublicUrl(fileName);
+      const { data: urlData } = supabase.storage.from('report-photos').getPublicUrl(`${user.id}/${Date.now()}.${ext}`);
       setFormPhotos(prev => [...prev, urlData.publicUrl]);
     } catch { showToast(t.uploadFailed ?? 'Upload failed', 'err'); }
     setUploading(false);
@@ -441,10 +396,9 @@ export function ReportsPage() {
     const errors = validateReportForm();
     if (errors.length > 0) { setFormErrors(errors); return; }
     setFormErrors([]); setSaving(true);
-    const actualHours = computeActualHours();
     const payload = {
       taskId: reportData.job.task_id, date: reportData.date,
-      plannedHours: parseFloat(formPlannedHours) || 8, actualHours, status: formStatus,
+      plannedHours: parseFloat(formPlannedHours) || 8, actualHours: computeActualHours(), status: formStatus,
       workDescription: formDescription || null, notes: formNotes || null, photos: formPhotos,
     };
     try {
@@ -461,51 +415,86 @@ export function ReportsPage() {
     setSaving(false);
   };
 
-  /* ═══════ ADD JOB LOGIC ═══════ */
+  /* ═══════ ADD JOB LOGIC (Task → Customer → Machines wizard) ═══════ */
 
   const openAddJobModal = useCallback((dayIndex: number) => {
     setAddJobData({ dayIndex, date: format(dates[dayIndex], 'yyyy-MM-dd') });
-    setJobTaskSearch(''); setJobSelectedTask(null); setJobMachineIds([]); setJobNotes('');
+    setJobStep('task');
+    setJobTaskSearch(''); setJobSelectedTask(null);
+    setJobCustomerSearch(''); setJobSelectedCustomer(null);
+    setJobMachineSearch(''); setJobMachineIds([]); setJobNotes('');
     setModalType('add-job');
   }, [dates]);
 
+  /* When task is selected, auto-resolve its customer */
+  const selectTask = useCallback((task: Task) => {
+    setJobSelectedTask(task);
+    setJobTaskSearch(task.name);
+    // Auto-fill customer from task
+    if (task.customer_id && customerById[task.customer_id]) {
+      setJobSelectedCustomer(customerById[task.customer_id]);
+      setJobCustomerSearch(customerById[task.customer_id].name);
+    } else if (task.customer && !Array.isArray(task.customer)) {
+      const c = customers.find(cu => cu.id === (task.customer as any).id);
+      if (c) { setJobSelectedCustomer(c); setJobCustomerSearch(c.name); }
+      else { setJobSelectedCustomer(null); setJobCustomerSearch(''); }
+    } else {
+      setJobSelectedCustomer(null); setJobCustomerSearch('');
+    }
+    setJobStep('customer');
+  }, [customerById, customers]);
+
   const filteredTasks = useMemo(() => {
-    if (!jobTaskSearch.trim()) return tasks.filter(tk => tk.status !== 'CANCELLED').slice(0, 30);
+    const list = tasks.filter(tk => tk.status !== 'CANCELLED');
+    if (!jobTaskSearch.trim()) return list.slice(0, 30);
     const s = jobTaskSearch.toLowerCase();
-    return tasks.filter(tk => tk.status !== 'CANCELLED' && (
+    return list.filter(tk =>
       tk.name.toLowerCase().includes(s) || tk.code.toLowerCase().includes(s) ||
       (tk.customer?.name || '').toLowerCase().includes(s)
-    )).slice(0, 30);
+    ).slice(0, 30);
   }, [tasks, jobTaskSearch]);
 
-  const activeMachines = useMemo(() => machines.filter(m => (m as any).is_active !== false), [machines]);
+  const filteredCustomers = useMemo(() => {
+    if (!jobCustomerSearch.trim()) return customers.slice(0, 30);
+    const s = jobCustomerSearch.toLowerCase();
+    return customers.filter(c =>
+      c.name.toLowerCase().includes(s) ||
+      (c.company_name || '').toLowerCase().includes(s) ||
+      (c.city || '').toLowerCase().includes(s)
+    ).slice(0, 30);
+  }, [customers, jobCustomerSearch]);
+
+  const filteredMachines = useMemo(() => {
+    const list = machines.filter(m => (m as any).is_active !== false);
+    if (!jobMachineSearch.trim()) return list.slice(0, 40);
+    const s = jobMachineSearch.toLowerCase();
+    return list.filter(m =>
+      m.name.toLowerCase().includes(s) ||
+      (m.inventory_nr || '').toLowerCase().includes(s) ||
+      m.category.toLowerCase().includes(s)
+    ).slice(0, 40);
+  }, [machines, jobMachineSearch]);
 
   const saveJob = async () => {
     if (!addJobData || !jobSelectedTask || !user) return;
     setJobSaving(true);
     const week = matchingWeeks.find(w => w.schedule_type === jobSelectedTask.schedule_type) || matchingWeeks[0];
     if (!week) { showToast(t.weekNotFound ?? 'Week not found', 'err'); setJobSaving(false); return; }
-    const existingDayJobs = myDayJobs[addJobData.dayIndex] || [];
-    if (existingDayJobs.length >= 2) { showToast(t.maxJobsReached ?? 'Maximum 2 jobs per cell', 'err'); setJobSaving(false); return; }
+    const existing = myDayJobs[addJobData.dayIndex] || [];
+    if (existing.length >= 2) { showToast(t.maxJobsReached ?? 'Maximum 2 jobs per cell', 'err'); setJobSaving(false); return; }
     try {
       const resp = await fetch(`${API}/api/v1/jobs`, {
         method: 'POST', headers: authHeaders,
         body: JSON.stringify({
           weekId: week.id, userId: user.id, dayOfWeek: addJobData.dayIndex,
-          timeSlot: existingDayJobs.length + 1, taskId: jobSelectedTask.id,
-          customerId: jobSelectedTask.customer_id || null,
+          timeSlot: existing.length + 1, taskId: jobSelectedTask.id,
+          customerId: jobSelectedCustomer?.id || jobSelectedTask.customer_id || null,
           machineIds: jobMachineIds.length > 0 ? jobMachineIds : undefined,
           notes: jobNotes || null,
         }),
       });
-      if (resp.ok) {
-        showToast(t.jobAdded ?? 'Job added', 'ok');
-        setModalType(null);
-        await refreshJobs();
-      } else {
-        const err = await resp.json();
-        showToast(`${t.error ?? 'Error'}: ${err.error || ''}`, 'err');
-      }
+      if (resp.ok) { showToast(t.jobAdded ?? 'Job added', 'ok'); setModalType(null); await refreshJobs(); }
+      else { const err = await resp.json(); showToast(`${t.error ?? 'Error'}: ${err.error || ''}`, 'err'); }
     } catch { showToast(t.networkError ?? 'Network error', 'err'); }
     setJobSaving(false);
   };
@@ -523,8 +512,7 @@ export function ReportsPage() {
     setQuoteNotes('');
     setQuoteLines([{
       id: makeId(), description: job.task?.name || '',
-      quantity: 1, unit: 'Std', unit_price: 0, discount_percent: 0, vat_rate: 8.1,
-      task_id: job.task_id,
+      quantity: 1, unit: 'Std', unit_price: 0, vat_rate: 8.1, task_id: job.task_id,
     }]);
     setQuoteSignature(null);
     setModalType('quotation');
@@ -534,22 +522,21 @@ export function ReportsPage() {
     setQuoteLines(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
   };
   const addQuoteLine = () => {
-    setQuoteLines(prev => [...prev, { id: makeId(), description: '', quantity: 1, unit: 'Std', unit_price: 0, discount_percent: 0, vat_rate: 8.1 }]);
+    setQuoteLines(prev => [...prev, { id: makeId(), description: '', quantity: 1, unit: 'Std', unit_price: 0, vat_rate: 8.1 }]);
   };
   const removeQuoteLine = (id: string) => {
-    setQuoteLines(prev => { const f = prev.filter(l => l.id !== id); return f.length === 0 ? [{ id: makeId(), description: '', quantity: 1, unit: 'Std', unit_price: 0, discount_percent: 0, vat_rate: 8.1 }] : f; });
+    setQuoteLines(prev => { const f = prev.filter(l => l.id !== id); return f.length === 0 ? [{ id: makeId(), description: '', quantity: 1, unit: 'Std', unit_price: 0, vat_rate: 8.1 }] : f; });
   };
 
-  const quoteSubtotal = useMemo(() => quoteLines.reduce((s, l) => {
-    const line = (l.quantity || 0) * (l.unit_price || 0) * (1 - (l.discount_percent || 0) / 100);
-    return s + Math.round(line * 100) / 100;
-  }, 0), [quoteLines]);
-
-  const quoteVat = useMemo(() => quoteLines.reduce((s, l) => {
-    const line = (l.quantity || 0) * (l.unit_price || 0) * (1 - (l.discount_percent || 0) / 100);
-    return s + Math.round(line * (l.vat_rate || 8.1) / 100 * 100) / 100;
-  }, 0), [quoteLines]);
-
+  const quoteSubtotal = useMemo(() =>
+    quoteLines.reduce((s, l) => s + Math.round((l.quantity || 0) * (l.unit_price || 0) * 100) / 100, 0),
+  [quoteLines]);
+  const quoteVat = useMemo(() =>
+    quoteLines.reduce((s, l) => {
+      const line = Math.round((l.quantity || 0) * (l.unit_price || 0) * 100) / 100;
+      return s + Math.round(line * (l.vat_rate || 8.1) / 100 * 100) / 100;
+    }, 0),
+  [quoteLines]);
   const quoteTotal = Math.round((quoteSubtotal + quoteVat) * 100) / 100;
 
   const saveQuotation = async () => {
@@ -569,7 +556,7 @@ export function ReportsPage() {
           signature_data: quoteSignature || null,
           items: quoteLines.filter(l => l.description.trim()).map(l => ({
             description: l.description, quantity: l.quantity, unit: l.unit,
-            unit_price: l.unit_price, discount_percent: l.discount_percent,
+            unit_price: l.unit_price, discount_percent: 0,
             vat_rate: l.vat_rate, task_id: l.task_id || null,
           })),
         }),
@@ -577,21 +564,14 @@ export function ReportsPage() {
       if (resp.ok) {
         showToast(quoteSignature ? (t.quotationAccepted ?? 'Quotation created & accepted') : (t.quotationCreated ?? 'Quotation created as draft'), 'ok');
         setModalType(null);
-      } else {
-        const err = await resp.json();
-        showToast(`${t.error ?? 'Error'}: ${err.error || ''}`, 'err');
-      }
+      } else { const err = await resp.json(); showToast(`${t.error ?? 'Error'}: ${err.error || ''}`, 'err'); }
     } catch { showToast(t.networkError ?? 'Network error', 'err'); }
     setQuoteSaving(false);
   };
 
   /* ── Status helpers ── */
-  const statusColor = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': return '#4A6741'; case 'PARTIAL': return '#B8860B';
-      case 'NOT_DONE': return '#8B4513'; case 'ADDED': return '#5B6E82'; case 'PLANNED': return '#483D8B';
-      default: return th.textDim;
-    }
+  const statusColor = (s: string) => {
+    switch (s) { case 'COMPLETED': return '#4A6741'; case 'PARTIAL': return '#B8860B'; case 'NOT_DONE': return '#8B4513'; case 'ADDED': return '#5B6E82'; case 'PLANNED': return '#483D8B'; default: return th.textDim; }
   };
   const statusLabel = (s: string): string => (t as any).status?.[s] ?? s;
 
@@ -601,8 +581,11 @@ export function ReportsPage() {
     background: th.btnBg, color: th.text, fontSize: 14, fontFamily: "'Outfit',sans-serif",
     outline: 'none', boxSizing: 'border-box',
   };
+  const labelSty: React.CSSProperties = {
+    fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1,
+    textTransform: 'uppercase', display: 'block', marginBottom: 6,
+  };
 
-  /* ═══ ACCESS GUARD ═══ */
   if (!canView) {
     return (
       <div style={{ maxWidth: 800, margin: '0 auto', padding: 60, textAlign: 'center' }}>
@@ -614,13 +597,12 @@ export function ReportsPage() {
   /* ═══════════════════════════════════ RENDER ═══════════════════════════════════ */
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      {/* Toast */}
       {toast && (
         <div style={{
           position: 'fixed', top: 24, right: 24, zIndex: 1000,
           background: toast.type === 'err' ? th.toastErrBg : th.toastBg,
           color: toast.type === 'err' ? th.toastErrText : th.toastText,
-          padding: '12px 20px', borderRadius: 2, fontSize: 12, fontFamily: "'Outfit',sans-serif", fontWeight: 500,
+          padding: '12px 20px', borderRadius: 2, fontSize: 12, fontWeight: 500,
           border: `1px solid ${toast.type === 'err' ? th.toastErrBorder : th.toastBorder}`,
           boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'fadeSlide 0.35s cubic-bezier(0.16,1,0.3,1)',
         }}>{toast.msg}</div>
@@ -628,47 +610,26 @@ export function ReportsPage() {
 
       {/* Greeting */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 28, fontWeight: 300, color: th.gold, letterSpacing: 1 }}>
-          {t.greeting ?? 'Hello'}, {user?.first_name || 'User'}
-        </div>
-        <div style={{ fontSize: 11, color: th.textDim, fontFamily: "'Outfit',sans-serif", fontWeight: 400, letterSpacing: 0.5, marginTop: 4 }}>
-          {t.yourWeek ?? 'Your week at a glance'}
-        </div>
+        <div style={{ fontSize: 28, fontWeight: 300, color: th.gold, letterSpacing: 1 }}>{t.greeting ?? 'Hello'}, {user?.first_name || 'User'}</div>
+        <div style={{ fontSize: 11, color: th.textDim, fontWeight: 400, letterSpacing: 0.5, marginTop: 4 }}>{t.yourWeek ?? 'Your week at a glance'}</div>
       </div>
 
       {/* Week nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setWeekOff(w => w - 1)} style={{
-            width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`,
-            background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>‹</button>
+          <button onClick={() => setWeekOff(w => w - 1)} style={{ width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
           <div style={{ textAlign: 'center', minWidth: 140 }}>
             <div style={{ fontSize: 36, fontWeight: 300, color: th.gold, lineHeight: 1, letterSpacing: 1 }}>{t.kw ?? 'KW'} {kw}</div>
-            <div style={{ fontSize: 11, color: th.textDim, marginTop: 4, fontFamily: "'Outfit',sans-serif", fontWeight: 400, letterSpacing: 0.5 }}>
-              {fmtDate(dates[0])} — {fmtDate(dates[5])} {year}
-            </div>
+            <div style={{ fontSize: 11, color: th.textDim, marginTop: 4, fontWeight: 400, letterSpacing: .5 }}>{fmtDate(dates[0])} — {fmtDate(dates[5])} {year}</div>
           </div>
-          <button onClick={() => setWeekOff(w => w + 1)} style={{
-            width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`,
-            background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>›</button>
-          <button onClick={() => setWeekOff(0)} style={{
-            padding: '8px 14px', borderRadius: 2, border: 'none', background: th.switchActive,
-            color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase',
-          }}>{t.today ?? 'Today'}</button>
+          <button onClick={() => setWeekOff(w => w + 1)} style={{ width: 36, height: 36, borderRadius: 2, border: `1px solid ${th.goldFaint}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+          <button onClick={() => setWeekOff(0)} style={{ padding: '8px 14px', borderRadius: 2, border: 'none', background: th.switchActive, color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase' }}>{t.today ?? 'Today'}</button>
         </div>
         <div style={{ display: 'flex', gap: 24 }}>
-          {[
-            { v: totalJobs, l: t.jobs ?? 'Jobs', c: th.gold },
-            { v: totalReported, l: t.reported ?? 'Reported', c: '#42a5f5' },
-            { v: totalAbs, l: t.absences ?? 'Absences', c: '#7D4E57' },
-          ].map(s => (
+          {[{ v: totalJobs, l: t.jobs ?? 'Jobs', c: th.gold }, { v: totalReported, l: t.reported ?? 'Reported', c: '#42a5f5' }, { v: totalAbs, l: t.absences ?? 'Absences', c: '#7D4E57' }].map(s => (
             <div key={s.l} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 300, color: s.c, lineHeight: 1 }}>{s.v}</div>
-              <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontFamily: "'Outfit',sans-serif", fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{s.l}</div>
+              <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{s.l}</div>
             </div>
           ))}
         </div>
@@ -689,156 +650,71 @@ export function ReportsPage() {
 
             return (
               <div key={di} style={{
-                background: th.bgCard, borderRadius: 2,
-                border: `1px solid ${isTodayDay ? th.gold : th.border}`, overflow: 'hidden',
+                background: th.bgCard, borderRadius: 2, border: `1px solid ${isTodayDay ? th.gold : th.border}`, overflow: 'hidden',
                 boxShadow: isTodayDay ? (isDark ? '0 0 12px rgba(0,229,160,0.15)' : '0 0 12px rgba(5,150,105,0.1)') : 'none',
               }}>
-                {/* Day header */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px',
-                  background: isTodayDay ? th.goldGhost : 'transparent',
-                  borderBottom: hasContent ? `1px solid ${th.borderFaint}` : 'none',
-                }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: isTodayDay ? th.goldGhost : 'transparent', borderBottom: hasContent ? `1px solid ${th.borderFaint}` : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: 2,
-                      background: isTodayDay ? th.gold : th.switchBg,
-                      color: isTodayDay ? (isDark ? '#0a0a0a' : '#fff') : th.textDim,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 14, fontWeight: 600,
-                    }}>{date.getDate()}</div>
+                    <div style={{ width: 32, height: 32, borderRadius: 2, background: isTodayDay ? th.gold : th.switchBg, color: isTodayDay ? (isDark ? '#0a0a0a' : '#fff') : th.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{date.getDate()}</div>
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 400, color: isTodayDay ? th.gold : th.text }}>{(t.days as string[])?.[di] ?? ''}</div>
-                      <div style={{ fontSize: 9, color: th.textDim, fontFamily: "'Outfit',sans-serif" }}>{fmtDate(date)}</div>
+                      <div style={{ fontSize: 9, color: th.textDim }}>{fmtDate(date)}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {dayJobs.length > 0 && (
-                      <span style={{ fontSize: 9, fontWeight: 600, color: th.textDim }}>{dayReportedCount}/{dayJobs.length}</span>
-                    )}
+                    {dayJobs.length > 0 && <span style={{ fontSize: 9, fontWeight: 600, color: th.textDim }}>{dayReportedCount}/{dayJobs.length}</span>}
                     {canAddJob && (
-                      <button onClick={() => openAddJobModal(di)} style={{
-                        padding: '4px 10px', borderRadius: 3, border: `1px solid ${th.border}`,
-                        background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 700,
-                        transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 4,
-                      }}
+                      <button onClick={() => openAddJobModal(di)} style={{ padding: '4px 10px', borderRadius: 3, border: `1px solid ${th.border}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 10, fontWeight: 700, transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 4 }}
                         onMouseEnter={e => { e.currentTarget.style.background = th.switchActive; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                      >
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         + {t.addJob ?? 'Add Job'}
                       </button>
                     )}
-                    {isTodayDay && (
-                      <div style={{
-                        fontSize: 8, color: th.gold, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase',
-                        background: th.switchActive, padding: '4px 10px', borderRadius: 2,
-                      }}>{t.today ?? 'Today'}</div>
-                    )}
+                    {isTodayDay && <div style={{ fontSize: 8, color: th.gold, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', background: th.switchActive, padding: '4px 10px', borderRadius: 2 }}>{t.today ?? 'Today'}</div>}
                   </div>
                 </div>
 
                 {hasContent ? (
                   <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {/* Absences */}
                     {dayAbs.map((abs, idx) => {
-                      const code = String(abs.absence_code);
-                      const absInfo = ABS[code as unknown as keyof typeof ABS];
+                      const code = String(abs.absence_code); const absInfo = ABS[code as unknown as keyof typeof ABS];
                       return (
-                        <div key={`abs-${abs.id || idx}`} style={{
-                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                          background: absInfo?.bg || '#666',
-                          color: isDark ? (absInfo as any)?.textD || '#fff' : (absInfo as any)?.textL || '#fff',
-                          borderRadius: 2, fontSize: 12, fontWeight: 600,
-                        }}>
+                        <div key={`abs-${abs.id || idx}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: absInfo?.bg || '#666', color: isDark ? (absInfo as any)?.textD || '#fff' : (absInfo as any)?.textL || '#fff', borderRadius: 2, fontSize: 12, fontWeight: 600 }}>
                           <span style={{ fontSize: 16 }}>{absInfo?.icon || '●'}</span>
                           <span>{(t.abs as any)?.[code] ?? `Absence ${code}`}</span>
                         </div>
                       );
                     })}
-
-                    {/* Jobs */}
                     {dayJobs.map(job => {
                       const task = job.task; const color = getTaskColor(task, job.task_id);
-                      const customerName = resolveCustomerName(job);
-                      const jm = job.machines || []; const report = getReportForJob(job, di);
-                      const hasCustomer = !!resolveCustomer(job);
-
+                      const customerName = resolveCustomerName(job); const jm = job.machines || [];
+                      const report = getReportForJob(job, di); const hasCustomer = !!resolveCustomer(job);
                       return (
-                        <div key={job.id} style={{
-                          background: isDark ? `${color}28` : `${color}18`,
-                          borderLeft: `4px solid ${color}`, borderRadius: 2, overflow: 'hidden',
-                        }}>
-                          {/* Main job row — click for report */}
-                          <div
-                            onClick={() => openReportModal(job, di)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                              cursor: 'pointer', transition: 'transform .15s',
-                            }}
+                        <div key={job.id} style={{ background: isDark ? `${color}28` : `${color}18`, borderLeft: `4px solid ${color}`, borderRadius: 2, overflow: 'hidden' }}>
+                          <div onClick={() => openReportModal(job, di)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer', transition: 'transform .15s' }}
                             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(3px)'; }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(0)'; }}
-                          >
-                            <div style={{
-                              width: 32, height: 32, borderRadius: 4, flexShrink: 0, background: color,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 11, fontWeight: 700, color: '#fff',
-                            }}>{(task?.code || '?').slice(0, 3).toUpperCase()}</div>
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateX(0)'; }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 4, flexShrink: 0, background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{(task?.code || '?').slice(0, 3).toUpperCase()}</div>
                             <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <div style={{
-                                fontSize: 13, fontWeight: 600, color: isDark ? '#ddd' : '#333',
-                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                              }}>{task?.name || task?.code || '?'}</div>
-                              {customerName && (
-                                <div style={{
-                                  fontSize: 10, fontWeight: 500, color: isDark ? 'rgba(0,229,160,.6)' : 'rgba(5,150,105,.7)',
-                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1,
-                                }}>&#x1F3E2; {customerName}</div>
-                              )}
+                              <div style={{ fontSize: 13, fontWeight: 600, color: isDark ? '#ddd' : '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task?.name || task?.code || '?'}</div>
+                              {customerName && <div style={{ fontSize: 10, fontWeight: 500, color: isDark ? 'rgba(0,229,160,.6)' : 'rgba(5,150,105,.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>&#x1F3E2; {customerName}</div>}
                               {jm.length > 0 && (
                                 <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
-                                  {jm.slice(0, 3).map(m => (
-                                    <span key={m.id} style={{
-                                      fontSize: 8, fontWeight: 600, padding: '1px 4px', borderRadius: 2,
-                                      background: isDark ? 'rgba(66,165,245,.15)' : 'rgba(66,165,245,.1)', color: '#42a5f5',
-                                    }}>&#x1F69C; {m.machine?.name?.slice(0, 10) || '?'}</span>
-                                  ))}
+                                  {jm.slice(0, 3).map(m => <span key={m.id} style={{ fontSize: 8, fontWeight: 600, padding: '1px 4px', borderRadius: 2, background: isDark ? 'rgba(66,165,245,.15)' : 'rgba(66,165,245,.1)', color: '#42a5f5' }}>&#x1F69C; {m.machine?.name?.slice(0, 10) || '?'}</span>)}
                                   {jm.length > 3 && <span style={{ fontSize: 8, color: '#42a5f5' }}>+{jm.length - 3}</span>}
                                 </div>
                               )}
-                              <div style={{
-                                fontSize: 9, opacity: 0.7, fontWeight: 400, marginTop: 2, color: isDark ? '#aaa' : '#666',
-                              }}>
-                                {report
-                                  ? `${t.reported ?? 'Reported'} · ${hoursToDisplay(report.actual_hours || 0)} · ${statusLabel(report.status)}`
-                                  : (t.clickToReport ?? 'Click to report time')}
+                              <div style={{ fontSize: 9, opacity: 0.7, fontWeight: 400, marginTop: 2, color: isDark ? '#aaa' : '#666' }}>
+                                {report ? `${t.reported ?? 'Reported'} · ${hoursToDisplay(report.actual_hours || 0)} · ${statusLabel(report.status)}` : (t.clickToReport ?? 'Click to report time')}
                               </div>
                             </div>
-                            <div style={{
-                              width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                              background: report ? statusColor(report.status) : 'transparent',
-                              border: report ? 'none' : `1px dashed ${th.textDim}`,
-                            }} />
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: report ? statusColor(report.status) : 'transparent', border: report ? 'none' : `1px dashed ${th.textDim}` }} />
                           </div>
-
-                          {/* Quick action: Create Quotation */}
                           {hasCustomer && (
-                            <div style={{
-                              borderTop: `1px solid ${isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)'}`,
-                              padding: '4px 14px 6px',
-                            }}>
-                              <button
-                                onClick={e => { e.stopPropagation(); openQuotationModal(job, di); }}
-                                style={{
-                                  padding: '3px 10px', borderRadius: 3, border: `1px solid ${isDark ? 'rgba(139,92,246,.3)' : 'rgba(124,58,237,.2)'}`,
-                                  background: isDark ? 'rgba(139,92,246,.08)' : 'rgba(124,58,237,.05)',
-                                  color: isDark ? '#a78bfa' : '#7c3aed', cursor: 'pointer',
-                                  fontSize: 9, fontWeight: 700, letterSpacing: .5,
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  transition: 'all .15s',
-                                }}
+                            <div style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)'}`, padding: '4px 14px 6px' }}>
+                              <button onClick={e => { e.stopPropagation(); openQuotationModal(job, di); }} style={{ padding: '3px 10px', borderRadius: 3, border: `1px solid ${isDark ? 'rgba(139,92,246,.3)' : 'rgba(124,58,237,.2)'}`, background: isDark ? 'rgba(139,92,246,.08)' : 'rgba(124,58,237,.05)', color: isDark ? '#a78bfa' : '#7c3aed', cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: .5, display: 'inline-flex', alignItems: 'center', gap: 4, transition: 'all .15s' }}
                                 onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(139,92,246,.15)' : 'rgba(124,58,237,.1)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(139,92,246,.08)' : 'rgba(124,58,237,.05)'; }}
-                              >
+                                onMouseLeave={e => { e.currentTarget.style.background = isDark ? 'rgba(139,92,246,.08)' : 'rgba(124,58,237,.05)'; }}>
                                 &#x1F4DD; {t.createQuotation ?? 'Create Quotation'}
                               </button>
                             </div>
@@ -848,19 +724,12 @@ export function ReportsPage() {
                     })}
                   </div>
                 ) : (
-                  <div style={{
-                    padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  }}>
+                  <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ color: th.textDim, fontSize: 11, fontStyle: 'italic' }}>{t.free ?? 'Free'}</span>
                     {canAddJob && (
-                      <button onClick={() => openAddJobModal(di)} style={{
-                        padding: '4px 10px', borderRadius: 3, border: `1px dashed ${th.border}`,
-                        background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10,
-                        fontWeight: 600, transition: 'all .15s',
-                      }}
+                      <button onClick={() => openAddJobModal(di)} style={{ padding: '4px 10px', borderRadius: 3, border: `1px dashed ${th.border}`, background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600, transition: 'all .15s' }}
                         onMouseEnter={e => { e.currentTarget.style.color = th.gold; e.currentTarget.style.borderColor = th.gold; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = th.textDim; e.currentTarget.style.borderColor = th.border; }}
-                      >
+                        onMouseLeave={e => { e.currentTarget.style.color = th.textDim; e.currentTarget.style.borderColor = th.border; }}>
                         + {t.addJob ?? 'Add Job'}
                       </button>
                     )}
@@ -874,78 +743,47 @@ export function ReportsPage() {
 
       {/* ═══════════════════════ REPORT MODAL ═══════════════════════ */}
       {modalType === 'report' && reportData && (
-        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }}
-          onClick={() => setModalType(null)}>
-          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, width: 440, maxHeight: '90vh', overflow: 'auto', boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.5)' : '0 16px 48px rgba(0,0,0,.1)', animation: 'scaleIn .25s cubic-bezier(0.16,1,0.3,1)' }}
-            onClick={e => e.stopPropagation()}>
-            {/* Header */}
+        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }} onClick={() => setModalType(null)}>
+          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, width: 440, maxHeight: '90vh', overflow: 'auto', boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.5)' : '0 16px 48px rgba(0,0,0,.1)', animation: 'scaleIn .25s cubic-bezier(0.16,1,0.3,1)' }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${th.borderFaint}` }}>
-              <div style={{ fontSize: 8, color: th.goldDim, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>{t.reportTime ?? 'Report Time'}</div>
+              <div style={{ ...labelSty, color: th.goldDim, marginBottom: 6 }}>{t.reportTime ?? 'Report Time'}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 4, background: reportData.taskColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>
-                  {(reportData.job.task?.code || '?').slice(0, 3).toUpperCase()}
-                </div>
+                <div style={{ width: 32, height: 32, borderRadius: 4, background: reportData.taskColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{(reportData.job.task?.code || '?').slice(0, 3).toUpperCase()}</div>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 400, color: th.gold }}>{reportData.taskName}</div>
-                  <div style={{ fontSize: 10, color: th.textDim }}>
-                    {(t.days as string[])?.[reportData.dayIndex] ?? ''}, {fmtDate(dates[reportData.dayIndex])}
-                    {reportData.customerName ? ` · ${reportData.customerName}` : ''}
-                  </div>
+                  <div style={{ fontSize: 10, color: th.textDim }}>{(t.days as string[])?.[reportData.dayIndex] ?? ''}, {fmtDate(dates[reportData.dayIndex])}{reportData.customerName ? ` · ${reportData.customerName}` : ''}</div>
                 </div>
               </div>
             </div>
-            {/* Errors */}
             {formErrors.length > 0 && (
               <div style={{ margin: '12px 24px 0', padding: '10px 14px', borderRadius: 2, background: isDark ? 'rgba(248,113,113,.1)' : 'rgba(220,38,38,.06)', border: `1px solid ${isDark ? 'rgba(248,113,113,.2)' : 'rgba(220,38,38,.15)'}` }}>
                 {formErrors.map((err, i) => <div key={i} style={{ fontSize: 11, color: isDark ? '#f87171' : '#dc2626', fontWeight: 500, lineHeight: 1.6 }}>⚠ {err}</div>)}
               </div>
             )}
-            {/* Form */}
             <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.startTime ?? 'Start'}</label>
-                  <input type="time" value={formStartTime} onChange={e => { setFormStartTime(e.target.value); setFormErrors([]); }} style={inputStyle} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.endTime ?? 'End'}</label>
-                  <input type="time" value={formEndTime} onChange={e => { setFormEndTime(e.target.value); setFormErrors([]); }} style={{ ...inputStyle, borderColor: timeToHours(formEndTime) <= timeToHours(formStartTime) ? (isDark ? '#f87171' : '#dc2626') : th.border }} />
-                </div>
+                <div style={{ flex: 1 }}><label style={labelSty}>{t.startTime ?? 'Start'}</label><input type="time" value={formStartTime} onChange={e => { setFormStartTime(e.target.value); setFormErrors([]); }} style={inputStyle} /></div>
+                <div style={{ flex: 1 }}><label style={labelSty}>{t.endTime ?? 'End'}</label><input type="time" value={formEndTime} onChange={e => { setFormEndTime(e.target.value); setFormErrors([]); }} style={{ ...inputStyle, borderColor: timeToHours(formEndTime) <= timeToHours(formStartTime) ? (isDark ? '#f87171' : '#dc2626') : th.border }} /></div>
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1, padding: '10px 12px', background: th.goldGhost, borderRadius: 2, textAlign: 'center' }}>
                   <div style={{ fontSize: 8, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>{t.actualHours ?? 'Actual'}</div>
-                  <div style={{ fontSize: 20, fontWeight: 300, color: computeActualHours() > 0 ? th.gold : (isDark ? '#f87171' : '#dc2626') }}>
-                    {computeActualHours() > 0 ? hoursToDisplay(computeActualHours()) : '—'}
-                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 300, color: computeActualHours() > 0 ? th.gold : (isDark ? '#f87171' : '#dc2626') }}>{computeActualHours() > 0 ? hoursToDisplay(computeActualHours()) : '—'}</div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.plannedHours ?? 'Planned'}</label>
-                  <input type="number" min="0" max="24" step="0.5" value={formPlannedHours} onChange={e => { setFormPlannedHours(e.target.value); setFormErrors([]); }} style={inputStyle} />
-                </div>
+                <div style={{ flex: 1 }}><label style={labelSty}>{t.plannedHours ?? 'Planned'}</label><input type="number" min="0" max="24" step="0.5" value={formPlannedHours} onChange={e => { setFormPlannedHours(e.target.value); setFormErrors([]); }} style={inputStyle} /></div>
               </div>
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Status</label>
+                <label style={labelSty}>Status</label>
                 <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                   {['COMPLETED', 'PARTIAL', 'NOT_DONE', 'ADDED'].map(s => (
-                    <button key={s} onClick={() => setFormStatus(s)} style={{
-                      padding: '6px 12px', borderRadius: 2, border: 'none', cursor: 'pointer',
-                      background: formStatus === s ? statusColor(s) : th.btnBg,
-                      color: formStatus === s ? '#fff' : th.textMuted, fontSize: 10, fontWeight: 600, transition: 'all .15s',
-                    }}>{statusLabel(s)}</button>
+                    <button key={s} onClick={() => setFormStatus(s)} style={{ padding: '6px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', background: formStatus === s ? statusColor(s) : th.btnBg, color: formStatus === s ? '#fff' : th.textMuted, fontSize: 10, fontWeight: 600 }}>{statusLabel(s)}</button>
                   ))}
                 </div>
               </div>
+              <div><label style={labelSty}>{t.description ?? 'Description'}</label><textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} rows={3} placeholder={t.descriptionPlaceholder ?? 'What was done...'} style={{ ...inputStyle, resize: 'vertical' }} /></div>
+              <div><label style={labelSty}>{t.notes ?? 'Notes'}</label><textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} /></div>
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.description ?? 'Description'}</label>
-                <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} rows={3} placeholder={t.descriptionPlaceholder ?? 'What was done...'} style={{ ...inputStyle, resize: 'vertical' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.notes ?? 'Notes'}</label>
-                <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} placeholder={t.notesPlaceholder ?? ''} style={{ ...inputStyle, resize: 'vertical' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.photos ?? 'Photos'}</label>
+                <label style={labelSty}>{t.photos ?? 'Photos'}</label>
                 {formPhotos.length > 0 && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 8 }}>
                     {formPhotos.map((url, idx) => (
@@ -957,10 +795,7 @@ export function ReportsPage() {
                   </div>
                 )}
                 <input type="file" accept="image/*" ref={fileInputRef} onChange={handlePhotoUpload} style={{ display: 'none' }} />
-                <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{
-                  width: '100%', padding: '10px', borderRadius: 2, border: `1px dashed ${th.border}`,
-                  background: 'transparent', color: th.textDim, cursor: uploading ? 'wait' : 'pointer', fontSize: 11, fontWeight: 500, boxSizing: 'border-box',
-                }}>
+                <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{ width: '100%', padding: '10px', borderRadius: 2, border: `1px dashed ${th.border}`, background: 'transparent', color: th.textDim, cursor: uploading ? 'wait' : 'pointer', fontSize: 11, fontWeight: 500, boxSizing: 'border-box' }}>
                   {uploading ? (t.uploadingPhoto ?? 'Uploading...') : `+ ${t.addPhoto ?? 'Add photo'}`}
                 </button>
               </div>
@@ -975,85 +810,186 @@ export function ReportsPage() {
         </div>
       )}
 
-      {/* ═══════════════════════ ADD JOB MODAL ═══════════════════════ */}
+      {/* ═══════════════════════ ADD JOB MODAL (Wizard: Task → Customer → Machines) ═══════════════════════ */}
       {modalType === 'add-job' && addJobData && (
-        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }}
-          onClick={() => setModalType(null)}>
-          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, width: 440, maxHeight: '90vh', overflow: 'auto', boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.5)' : '0 16px 48px rgba(0,0,0,.1)', animation: 'scaleIn .25s cubic-bezier(0.16,1,0.3,1)' }}
-            onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }} onClick={() => setModalType(null)}>
+          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, width: 460, maxHeight: '90vh', overflow: 'auto', boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.5)' : '0 16px 48px rgba(0,0,0,.1)', animation: 'scaleIn .25s cubic-bezier(0.16,1,0.3,1)' }} onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
             <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${th.borderFaint}` }}>
-              <div style={{ fontSize: 8, color: th.goldDim, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>{t.addJob ?? 'Add Job'}</div>
-              <div style={{ fontSize: 16, fontWeight: 400, color: th.gold }}>
-                {(t.days as string[])?.[addJobData.dayIndex] ?? ''}, {fmtDate(dates[addJobData.dayIndex])}
+              <div style={{ ...labelSty, color: th.goldDim, marginBottom: 6 }}>{t.addJob ?? 'Add Job'}</div>
+              <div style={{ fontSize: 16, fontWeight: 400, color: th.gold }}>{(t.days as string[])?.[addJobData.dayIndex] ?? ''}, {fmtDate(dates[addJobData.dayIndex])}</div>
+
+              {/* Step indicator */}
+              <div style={{ display: 'flex', gap: 4, marginTop: 12 }}>
+                {(['task', 'customer', 'machines'] as const).map((step, i) => {
+                  const stepLabels = { task: t.task ?? 'Task', customer: t.customer ?? 'Customer', machines: t.machines ?? 'Machines' };
+                  const isActive = jobStep === step;
+                  const isDone = (step === 'task' && jobSelectedTask) || (step === 'customer' && (jobStep === 'machines')) || false;
+                  return (
+                    <div key={step} style={{ flex: 1, textAlign: 'center', padding: '6px 4px', borderRadius: 2, background: isActive ? (isDark ? 'rgba(0,229,160,.1)' : 'rgba(5,150,105,.08)') : isDone ? (isDark ? 'rgba(0,229,160,.04)' : 'rgba(5,150,105,.03)') : 'transparent', border: `1px solid ${isActive ? th.gold : isDone ? th.goldFaint : th.borderFaint}`, cursor: isDone || isActive ? 'pointer' : 'default', transition: 'all .15s' }}
+                      onClick={() => {
+                        if (step === 'task') setJobStep('task');
+                        else if (step === 'customer' && jobSelectedTask) setJobStep('customer');
+                        else if (step === 'machines' && jobSelectedTask) setJobStep('machines');
+                      }}>
+                      <div style={{ fontSize: 8, fontWeight: 700, color: isActive ? th.gold : isDone ? th.goldDim : th.textGhost, letterSpacing: 1, textTransform: 'uppercase' }}>
+                        {i + 1}. {stepLabels[step]}
+                      </div>
+                      {step === 'task' && jobSelectedTask && <div style={{ fontSize: 9, color: th.textDim, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jobSelectedTask.name}</div>}
+                      {step === 'customer' && jobSelectedCustomer && <div style={{ fontSize: 9, color: th.textDim, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{jobSelectedCustomer.name}</div>}
+                      {step === 'machines' && jobMachineIds.length > 0 && <div style={{ fontSize: 9, color: th.textDim, marginTop: 2 }}>{jobMachineIds.length} selected</div>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
+
             <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {/* Task search */}
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.selectTask ?? 'Select Task'} *</label>
-                <input placeholder={t.searchTasks ?? 'Search tasks...'} value={jobTaskSearch} onChange={e => { setJobTaskSearch(e.target.value); setJobSelectedTask(null); }} style={inputStyle} />
-                {/* Task list */}
-                {!jobSelectedTask && (
-                  <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 4, border: `1px solid ${th.border}`, borderRadius: 2 }}>
-                    {filteredTasks.length === 0 ? (
-                      <div style={{ padding: 12, textAlign: 'center', color: th.textDim, fontSize: 12 }}>{t.noMatch ?? 'No match'}</div>
-                    ) : filteredTasks.map(task => {
-                      const color = getTaskColor(task, task.id);
-                      return (
-                        <div key={task.id} onClick={() => { setJobSelectedTask(task); setJobTaskSearch(task.name); }}
+
+              {/* ── STEP 1: TASK ── */}
+              {jobStep === 'task' && (
+                <div>
+                  <label style={labelSty}>{t.searchTasks ?? 'Search Tasks'} *</label>
+                  <input placeholder={t.searchTasks ?? 'Search by name, code, or customer...'} value={jobTaskSearch}
+                    onChange={e => { setJobTaskSearch(e.target.value); if (jobSelectedTask) { setJobSelectedTask(null); } }} style={inputStyle} />
+                  {jobSelectedTask ? (
+                    <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 2, background: isDark ? `${getTaskColor(jobSelectedTask, jobSelectedTask.id)}28` : `${getTaskColor(jobSelectedTask, jobSelectedTask.id)}18`, borderLeft: `4px solid ${getTaskColor(jobSelectedTask, jobSelectedTask.id)}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{jobSelectedTask.name}</div>
+                        <div style={{ fontSize: 10, color: th.textDim }}>{jobSelectedTask.code} · {jobSelectedTask.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}{jobSelectedTask.customer ? ` · ${jobSelectedTask.customer.name}` : ''}</div>
+                      </div>
+                      <button onClick={() => { setJobSelectedTask(null); setJobTaskSearch(''); setJobSelectedCustomer(null); setJobCustomerSearch(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>×</button>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: 240, overflowY: 'auto', marginTop: 4, border: `1px solid ${th.border}`, borderRadius: 2 }}>
+                      {filteredTasks.length === 0 ? (
+                        <div style={{ padding: 14, textAlign: 'center', color: th.textDim, fontSize: 12 }}>{t.noMatch ?? 'No match'}</div>
+                      ) : filteredTasks.map(task => {
+                        const color = getTaskColor(task, task.id);
+                        return (
+                          <div key={task.id} onClick={() => selectTask(task)}
+                            style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${th.borderFaint}`, transition: 'background .1s' }}
+                            onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: th.text }}>{task.name}</div>
+                              <div style={{ fontSize: 9, color: th.textDim }}>{task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}{task.customer ? ` · ${task.customer.name}` : ''}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── STEP 2: CUSTOMER ── */}
+              {jobStep === 'customer' && (
+                <div>
+                  <label style={labelSty}>{t.selectCustomer ?? 'Select Customer'} ({t.optional ?? 'optional'})</label>
+                  {jobSelectedCustomer && (
+                    <div style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 2, background: isDark ? 'rgba(0,229,160,.06)' : 'rgba(5,150,105,.04)', border: `1px solid ${isDark ? 'rgba(0,229,160,.15)' : 'rgba(5,150,105,.12)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: th.text }}>&#x1F3E2; {jobSelectedCustomer.name}</div>
+                        <div style={{ fontSize: 10, color: th.textDim }}>
+                          {[jobSelectedCustomer.street, jobSelectedCustomer.postal_code, jobSelectedCustomer.city].filter(Boolean).join(', ')}
+                        </div>
+                      </div>
+                      <button onClick={() => { setJobSelectedCustomer(null); setJobCustomerSearch(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>×</button>
+                    </div>
+                  )}
+                  <input placeholder={t.searchCustomers ?? 'Search customers...'} value={jobCustomerSearch}
+                    onChange={e => { setJobCustomerSearch(e.target.value); if (jobSelectedCustomer) setJobSelectedCustomer(null); }} style={inputStyle} />
+                  {!jobSelectedCustomer && (
+                    <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 4, border: `1px solid ${th.border}`, borderRadius: 2 }}>
+                      {filteredCustomers.length === 0 ? (
+                        <div style={{ padding: 14, textAlign: 'center', color: th.textDim, fontSize: 12 }}>{t.noMatch ?? 'No match'}</div>
+                      ) : filteredCustomers.map(c => (
+                        <div key={c.id} onClick={() => { setJobSelectedCustomer(c); setJobCustomerSearch(c.name); }}
                           style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${th.borderFaint}`, transition: 'background .1s' }}
                           onMouseEnter={e => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.03)'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                          <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+                          <span style={{ fontSize: 12 }}>&#x1F3E2;</span>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: th.text }}>{task.name}</div>
-                            <div style={{ fontSize: 9, color: th.textDim }}>{task.code} · {task.schedule_type === 'UNTERHALT' ? 'UH' : 'GT'}{task.customer ? ` · ${task.customer.name}` : ''}</div>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: th.text }}>{c.name}</div>
+                            <div style={{ fontSize: 9, color: th.textDim }}>{[c.street, c.city].filter(Boolean).join(', ')}</div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {jobSelectedTask && (
-                  <div style={{ marginTop: 6, padding: '8px 12px', borderRadius: 2, background: isDark ? `${getTaskColor(jobSelectedTask, jobSelectedTask.id)}28` : `${getTaskColor(jobSelectedTask, jobSelectedTask.id)}18`, borderLeft: `3px solid ${getTaskColor(jobSelectedTask, jobSelectedTask.id)}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: th.text }}>{jobSelectedTask.name}</div>
-                      <div style={{ fontSize: 9, color: th.textDim }}>{jobSelectedTask.code}{jobSelectedTask.customer ? ` · ${jobSelectedTask.customer.name}` : ''}</div>
+                      ))}
                     </div>
-                    <button onClick={() => { setJobSelectedTask(null); setJobTaskSearch(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>×</button>
+                  )}
+                  <div style={{ fontSize: 9, color: th.textGhost, marginTop: 6, fontStyle: 'italic' }}>
+                    {t.customerHint ?? 'Pre-filled from task. Change or leave blank.'}
                   </div>
+                </div>
+              )}
+
+              {/* ── STEP 3: MACHINES + NOTES ── */}
+              {jobStep === 'machines' && (
+                <>
+                  <div>
+                    <label style={labelSty}>{t.machines ?? 'Machines'} ({t.optional ?? 'optional'})</label>
+                    <input placeholder={t.searchMachine ?? 'Search machines...'} value={jobMachineSearch}
+                      onChange={e => setJobMachineSearch(e.target.value)} style={{ ...inputStyle, marginBottom: 4 }} />
+                    <div style={{ maxHeight: 160, overflowY: 'auto', border: `1px solid ${th.border}`, borderRadius: 2 }}>
+                      {filteredMachines.length === 0 ? (
+                        <div style={{ padding: 12, textAlign: 'center', color: th.textDim, fontSize: 12 }}>{t.noMatch ?? 'No match'}</div>
+                      ) : filteredMachines.map(m => {
+                        const sel = jobMachineIds.includes(m.id);
+                        return (
+                          <div key={m.id} onClick={() => setJobMachineIds(prev => sel ? prev.filter(id => id !== m.id) : [...prev, m.id])}
+                            style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${th.borderFaint}`, background: sel ? (isDark ? 'rgba(66,165,245,.1)' : 'rgba(66,165,245,.06)') : 'transparent' }}>
+                            <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${sel ? '#42a5f5' : th.border}`, background: sel ? '#42a5f5' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 700, flexShrink: 0 }}>{sel ? '✓' : ''}</div>
+                            <span style={{ fontSize: 11, color: th.text, fontWeight: 500 }}>{m.name}</span>
+                            {m.inventory_nr && <span style={{ fontSize: 9, color: th.textDim }}>{m.inventory_nr}</span>}
+                            <span style={{ fontSize: 9, color: th.textGhost, marginLeft: 'auto' }}>{m.category}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div><label style={labelSty}>{t.notes ?? 'Notes'}</label><textarea value={jobNotes} onChange={e => setJobNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} /></div>
+
+                  {/* Summary */}
+                  <div style={{ padding: '10px 12px', borderRadius: 2, background: th.goldGhost, border: `1px solid ${th.goldFaint}` }}>
+                    <div style={{ fontSize: 9, color: th.goldDim, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>{t.summary ?? 'Summary'}</div>
+                    <div style={{ fontSize: 12, color: th.text }}><strong>{t.task ?? 'Task'}:</strong> {jobSelectedTask?.name}</div>
+                    <div style={{ fontSize: 12, color: th.text, marginTop: 2 }}><strong>{t.customer ?? 'Customer'}:</strong> {jobSelectedCustomer?.name || <span style={{ color: th.textDim, fontStyle: 'italic' }}>{t.none ?? 'None'}</span>}</div>
+                    {jobMachineIds.length > 0 && <div style={{ fontSize: 12, color: th.text, marginTop: 2 }}><strong>{t.machines ?? 'Machines'}:</strong> {jobMachineIds.map(id => machines.find(m => m.id === id)?.name || '?').join(', ')}</div>}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '16px 24px', borderTop: `1px solid ${th.borderFaint}`, display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <div>
+                {jobStep !== 'task' && (
+                  <button onClick={() => setJobStep(jobStep === 'machines' ? 'customer' : 'task')} style={{ padding: '10px 16px', borderRadius: 2, border: `1px solid ${th.borderFaint}`, background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    ‹ {t.back ?? 'Back'}
+                  </button>
                 )}
               </div>
-              {/* Machine selection */}
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.machines ?? 'Machines'} ({t.optional ?? 'optional'})</label>
-                <div style={{ maxHeight: 120, overflowY: 'auto', border: `1px solid ${th.border}`, borderRadius: 2 }}>
-                  {activeMachines.slice(0, 30).map(m => {
-                    const selected = jobMachineIds.includes(m.id);
-                    return (
-                      <div key={m.id} onClick={() => setJobMachineIds(prev => selected ? prev.filter(id => id !== m.id) : [...prev, m.id])}
-                        style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${th.borderFaint}`, background: selected ? (isDark ? 'rgba(66,165,245,.1)' : 'rgba(66,165,245,.06)') : 'transparent' }}>
-                        <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${selected ? '#42a5f5' : th.border}`, background: selected ? '#42a5f5' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#fff', fontWeight: 700, flexShrink: 0 }}>
-                          {selected ? '✓' : ''}
-                        </div>
-                        <span style={{ fontSize: 11, color: th.text, fontWeight: 500 }}>{m.name}</span>
-                        {m.inventory_nr && <span style={{ fontSize: 9, color: th.textDim }}>{m.inventory_nr}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setModalType(null)} style={{ padding: '10px 20px', borderRadius: 2, border: `1px solid ${th.borderFaint}`, background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{t.cancel ?? 'Cancel'}</button>
+                {jobStep === 'task' && (
+                  <button onClick={() => { if (jobSelectedTask) setJobStep('customer'); }} disabled={!jobSelectedTask} style={{ padding: '10px 24px', borderRadius: 2, border: 'none', background: !jobSelectedTask ? th.textGhost : th.gold, color: isDark ? '#0a0a0a' : '#fff', cursor: !jobSelectedTask ? 'default' : 'pointer', opacity: !jobSelectedTask ? 0.4 : 1, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    {t.next ?? 'Next'} ›
+                  </button>
+                )}
+                {jobStep === 'customer' && (
+                  <button onClick={() => setJobStep('machines')} style={{ padding: '10px 24px', borderRadius: 2, border: 'none', background: th.gold, color: isDark ? '#0a0a0a' : '#fff', cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    {t.next ?? 'Next'} ›
+                  </button>
+                )}
+                {jobStep === 'machines' && (
+                  <button onClick={saveJob} disabled={jobSaving} style={{ padding: '10px 24px', borderRadius: 2, border: 'none', background: th.gold, color: isDark ? '#0a0a0a' : '#fff', cursor: jobSaving ? 'wait' : 'pointer', opacity: jobSaving ? 0.7 : 1, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    {jobSaving ? '...' : (t.addJob ?? 'Add Job')}
+                  </button>
+                )}
               </div>
-              {/* Notes */}
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.notes ?? 'Notes'}</label>
-                <textarea value={jobNotes} onChange={e => setJobNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-              </div>
-            </div>
-            <div style={{ padding: '16px 24px', borderTop: `1px solid ${th.borderFaint}`, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setModalType(null)} style={{ padding: '10px 20px', borderRadius: 2, border: `1px solid ${th.borderFaint}`, background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{t.cancel ?? 'Cancel'}</button>
-              <button onClick={saveJob} disabled={!jobSelectedTask || jobSaving} style={{ padding: '10px 24px', borderRadius: 2, border: 'none', background: !jobSelectedTask ? th.textGhost : th.gold, color: isDark ? '#0a0a0a' : '#fff', cursor: !jobSelectedTask || jobSaving ? 'default' : 'pointer', opacity: !jobSelectedTask ? 0.4 : jobSaving ? 0.7 : 1, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>
-                {jobSaving ? '...' : (t.addJob ?? 'Add Job')}
-              </button>
             </div>
           </div>
         </div>
@@ -1061,17 +997,13 @@ export function ReportsPage() {
 
       {/* ═══════════════════════ QUOTATION MODAL ═══════════════════════ */}
       {modalType === 'quotation' && quoteData && (
-        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }}
-          onClick={() => setModalType(null)}>
-          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, width: 520, maxHeight: '92vh', overflow: 'auto', boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.5)' : '0 16px 48px rgba(0,0,0,.1)', animation: 'scaleIn .25s cubic-bezier(0.16,1,0.3,1)' }}
-            onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, background: th.modalBg, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, animation: 'fadeIn .2s ease' }} onClick={() => setModalType(null)}>
+          <div style={{ background: th.modalCard, border: `1px solid ${th.border}`, borderRadius: 2, width: 520, maxHeight: '92vh', overflow: 'auto', boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.5)' : '0 16px 48px rgba(0,0,0,.1)', animation: 'scaleIn .25s cubic-bezier(0.16,1,0.3,1)' }} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${th.borderFaint}` }}>
               <div style={{ fontSize: 8, color: isDark ? '#a78bfa' : '#7c3aed', fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 }}>&#x1F4DD; {t.fieldQuotation ?? 'Field Quotation'}</div>
               <div style={{ fontSize: 16, fontWeight: 400, color: th.gold }}>{quoteData.taskName}</div>
-              <div style={{ fontSize: 10, color: th.textDim, marginTop: 2 }}>
-                {quoteData.customerName ? `${quoteData.customerName}` : ''} · {(t.days as string[])?.[quoteData.dayIndex] ?? ''}, {fmtDate(dates[quoteData.dayIndex])}
-              </div>
+              <div style={{ fontSize: 10, color: th.textDim, marginTop: 2 }}>{quoteData.customerName ? `${quoteData.customerName}` : ''} · {(t.days as string[])?.[quoteData.dayIndex] ?? ''}, {fmtDate(dates[quoteData.dayIndex])}</div>
               {quoteData.customer && (
                 <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 2, background: isDark ? 'rgba(139,92,246,.06)' : 'rgba(124,58,237,.04)', border: `1px solid ${isDark ? 'rgba(139,92,246,.15)' : 'rgba(124,58,237,.1)'}`, fontSize: 10, color: th.textDim }}>
                   <strong style={{ color: th.text }}>{quoteData.customer.name}</strong>
@@ -1084,94 +1016,105 @@ export function ReportsPage() {
 
             <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* Title */}
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.title ?? 'Title'}</label>
-                <input value={quoteTitle} onChange={e => setQuoteTitle(e.target.value)} style={inputStyle} />
-              </div>
+              <div><label style={labelSty}>{t.quotationTitle ?? 'Quotation Title'}</label><input value={quoteTitle} onChange={e => setQuoteTitle(e.target.value)} placeholder={t.quotationTitlePlaceholder ?? 'e.g. Garden maintenance — Spring 2026'} style={inputStyle} /></div>
 
               {/* Line items */}
               <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.lineItems ?? 'Line Items'}</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {quoteLines.map((line, idx) => (
-                    <div key={line.id} style={{
-                      padding: '10px 12px', borderRadius: 2, border: `1px solid ${th.border}`,
-                      background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.015)',
-                    }}>
-                      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                        <span style={{ fontSize: 9, color: th.textDim, fontWeight: 700, minWidth: 18 }}>#{idx + 1}</span>
-                        <input placeholder={t.description ?? 'Description'} value={line.description}
-                          onChange={e => updateQuoteLine(line.id, { description: e.target.value })}
-                          style={{ ...inputStyle, fontSize: 12, padding: '6px 8px', flex: 1 }} />
-                        {quoteLines.length > 1 && (
-                          <button onClick={() => removeQuoteLine(line.id)} style={{
-                            background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14, fontWeight: 700, padding: '0 4px',
-                          }}>×</button>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 8, color: th.textGhost, marginBottom: 2 }}>{t.qty ?? 'Qty'}</div>
-                          <input type="number" min="0" step="0.5" value={line.quantity}
-                            onChange={e => updateQuoteLine(line.id, { quantity: parseFloat(e.target.value) || 0 })}
-                            style={{ ...inputStyle, fontSize: 11, padding: '5px 6px' }} />
+                <label style={labelSty}>{t.servicesAndMaterials ?? 'Services & Materials'}</label>
+                <div style={{ fontSize: 10, color: th.textDim, marginBottom: 8 }}>{t.lineItemsHint ?? 'Add each service or material as a separate line with quantity, unit, and price.'}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {quoteLines.map((line, idx) => {
+                    const lineTotal = Math.round((line.quantity || 0) * (line.unit_price || 0) * 100) / 100;
+                    return (
+                      <div key={line.id} style={{ padding: '12px 14px', borderRadius: 4, border: `1px solid ${th.border}`, background: isDark ? 'rgba(255,255,255,.02)' : 'rgba(0,0,0,.015)' }}>
+                        {/* Item header */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 22, height: 22, borderRadius: 4, background: isDark ? 'rgba(0,229,160,.1)' : 'rgba(5,150,105,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: th.gold }}>{idx + 1}</span>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: th.textMuted ?? th.textDim, textTransform: 'uppercase', letterSpacing: .5 }}>{t.position ?? 'Position'} {idx + 1}</span>
+                          </div>
+                          {quoteLines.length > 1 && (
+                            <button onClick={() => removeQuoteLine(line.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: '2px 6px' }}>✕ {t.remove ?? 'Remove'}</button>
+                          )}
                         </div>
-                        <div style={{ width: 70 }}>
-                          <div style={{ fontSize: 8, color: th.textGhost, marginBottom: 2 }}>{t.unit ?? 'Unit'}</div>
-                          <select value={line.unit} onChange={e => updateQuoteLine(line.id, { unit: e.target.value })}
-                            style={{ ...inputStyle, fontSize: 11, padding: '5px 6px', appearance: 'auto' }}>
-                            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
+
+                        {/* Description of work / service */}
+                        <div style={{ marginBottom: 8 }}>
+                          <label style={{ fontSize: 8, color: th.textGhost, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                            {t.workDescription ?? 'Description of work / service'}
+                          </label>
+                          <textarea value={line.description}
+                            onChange={e => updateQuoteLine(line.id, { description: e.target.value })}
+                            rows={2} placeholder={t.describeWork ?? 'e.g. Hedge trimming, lawn mowing, tree pruning...'}
+                            style={{ ...inputStyle, fontSize: 12, padding: '8px 10px', resize: 'vertical' }} />
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 8, color: th.textGhost, marginBottom: 2 }}>{t.price ?? 'Price'} (CHF)</div>
-                          <input type="number" min="0" step="0.05" value={line.unit_price}
-                            onChange={e => updateQuoteLine(line.id, { unit_price: parseFloat(e.target.value) || 0 })}
-                            style={{ ...inputStyle, fontSize: 11, padding: '5px 6px' }} />
-                        </div>
-                        <div style={{ width: 50 }}>
-                          <div style={{ fontSize: 8, color: th.textGhost, marginBottom: 2 }}>%</div>
-                          <input type="number" min="0" max="100" value={line.discount_percent}
-                            onChange={e => updateQuoteLine(line.id, { discount_percent: parseFloat(e.target.value) || 0 })}
-                            style={{ ...inputStyle, fontSize: 11, padding: '5px 6px' }} />
-                        </div>
-                        <div style={{ width: 80, textAlign: 'right' }}>
-                          <div style={{ fontSize: 8, color: th.textGhost, marginBottom: 2 }}>Total</div>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: th.gold, paddingTop: 6 }}>
-                            {formatChf(Math.round((line.quantity || 0) * (line.unit_price || 0) * (1 - (line.discount_percent || 0) / 100) * 100) / 100)}
+
+                        {/* Qty / Unit / Price / Total */}
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: 8, color: th.textGhost, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                              {t.quantity ?? 'Quantity'}
+                            </label>
+                            <input type="number" min="0" step="0.5" value={line.quantity}
+                              onChange={e => updateQuoteLine(line.id, { quantity: parseFloat(e.target.value) || 0 })}
+                              style={{ ...inputStyle, fontSize: 12, padding: '8px 10px' }} />
+                          </div>
+                          <div style={{ width: 90 }}>
+                            <label style={{ fontSize: 8, color: th.textGhost, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                              {t.unit ?? 'Unit'}
+                            </label>
+                            <select value={line.unit} onChange={e => updateQuoteLine(line.id, { unit: e.target.value })}
+                              style={{ ...inputStyle, fontSize: 12, padding: '8px 6px', appearance: 'auto' }}>
+                              {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u} ({UNIT_LABELS[u] || u})</option>)}
+                            </select>
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: 8, color: th.textGhost, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                              {t.unitPrice ?? 'Unit Price'} (CHF)
+                            </label>
+                            <input type="number" min="0" step="0.05" value={line.unit_price}
+                              onChange={e => updateQuoteLine(line.id, { unit_price: parseFloat(e.target.value) || 0 })}
+                              style={{ ...inputStyle, fontSize: 12, padding: '8px 10px' }} />
+                          </div>
+                          <div style={{ width: 90, textAlign: 'right', paddingBottom: 2 }}>
+                            <label style={{ fontSize: 8, color: th.textGhost, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>
+                              {t.lineTotal ?? 'Line Total'}
+                            </label>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: th.gold }}>
+                              {formatChf(lineTotal)}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  <button onClick={addQuoteLine} style={{
-                    padding: '6px 12px', borderRadius: 2, border: `1px dashed ${th.border}`,
-                    background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600,
-                  }}>+ {t.addLine ?? 'Add line'}</button>
+                    );
+                  })}
+
+                  <button onClick={addQuoteLine} style={{ padding: '8px 14px', borderRadius: 4, border: `1px dashed ${th.gold}`, background: 'transparent', color: th.gold, cursor: 'pointer', fontSize: 11, fontWeight: 600, transition: 'all .15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    onMouseEnter={e => { e.currentTarget.style.background = th.goldGhost; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    + {t.addAnotherItem ?? 'Add another service / material'}
+                  </button>
                 </div>
               </div>
 
               {/* Totals */}
-              <div style={{ padding: '12px', borderRadius: 2, background: th.goldGhost, display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+              <div style={{ padding: '14px 16px', borderRadius: 4, background: th.goldGhost, border: `1px solid ${th.goldFaint}` }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, fontSize: 12, marginBottom: 4 }}>
                   <span style={{ color: th.textDim }}>{t.subtotal ?? 'Subtotal'}:</span>
-                  <span style={{ color: th.text, fontWeight: 600, minWidth: 80, textAlign: 'right' }}>CHF {formatChf(quoteSubtotal)}</span>
+                  <span style={{ color: th.text, fontWeight: 600, minWidth: 90, textAlign: 'right' }}>CHF {formatChf(quoteSubtotal)}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, fontSize: 12, marginBottom: 4 }}>
                   <span style={{ color: th.textDim }}>{t.vat ?? 'VAT'} (8.1%):</span>
-                  <span style={{ color: th.text, fontWeight: 600, minWidth: 80, textAlign: 'right' }}>CHF {formatChf(quoteVat)}</span>
+                  <span style={{ color: th.text, fontWeight: 600, minWidth: 90, textAlign: 'right' }}>CHF {formatChf(quoteVat)}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 14, borderTop: `1px solid ${th.border}`, paddingTop: 6, marginTop: 4 }}>
-                  <span style={{ color: th.gold, fontWeight: 700 }}>{t.total ?? 'Total'}:</span>
-                  <span style={{ color: th.gold, fontWeight: 700, minWidth: 80, textAlign: 'right' }}>CHF {formatChf(quoteTotal)}</span>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, fontSize: 16, borderTop: `1px solid ${th.border}`, paddingTop: 8, marginTop: 4 }}>
+                  <span style={{ color: th.gold, fontWeight: 700 }}>{t.totalAmount ?? 'Total'}:</span>
+                  <span style={{ color: th.gold, fontWeight: 700, minWidth: 90, textAlign: 'right' }}>CHF {formatChf(quoteTotal)}</span>
                 </div>
               </div>
 
               {/* Notes */}
-              <div>
-                <label style={{ fontSize: 9, color: th.goldDim, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>{t.notes ?? 'Notes'}</label>
-                <textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
-              </div>
+              <div><label style={labelSty}>{t.additionalNotes ?? 'Additional Notes'}</label><textarea value={quoteNotes} onChange={e => setQuoteNotes(e.target.value)} rows={2} placeholder={t.notesPlaceholderQuote ?? 'Payment terms, special conditions...'} style={{ ...inputStyle, resize: 'vertical' }} /></div>
 
               {/* Signature */}
               <div>
@@ -1179,12 +1122,9 @@ export function ReportsPage() {
                   &#x270D; {t.customerSignature ?? 'Customer Signature'} ({t.optional ?? 'optional'})
                 </label>
                 <div style={{ fontSize: 10, color: th.textDim, marginBottom: 8 }}>
-                  {t.signatureHint ?? 'If the customer signs, the quotation is automatically accepted'}
+                  {t.signatureHint ?? 'If the customer signs below, the quotation will be automatically marked as accepted.'}
                 </div>
-                <SignaturePad isDark={isDark} th={th}
-                  onSave={(dataUrl) => setQuoteSignature(dataUrl)}
-                  onClear={() => setQuoteSignature(null)}
-                />
+                <SignaturePad isDark={isDark} th={th} onSave={d => setQuoteSignature(d)} onClear={() => setQuoteSignature(null)} />
                 {quoteSignature && (
                   <div style={{ marginTop: 6, fontSize: 10, color: isDark ? '#4ade80' : '#16a34a', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                     ✓ {t.signatureCaptured ?? 'Signature captured — quotation will be marked as accepted'}
@@ -1196,7 +1136,7 @@ export function ReportsPage() {
             {/* Footer */}
             <div style={{ padding: '16px 24px', borderTop: `1px solid ${th.borderFaint}`, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontSize: 9, color: th.textDim }}>
-                {quoteSignature ? `✓ ${t.willBeAccepted ?? 'Will be accepted'}` : `${t.willBeDraft ?? 'Will be saved as draft'}`}
+                {quoteSignature ? `✓ ${t.willBeAccepted ?? 'Will be saved as accepted'}` : `${t.willBeDraft ?? 'Will be saved as draft'}`}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setModalType(null)} style={{ padding: '10px 20px', borderRadius: 2, border: `1px solid ${th.borderFaint}`, background: 'transparent', color: th.textDim, cursor: 'pointer', fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>{t.cancel ?? 'Cancel'}</button>

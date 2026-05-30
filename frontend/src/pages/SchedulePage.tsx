@@ -66,9 +66,42 @@ interface AbsenceRecord {
   week_id?: string;
   day_of_week?: number;
 }
+interface TimeReport {
+  id: string;
+  user_id: string;
+  task_id: string;
+  date: string;
+  planned_hours?: number;
+  actual_hours?: number;
+  status: string;
+  work_description?: string;
+  notes?: string;
+  photos?: string[];
+  submitted_at?: string;
+  updated_at?: string;
+}
 
 const API = import.meta.env.VITE_API_URL || '';
 const PAGE_SIZE = 20;
+
+/* ─── Report status colors ─── */
+const REPORT_STATUS_COLORS: Record<string, string> = {
+  COMPLETED: '#22c55e',   // green
+  PARTIAL:   '#f59e0b',   // orange
+  NOT_DONE:  '#ef4444',   // red
+  PLANNED:   '#ef4444',   // red (planned = not yet done)
+  ADDED:     '#3b82f6',   // blue (modified / added after the fact)
+  MODIFIED:  '#3b82f6',   // blue
+};
+
+const REPORT_STATUS_LABELS: Record<string, string> = {
+  COMPLETED: 'Completed',
+  PARTIAL:   'Partial',
+  NOT_DONE:  'Not done',
+  PLANNED:   'Planned',
+  ADDED:     'Added',
+  MODIFIED:  'Modified',
+};
 
 /* ─── Color palette ─── */
 const PALETTE = [
@@ -147,6 +180,7 @@ export function SchedulePage() {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [absenceRecords, setAbsenceRecords] = useState<AbsenceRecord[]>([]);
+  const [timeReports, setTimeReports] = useState<TimeReport[]>([]);
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null);
 
   const [selectedTeamLeaderId, setSelectedTeamLeaderId] = useState<string | null>(null);
@@ -275,6 +309,33 @@ export function SchedulePage() {
     );
   }, [absenceRecords, dates, weekIds]);
 
+  /* ─── Report status lookup ─── */
+  // Build a map: reportKey(userId, taskId, dateStr) → TimeReport
+  const reportMap = useMemo(() => {
+    const m: Record<string, TimeReport> = {};
+    timeReports.forEach(r => {
+      // Key: user_id|task_id|date
+      const key = `${r.user_id}|${r.task_id}|${r.date}`;
+      // If multiple reports for same key, prefer the latest one (by submitted_at or updated_at)
+      const existing = m[key];
+      if (!existing) {
+        m[key] = r;
+      } else {
+        const existTime = existing.updated_at || existing.submitted_at || '';
+        const newTime = r.updated_at || r.submitted_at || '';
+        if (newTime > existTime) m[key] = r;
+      }
+    });
+    return m;
+  }, [timeReports]);
+
+  const getJobReportStatus = useCallback((job: Job, dayIndex: number): TimeReport | null => {
+    if (!dates[dayIndex]) return null;
+    const dateStr = format(dates[dayIndex], 'yyyy-MM-dd');
+    const key = `${job.user_id}|${job.task_id}|${dateStr}`;
+    return reportMap[key] || null;
+  }, [reportMap, dates]);
+
   const showToast = useCallback((msg: string, err = false) => {
     setToast({ msg, err });
     setTimeout(() => setToast(null), 2800);
@@ -335,15 +396,26 @@ export function SchedulePage() {
       setAbsenceRecords(Array.isArray(d) ? d : d.data || []);
     } catch {}
   };
+  const fetchTimeReports = async () => {
+    if (dates.length === 0) { setTimeReports([]); return; }
+    try {
+      const startDate = format(dates[0], 'yyyy-MM-dd');
+      const endDate = format(dates[dates.length - 1], 'yyyy-MM-dd');
+      const r = await fetch(`${API}/api/v1/reports?startDate=${startDate}&endDate=${endDate}`, { headers: authHeaders });
+      if (!r.ok) return;
+      const d = await r.json();
+      setTimeReports(Array.isArray(d) ? d : d.data || []);
+    } catch {}
+  };
 
   const refreshCellData = useCallback(async () => {
-    await Promise.all([fetchJobs(), fetchAbsenceRecords()]);
+    await Promise.all([fetchJobs(), fetchAbsenceRecords(), fetchTimeReports()]);
   }, [matchingWeeks, dates, authHeaders]);
 
   /* ─── Initial + week-change fetches ─── */
   useEffect(() => { fetchWeeks(); fetchTasks(); fetchUsers(); fetchMachines(); fetchCustomers(); }, []);
   useEffect(() => {
-    if (weeks.length > 0) { fetchJobs(); fetchAbsenceRecords(); }
+    if (weeks.length > 0) { fetchJobs(); fetchAbsenceRecords(); fetchTimeReports(); }
   }, [weekOff, weeks]);
   useEffect(() => { if (toast) { const tm = setTimeout(() => setToast(null), 3000); return () => clearTimeout(tm); } }, [toast]);
 
@@ -504,6 +576,26 @@ export function SchedulePage() {
     return t.bothDept ?? 'All';
   };
 
+  /* ─── Report status stats for the header ─── */
+  const reportStats = useMemo(() => {
+    let reported = 0, completed = 0, partial = 0;
+    // Count jobs that have a report
+    jobs.forEach(j => {
+      if (!weekIds.has(j.week_id)) return;
+      // find the day index from day_of_week
+      const dateStr = dates[j.day_of_week] ? format(dates[j.day_of_week], 'yyyy-MM-dd') : null;
+      if (!dateStr) return;
+      const key = `${j.user_id}|${j.task_id}|${dateStr}`;
+      const report = reportMap[key];
+      if (report) {
+        reported++;
+        if (report.status === 'COMPLETED') completed++;
+        else if (report.status === 'PARTIAL') partial++;
+      }
+    });
+    return { reported, completed, partial, total: totalSlots };
+  }, [jobs, weekIds, dates, reportMap, totalSlots]);
+
   /* ═══ ACCESS GUARD ═══ */
   if (scheduleScope === 'none' || !canView) {
     return (
@@ -658,8 +750,44 @@ export function SchedulePage() {
                 <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>{s.l}</div>
               </div>
             ))}
+            {/* Report completion stat */}
+            {reportStats.reported > 0 && (
+              <div style={{ textAlign: 'center' }} title={`${reportStats.completed} completed, ${reportStats.partial} partial, ${reportStats.reported} reported / ${reportStats.total} total`}>
+                <div style={{ fontSize: 20, fontWeight: 300, color: '#22c55e', lineHeight: 1 }}>
+                  {reportStats.total > 0 ? Math.round((reportStats.reported / reportStats.total) * 100) : 0}%
+                </div>
+                <div style={{ fontSize: 8, color: th.textGhost, marginTop: 3, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' as const }}>
+                  {t.reported ?? 'Reported'}
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* ── Report Status Legend (mini) ── */}
+        {reportStats.reported > 0 && (
+          <div style={{
+            display: 'flex', gap: 12, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 9, color: th.textGhost, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' as const }}>
+              {t.reportStatus ?? 'Report Status'}:
+            </span>
+            {[
+              { color: '#22c55e', label: t.statusCompleted ?? 'Completed' },
+              { color: '#f59e0b', label: t.statusPartial ?? 'Partial' },
+              { color: '#ef4444', label: t.statusNotDone ?? 'Not done' },
+              { color: '#3b82f6', label: t.statusModified ?? 'Modified' },
+            ].map(item => (
+              <span key={item.color} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', background: item.color,
+                  display: 'inline-block', boxShadow: `0 0 4px ${item.color}60`,
+                }} />
+                <span style={{ fontSize: 9, color: th.textDim, fontWeight: 500 }}>{item.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* ══════════════════════════ SCHEDULE GRID ══════════════════════════ */}
         <div style={{ background: th.bgCard, borderRadius: 8, border: `1px solid ${th.border}`, overflow: 'visible', position: 'relative' }}>
@@ -798,6 +926,10 @@ export function SchedulePage() {
                               const color = getTaskColor(job.task_id);
                               const customerName = resolveCustomerName(job);
                               const jm = job.machines || [];
+                              const report = getJobReportStatus(job, di);
+                              const reportStatus = report?.status || null;
+                              const reportColor = reportStatus ? (REPORT_STATUS_COLORS[reportStatus] || null) : null;
+                              const isCompleted = reportStatus === 'COMPLETED';
 
                               return (
                                 <div key={job.id} style={{
@@ -805,20 +937,47 @@ export function SchedulePage() {
                                   borderLeft: `3px solid ${color}`,
                                   borderRadius: 4, padding: '3px 6px', minHeight: 28,
                                   position: 'relative' as const,
-                                }} title={`${task?.name || '?'}${customerName ? ` · ${customerName}` : ''}`}>
+                                  // Grey out completed jobs slightly
+                                  opacity: isCompleted ? 0.65 : 1,
+                                  transition: 'opacity .2s',
+                                }} title={`${task?.name || '?'}${customerName ? ` · ${customerName}` : ''}${reportStatus ? ` · ${(t.status as any)?.[reportStatus] ?? REPORT_STATUS_LABELS[reportStatus] ?? reportStatus}` : ''}`}>
+
+                                  {/* ── Report status dot (top-right corner) ── */}
+                                  {reportColor && (
+                                    <span style={{
+                                      position: 'absolute' as const,
+                                      top: 3,
+                                      right: canEdit ? 17 : 3,
+                                      width: 7,
+                                      height: 7,
+                                      borderRadius: '50%',
+                                      background: reportColor,
+                                      boxShadow: `0 0 4px ${reportColor}80`,
+                                      zIndex: 2,
+                                      pointerEvents: 'none',
+                                    }} />
+                                  )}
+
                                   {/* Task name */}
                                   <div style={{
-                                    fontSize: 10, fontWeight: 700, color: isDark ? '#ddd' : '#333',
+                                    fontSize: 10, fontWeight: 700,
+                                    color: isCompleted
+                                      ? (isDark ? '#999' : '#888')
+                                      : (isDark ? '#ddd' : '#333'),
                                     overflow: 'hidden', textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap' as const,
-                                    paddingRight: canEdit ? 14 : 0, lineHeight: 1.3,
+                                    paddingRight: canEdit ? 20 : (reportColor ? 12 : 0),
+                                    lineHeight: 1.3,
+                                    textDecoration: isCompleted ? 'line-through' : 'none',
                                   }}>{task?.name || task?.code || '?'}</div>
 
                                   {/* Customer */}
                                   {customerName && (
                                     <div style={{
                                       fontSize: 8, fontWeight: 500,
-                                      color: isDark ? 'rgba(200,169,110,.7)' : 'rgba(139,115,85,.7)',
+                                      color: isCompleted
+                                        ? (isDark ? 'rgba(150,150,150,.6)' : 'rgba(100,100,100,.5)')
+                                        : (isDark ? 'rgba(200,169,110,.7)' : 'rgba(139,115,85,.7)'),
                                       overflow: 'hidden', textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap' as const, lineHeight: 1.3, marginTop: 1,
                                     }}>&#x1F464; {customerName}</div>
