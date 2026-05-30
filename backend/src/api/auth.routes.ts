@@ -18,7 +18,7 @@ authRouter.post('/login', async (req, res) => {
 
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, password_hash, first_name, last_name, role, departments, custom_permissions, is_active')
+      .select('id, email, password_hash, first_name, last_name, role, departments, custom_permissions, is_active, team_leader_id, executive_id, manager_id')
       .eq('email', email)
       .single();
 
@@ -53,7 +53,7 @@ authRouter.post('/login', async (req, res) => {
         userId: user.id,
         email: user.email,
         role: user.role,
-        departments: user.departments || [],  // ★ NEW
+        departments: user.departments || [],
       },
       process.env.JWT_SECRET || 'emmenegger-dev-secret-change-in-production',
       { expiresIn: '7d' }
@@ -72,6 +72,9 @@ authRouter.post('/login', async (req, res) => {
         role: user.role,
         departments: user.departments,
         custom_permissions: user.custom_permissions || null,
+        team_leader_id: user.team_leader_id || null,
+        executive_id: user.executive_id || null,
+        manager_id: user.manager_id || null,
       },
     });
   } catch (error) {
@@ -101,7 +104,7 @@ authRouter.post('/register', async (req, res) => {
         departments: departments || ['GARTEN_TIEFBAU'],
         is_active: true,
       })
-      .select('id, email, first_name, last_name, role, departments, custom_permissions')
+      .select('id, email, first_name, last_name, role, departments, custom_permissions, team_leader_id, executive_id, manager_id')
       .single();
 
     if (insertError) {
@@ -144,7 +147,7 @@ authRouter.get('/me', async (req, res) => {
 
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, email, first_name, last_name, role, departments, custom_permissions, is_active')
+      .select('id, email, first_name, last_name, role, departments, custom_permissions, is_active, team_leader_id, executive_id, manager_id')
       .eq('id', decoded.userId)
       .single();
 
