@@ -26,11 +26,12 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   // ── Planning ──
   { path: '/schedule',   labelKey: 'navSchedule',   icon: '📅', permissions: ['schedule.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
-  { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
   { path: '/machine-schedule', labelKey: 'navMachineSchedule', icon: '📊', permissions: ['machines.view'], section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
+  { path: '/reports',    labelKey: 'navReports',    icon: '📝', permissions: ['reports.own'],       section: 'ops' },
   { path: '/logistics', labelKey: 'navLogistics', icon: '🔧', permissions: ['logistics.view' as Permission], section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
+  // ── Management ──
+  { path: '/machines',   labelKey: 'navMachines',   icon: '🚜', permissions: ['machines.view'],    section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
   { path: '/tasks',      labelKey: 'navTasks',      icon: '📋', permissions: ['tasks.view'],       section: 'planning', excludeRoles: ['SALES', 'HR', 'FINANCE'] },
-
   // ── CRM ──
   { path: '/crm',        labelKey: 'navCRM',        icon: '💼', section: 'crm', onlyRoles: ['SALES', 'CEO', 'ADMIN', 'GLOBAL_MANAGER'] },
   { path: '/customers',  labelKey: 'navCustomers',  icon: '🏢', permissions: ['customers.view'],   section: 'crm' },
@@ -38,7 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/invoices',   labelKey: 'navInvoices',   icon: '💰', permissions: ['invoices.view'],    section: 'crm', excludeRoles: ['SALES'] },
 
   // ── Operations ──
-  { path: '/reports',    labelKey: 'navReports',    icon: '📝', permissions: ['reports.own'],       section: 'ops' },
+  
   { path: '/stats',      labelKey: 'navStats',      icon: '📊', permissions: ['reports.team'],      section: 'ops' },
 
   // ── Admin ──

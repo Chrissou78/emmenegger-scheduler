@@ -13,7 +13,7 @@ import { SchedulePage } from './pages/SchedulePage';
 import { MachinesPage } from './pages/MachinesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import AdminPage from './pages/AdminPage';
-import { StatsPage } from './pages/StatsPage';
+import { StatsPage } from './pages/stats';
 import { ProfilePage } from './pages/ProfilePage';
 import { TasksPage } from './pages/TasksPage';
 import { CustomersPage } from './pages/CustomersPage';
@@ -22,7 +22,7 @@ import { InvoicesPage } from './pages/InvoicesPage';
 import HRPage from './pages/HRPage';
 import CrmPage from './pages/CrmPage';
 import SettingsPage from './pages/settings';
-import { LogisticsPage } from './pages/LogisticsPage';
+import LogisticsPage from './pages/logistics';
 import { MachineSchedulePage } from './pages/MachineSchedulePage';
 
 /* ─── Map legacy DB roles to the 6-role system ─── */
