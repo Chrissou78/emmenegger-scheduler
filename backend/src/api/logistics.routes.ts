@@ -6,6 +6,32 @@ import { requireRole } from '../middleware/auth';
 export const logisticsRouter = Router();
 
 /* ================================================================== */
+/*  HELPERS — granular permission check                                */
+/* ================================================================== */
+
+/**
+ * Middleware that checks the user's resolved permissions array
+ * (populated by the auth middleware on req.user.permissions).
+ * Falls through if the user has ALL of the listed permissions.
+ */
+function requirePermission(...perms: string[]) {
+  return (req: any, res: any, next: any) => {
+    const userPerms: string[] = req.user?.permissions ?? [];
+    // If permissions array is empty (legacy auth without resolution),
+    // fall through and rely on requireRole only.
+    if (userPerms.length === 0) return next();
+    const hasAll = perms.every(p => userPerms.includes(p));
+    if (!hasAll) {
+      return res.status(403).json({
+        error: 'Insufficient permissions',
+        required: perms,
+      });
+    }
+    next();
+  };
+}
+
+/* ================================================================== */
 /*  SPARE PARTS — CRUD                                                 */
 /* ================================================================== */
 
@@ -57,7 +83,10 @@ logisticsRouter.get('/parts/:id', async (req, res, next) => {
 });
 
 // POST /api/v1/logistics/parts
-logisticsRouter.post('/parts', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.post('/parts',
+  requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
+  requirePermission('logistics.edit'),
+  async (req, res, next) => {
   try {
     const {
       part_number, name, description, category, unit,
@@ -110,7 +139,10 @@ logisticsRouter.post('/parts', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), a
 });
 
 // PUT /api/v1/logistics/parts/:id
-logisticsRouter.put('/parts/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.put('/parts/:id',
+  requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
+  requirePermission('logistics.edit'),
+  async (req, res, next) => {
   try {
     const updates: any = { updated_at: new Date().toISOString() };
     const allowed = [
@@ -140,7 +172,10 @@ logisticsRouter.put('/parts/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER')
 });
 
 // DELETE /api/v1/logistics/parts/:id
-logisticsRouter.delete('/parts/:id', requireRole('GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.delete('/parts/:id',
+  requireRole('GLOBAL_MANAGER'),
+  requirePermission('logistics.delete'),
+  async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('spare_parts')
@@ -204,6 +239,15 @@ logisticsRouter.post('/transactions', async (req, res, next) => {
     const validTypes = ['CONSUME', 'PURCHASE', 'ADJUST', 'RETURN', 'SALE'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: `type must be one of: ${validTypes.join(', ')}` });
+    }
+
+    // ★ Granular permission check for SALE
+    const userPerms: string[] = (req as any).user?.permissions ?? [];
+    if (type === 'SALE' && userPerms.length > 0 && !userPerms.includes('logistics.sell')) {
+      return res.status(403).json({ error: 'logistics.sell permission required for SALE transactions' });
+    }
+    if (type === 'CONSUME' && userPerms.length > 0 && !userPerms.includes('logistics.consume')) {
+      return res.status(403).json({ error: 'logistics.consume permission required for CONSUME transactions' });
     }
 
     // For CONSUME and SALE, qty in body is positive but we store as negative
@@ -298,7 +342,10 @@ logisticsRouter.get('/alerts', async (req, res, next) => {
 });
 
 // PUT /api/v1/logistics/alerts/:id — acknowledge or resolve
-logisticsRouter.put('/alerts/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.put('/alerts/:id',
+  requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
+  requirePermission('logistics.alerts'),
+  async (req, res, next) => {
   try {
     const { status } = req.body;
 
@@ -426,7 +473,10 @@ logisticsRouter.get('/stats', async (_req, res, next) => {
 /* ================================================================== */
 
 // POST /api/v1/logistics/parts/import
-logisticsRouter.post('/parts/import', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.post('/parts/import',
+  requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
+  requirePermission('logistics.import'),
+  async (req, res, next) => {
   try {
     const { rows } = req.body; // array of part objects
 
@@ -488,7 +538,10 @@ logisticsRouter.get('/margin-rules', async (_req, res, next) => {
 });
 
 // POST /api/v1/logistics/margin-rules
-logisticsRouter.post('/margin-rules', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.post('/margin-rules',
+  requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
+  requirePermission('logistics.pricing'),
+  async (req, res, next) => {
   try {
     const { scope, category, part_id, margin_pct } = req.body;
 
@@ -548,7 +601,10 @@ logisticsRouter.post('/margin-rules', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAG
 });
 
 // PUT /api/v1/logistics/margin-rules/:id
-logisticsRouter.put('/margin-rules/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.put('/margin-rules/:id',
+  requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'),
+  requirePermission('logistics.pricing'),
+  async (req, res, next) => {
   try {
     const updates: any = { updated_at: new Date().toISOString() };
     const allowed = ['margin_pct', 'is_active'];
@@ -571,7 +627,10 @@ logisticsRouter.put('/margin-rules/:id', requireRole('LOCAL_MANAGER', 'GLOBAL_MA
 });
 
 // DELETE /api/v1/logistics/margin-rules/:id
-logisticsRouter.delete('/margin-rules/:id', requireRole('GLOBAL_MANAGER'), async (req, res, next) => {
+logisticsRouter.delete('/margin-rules/:id',
+  requireRole('GLOBAL_MANAGER'),
+  requirePermission('logistics.pricing'),
+  async (req, res, next) => {
   try {
     const { error } = await supabase
       .from('margin_rules')

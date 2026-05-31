@@ -530,5 +530,21 @@
   "logSeedConfirm": "Populate sample spare parts?",
   "logSeedSuccess": "Sample spare parts created successfully",
   "logSeedMaintenance": "Sample Maintenance Parts",
-  "logSeedConsumables": "Sample Consumables"
+  "logSeedConsumables": "Sample Consumables",
+  "permGroupSchedule": "Schedule",
+  "permGroupMachines": "Machines",
+  "permGroupTasks": "Tasks",
+  "permGroupLogistics": "Logistics",
+  "permGroupCRM": "CRM",
+  "permGroupCustomers": "Customers",
+  "permGroupQuotations": "Quotations",
+  "permGroupInvoices": "Invoices",
+  "permGroupReports": "Reports",
+  "permGroupStats": "Statistics",
+  "permGroupMyWeek": "My Week",
+  "permGroupHR": "Human Resources",
+  "permGroupFinance": "Finance",
+  "permGroupAdmin": "Administration",
+  "permGroupCEO": "CEO",
+  "permGroupProfile": "Profile"
 }

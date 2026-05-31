@@ -13,6 +13,33 @@ interface Props {
   gold: string;
 }
 
+/* ── i18n keys for each permission group heading ── */
+const GROUP_I18N: Record<string, string> = {
+  Schedule:   'permGroupSchedule',
+  Machines:   'permGroupMachines',
+  Tasks:      'permGroupTasks',
+  Logistics:  'permGroupLogistics',
+  CRM:        'permGroupCRM',
+  Customers:  'permGroupCustomers',
+  Quotations: 'permGroupQuotations',
+  Invoices:   'permGroupInvoices',
+  Reports:    'permGroupReports',
+  Stats:      'permGroupStats',
+  'My Week':  'permGroupMyWeek',
+  HR:         'permGroupHR',
+  Finance:    'permGroupFinance',
+  Admin:      'permGroupAdmin',
+  CEO:        'permGroupCEO',
+  Profile:    'permGroupProfile',
+};
+
+/* ── Pretty label for individual permission tokens ── */
+function permLabel(perm: string): string {
+  // "logistics.sell" → "sell", "schedule.view.all" → "view.all"
+  const parts = perm.split('.');
+  return parts.slice(1).join('.');
+}
+
 export default function RolesTab({ data, S, t, gold }: Props) {
   const { roles, saving, fetchRoles, hdrs, showToast, setConfirmDel } = data;
 
@@ -58,6 +85,20 @@ export default function RolesTab({ data, S, t, gold }: Props) {
         ? prev.permissions.filter(p => p !== perm)
         : [...prev.permissions, perm],
     }));
+  };
+
+  /* ★ NEW: Toggle all permissions in a group */
+  const toggleGroupAll = (permsArr: Permission[]) => {
+    const allChecked = permsArr.every(p => form.permissions.includes(p));
+    setForm(prev => {
+      if (allChecked) {
+        // remove all group perms
+        return { ...prev, permissions: prev.permissions.filter(p => !permsArr.includes(p)) };
+      }
+      // add missing group perms
+      const newPerms = new Set([...prev.permissions, ...permsArr]);
+      return { ...prev, permissions: [...newPerms] as Permission[] };
+    });
   };
 
   return (
@@ -111,7 +152,7 @@ export default function RolesTab({ data, S, t, gold }: Props) {
       {/* ROLE MODAL */}
       {modal && (
         <div style={S.sOverlay} onClick={() => setModal(false)}>
-          <div style={S.sModal} onClick={e => e.stopPropagation()}>
+          <div style={{ ...S.sModal, maxWidth: 760 }} onClick={e => e.stopPropagation()}>
             <h2 style={{ margin: '0 0 16px', color: gold }}>
               {editId ? (t.editRole ?? 'Edit Role') : (t.newRole ?? 'New Role')}
             </h2>
@@ -146,29 +187,62 @@ export default function RolesTab({ data, S, t, gold }: Props) {
               </div>
             </div>
 
-            <h3 style={{ margin: '0 0 12px', color: gold, fontSize: 15 }}>{t.permissions ?? 'Permissions'}</h3>
-            <div style={{ maxHeight: 400, overflowY: 'auto', border: `1px solid`, borderRadius: 8, padding: 12 }}>
-              {Object.entries(PERM_GROUPS).map(([group, permsArr]) => (
-                <div key={group} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: gold, marginBottom: 6 }}>{group}</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {permsArr.map(perm => {
-                      const checked = form.permissions.includes(perm);
-                      return (
-                        <label key={perm} style={{
-                          display: 'flex', alignItems: 'center', gap: 4, fontSize: 13,
-                          padding: '4px 10px', borderRadius: 6,
-                          background: checked ? '#22c55e18' : 'transparent',
-                          border: `1px solid ${checked ? '#22c55e' : 'gray'}`, cursor: 'pointer',
-                        }}>
-                          <input type="checkbox" checked={checked} onChange={() => togglePerm(perm)} />
-                          {perm.split('.')[1]}
-                        </label>
-                      );
-                    })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, color: gold, fontSize: 15 }}>{t.permissions ?? 'Permissions'}</h3>
+              <span style={{ fontSize: 12, color: S.dimText }}>
+                {form.permissions.length} / {Object.values(PERM_GROUPS).flat().length} {t.selected ?? 'selected'}
+              </span>
+            </div>
+
+            <div style={{ maxHeight: 420, overflowY: 'auto', border: `1px solid`, borderRadius: 8, padding: 12 }}>
+              {Object.entries(PERM_GROUPS).map(([group, permsArr]) => {
+                const groupChecked = permsArr.filter(p => form.permissions.includes(p)).length;
+                const allChecked = groupChecked === permsArr.length;
+                const someChecked = groupChecked > 0 && !allChecked;
+                const i18nKey = GROUP_I18N[group];
+                const groupLabel = (i18nKey && t[i18nKey]) ? t[i18nKey] : group;
+
+                return (
+                  <div key={group} style={{ marginBottom: 14 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      marginBottom: 6, cursor: 'pointer',
+                    }}
+                      onClick={() => toggleGroupAll(permsArr)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={allChecked}
+                        ref={el => { if (el) el.indeterminate = someChecked; }}
+                        onChange={() => toggleGroupAll(permsArr)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: gold, letterSpacing: 0.5 }}>
+                        {groupLabel}
+                      </span>
+                      <span style={{ fontSize: 11, color: S.dimText }}>
+                        ({groupChecked}/{permsArr.length})
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingLeft: 24 }}>
+                      {permsArr.map(perm => {
+                        const checked = form.permissions.includes(perm);
+                        return (
+                          <label key={perm} style={{
+                            display: 'flex', alignItems: 'center', gap: 4, fontSize: 12,
+                            padding: '3px 10px', borderRadius: 6,
+                            background: checked ? '#22c55e18' : 'transparent',
+                            border: `1px solid ${checked ? '#22c55e' : 'gray'}`, cursor: 'pointer',
+                          }}>
+                            <input type="checkbox" checked={checked} onChange={() => togglePerm(perm)} />
+                            {permLabel(perm)}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>

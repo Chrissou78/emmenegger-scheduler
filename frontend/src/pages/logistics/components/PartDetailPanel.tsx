@@ -15,8 +15,8 @@ interface Props {
   onSave: (id: string | null, body: Record<string, unknown>) => Promise<any>;
   onDelete: (id: string) => Promise<void>;
   onClose: () => void;
-  onConsume: (partId: string) => void;
-  onPurchase: (partId: string) => void;
+  onConsume?: (partId: string) => void;   // ← optional
+  onPurchase?: (partId: string) => void;  // ← optional
   showToast: (msg: string, type: 'ok' | 'err') => void;
 }
 
@@ -79,12 +79,16 @@ export function PartDetailPanel({ t, isDark, part, machines, canEdit, canDelete,
         </span>
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons — only render if the callback is provided */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button style={{ ...s.btnPrimary, background: '#ef4444', flex: 1 }}
-                onClick={() => onConsume(part.id)}>📤 {t.logConsume || 'Consume'}</button>
-        <button style={{ ...s.btnPrimary, background: '#22c55e', flex: 1 }}
-                onClick={() => onPurchase(part.id)}>📥 {t.logPurchase || 'Purchase'}</button>
+        {onConsume && (
+          <button style={{ ...s.btnPrimary, background: '#ef4444', flex: 1 }}
+                  onClick={() => onConsume(part.id)}>📤 {t.logConsume || 'Consume'}</button>
+        )}
+        {onPurchase && (
+          <button style={{ ...s.btnPrimary, background: '#22c55e', flex: 1 }}
+                  onClick={() => onPurchase(part.id)}>📥 {t.logPurchase || 'Purchase'}</button>
+        )}
         {canEdit && <button style={{ ...s.btnSecondary, flex: 1 }}
                 onClick={() => setEditing(true)}>✏️ {t.edit || 'Edit'}</button>}
       </div>

@@ -1,14 +1,15 @@
 // frontend/src/pages/logistics/sections/MaintenanceParts.tsx
 import React, { useState } from 'react';
 import type { LogisticsData } from '../hooks/useLogisticsData';
+import type { PermChecks } from '../types';
 import { MAINTENANCE_CATEGORIES, CATEGORY_I18N } from '../constants';
 import { getLogStyles } from '../styles';
 import { fmtCHF, emptyPartForm } from '../helpers';
 import { PartDetailPanel } from '../components/PartDetailPanel';
 
-interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean }
+interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean; perms: PermChecks }
 
-export function MaintenanceParts({ data, t, isDark }: Props) {
+export function MaintenanceParts({ data, t, isDark, perms }: Props) {
   const s = getLogStyles(isDark);
   const { maintenanceParts, search, setSearch, categoryFilter, setCategoryFilter,
           selectedPart, setSelectedPart, savePart, deletePart,
@@ -42,7 +43,9 @@ export function MaintenanceParts({ data, t, isDark }: Props) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>🔧 {t.logMaintenanceParts || 'Maintenance Parts'}</h2>
-        <button style={s.btnPrimary} onClick={() => setCreating(true)}>+ {t.logNewPart || 'New Part'}</button>
+        {perms.canEdit && (
+          <button style={s.btnPrimary} onClick={() => setCreating(true)}>+ {t.logNewPart || 'New Part'}</button>
+        )}
       </div>
       <p style={{ color: s.muted, marginBottom: 16 }}>{t.logMaintenanceDesc || 'Internal use parts for machine upkeep'}</p>
 
@@ -56,8 +59,8 @@ export function MaintenanceParts({ data, t, isDark }: Props) {
         </select>
       </div>
 
-      {/* Create inline form */}
-      {creating && (
+      {/* Create inline form – only if canEdit */}
+      {creating && perms.canEdit && (
         <div style={{ ...s.card, marginBottom: 16 }}>
           <h3>{t.logNewPart || 'New Maintenance Part'}</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
@@ -134,12 +137,14 @@ export function MaintenanceParts({ data, t, isDark }: Props) {
         </table>
       )}
 
-      {/* Detail panel */}
+      {/* Detail panel – pass perms for edit/delete gating */}
       {selectedPart && selectedPart.part_type === 'MAINTENANCE' && (
         <PartDetailPanel t={t} isDark={isDark} part={selectedPart} machines={machines}
-          canEdit={true} canDelete={true}
+          canEdit={perms.canEdit} canDelete={perms.canDelete}
           onSave={savePart} onDelete={deletePart} onClose={() => setSelectedPart(null)}
-          onConsume={openConsume} onPurchase={openPurchase} showToast={showToast} />
+          onConsume={perms.canConsume ? openConsume : undefined}
+          onPurchase={perms.canEdit ? openPurchase : undefined}
+          showToast={showToast} />
       )}
     </div>
   );

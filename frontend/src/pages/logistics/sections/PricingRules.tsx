@@ -1,16 +1,16 @@
 // frontend/src/pages/logistics/sections/PricingRules.tsx
 import React, { useState } from 'react';
 import type { LogisticsData } from '../hooks/useLogisticsData';
+import type { PermChecks } from '../types';
 import { CONSUMABLE_CATEGORIES, CATEGORY_I18N } from '../constants';
 import { getLogStyles } from '../styles';
 
-interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean }
+interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean; perms: PermChecks }
 
-export function PricingRules({ data, t, isDark }: Props) {
+export function PricingRules({ data, t, isDark, perms }: Props) {
   const s = getLogStyles(isDark);
   const { marginRules, consumableParts } = data;
 
-  // For now, local state — when the backend has margin_rules CRUD, wire it up
   const [defaultMargin, setDefaultMargin] = useState(50);
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, number>>({});
 
@@ -33,9 +33,12 @@ export function PricingRules({ data, t, isDark }: Props) {
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <input type="number" style={{ ...s.input, width: 100 }} value={defaultMargin}
-                 onChange={e => setDefaultMargin(Number(e.target.value))} min={0} max={500} />
+                 onChange={e => setDefaultMargin(Number(e.target.value))} min={0} max={500}
+                 disabled={!perms.canPricing} />
           <span style={{ fontSize: 14 }}>%</span>
-          <button style={s.btnPrimary}>{t.save || 'Save'}</button>
+          {perms.canPricing && (
+            <button style={s.btnPrimary}>{t.save || 'Save'}</button>
+          )}
         </div>
       </div>
 
@@ -68,7 +71,8 @@ export function PricingRules({ data, t, isDark }: Props) {
                         <input type="number" style={{ ...s.input, width: 80 }}
                                value={categoryOverrides[cat] ?? ''}
                                placeholder={`${defaultMargin}`}
-                               onChange={e => updateCatMargin(cat, e.target.value)} />
+                               onChange={e => updateCatMargin(cat, e.target.value)}
+                               disabled={!perms.canPricing} />
                         <span style={{ fontSize: 13 }}>%</span>
                       </div>
                     </td>

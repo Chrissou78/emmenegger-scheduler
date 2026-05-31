@@ -12,11 +12,12 @@ interface Props {
   tasks: Task[];
   defaultType: string;
   defaultPartId?: string;
+  canSell: boolean;
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }
 
-export function TransactionModal({ t, isDark, parts, machines, tasks, defaultType, defaultPartId, onSubmit, onClose }: Props) {
+export function TransactionModal({ t, isDark, parts, machines, tasks, defaultType, defaultPartId, canSell, onSubmit, onClose }: Props) {
   const s = getLogStyles(isDark);
   const [form, setForm] = useState({
     part_id: defaultPartId || '', type: defaultType,
@@ -24,6 +25,11 @@ export function TransactionModal({ t, isDark, parts, machines, tasks, defaultTyp
     machine_id: '', task_id: '', reference: '', notes: '',
   });
   const [busy, setBusy] = useState(false);
+
+  /* Filter SALE out of type dropdown when user lacks sell permission */
+  const availableTypes = canSell
+    ? TX_TYPES
+    : TX_TYPES.filter(ty => ty !== 'SALE');
 
   const handleSubmit = async () => {
     if (!form.part_id || form.qty <= 0) return;
@@ -66,7 +72,7 @@ export function TransactionModal({ t, isDark, parts, machines, tasks, defaultTyp
         <label style={{ fontSize: 13, fontWeight: 600 }}>{t.logType || 'Type'}</label>
         <select style={{ ...s.input, width: '100%', marginBottom: 12 }} value={form.type}
                 onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-          {TX_TYPES.map(ty => <option key={ty} value={ty}>{ty}</option>)}
+          {availableTypes.map(ty => <option key={ty} value={ty}>{ty}</option>)}
         </select>
 
         <label style={{ fontSize: 13, fontWeight: 600 }}>{t.logQuantity || 'Quantity'}</label>

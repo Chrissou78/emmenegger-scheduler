@@ -1,14 +1,15 @@
 // frontend/src/pages/logistics/sections/Dashboard.tsx
 import React from 'react';
 import type { LogisticsData } from '../hooks/useLogisticsData';
+import type { PermChecks } from '../types';
 import { KpiRow } from '../components/StatsCards';
 import { getLogStyles } from '../styles';
 import { fmtCHF, fmtNum } from '../helpers';
 import { SEED_MAINTENANCE_PARTS, SEED_CONSUMABLE_PARTS } from '../constants';
 
-interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean }
+interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean; perms: PermChecks }
 
-export function Dashboard({ data, t, isDark }: Props) {
+export function Dashboard({ data, t, isDark, perms }: Props) {
   const s = getLogStyles(isDark);
   const { stats, maintenanceParts, consumableParts, parts, alerts, setSection, importParts, showToast } = data;
 
@@ -42,14 +43,20 @@ export function Dashboard({ data, t, isDark }: Props) {
         { label: t.logOutOfStock || 'Out of Stock', value: fmtNum(outOfStockParts.length), color: '#ef4444' },
       ]} />
 
-      {/* Quick actions */}
+      {/* Quick actions – gated by perms */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
         <button style={s.btnPrimary} onClick={() => setSection('maintenance')}>🔧 {t.logMaintenanceParts || 'Maintenance Parts'}</button>
         <button style={{ ...s.btnPrimary, background: '#f97316' }} onClick={() => setSection('consumables')}>🛒 {t.logConsumables || 'Consumables'}</button>
-        <button style={s.btnSecondary} onClick={() => setSection('alerts')}>🔔 {t.logAlerts || 'Alerts'} ({openAlerts.length})</button>
-        <button style={s.btnSecondary} onClick={() => setSection('inventory')}>📦 {t.logStartInventory || 'Start Inventory'}</button>
-        <button style={s.btnSecondary} onClick={() => setSection('pricing')}>💲 {t.logPricingRules || 'Pricing Rules'}</button>
-        {parts.length === 0 && (
+        {perms.canAlerts && (
+          <button style={s.btnSecondary} onClick={() => setSection('alerts')}>🔔 {t.logAlerts || 'Alerts'} ({openAlerts.length})</button>
+        )}
+        {perms.canInventory && (
+          <button style={s.btnSecondary} onClick={() => setSection('inventory')}>📦 {t.logStartInventory || 'Start Inventory'}</button>
+        )}
+        {perms.canPricing && (
+          <button style={s.btnSecondary} onClick={() => setSection('pricing')}>💲 {t.logPricingRules || 'Pricing Rules'}</button>
+        )}
+        {parts.length === 0 && perms.canImport && (
           <button style={{ ...s.btnPrimary, background: '#22c55e' }} onClick={handleSeed}>🌱 {t.logSeedMaintenance || 'Seed Sample Data'}</button>
         )}
       </div>

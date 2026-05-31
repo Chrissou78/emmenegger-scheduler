@@ -53,7 +53,6 @@ export function getViewTier(role: string): 'ceo' | 'executive' | 'teamleader' | 
   }
 }
 
-/* ★ FIX: Added 'crm' to the interface */
 export interface NavAccess {
   schedule: boolean;
   machines: boolean;
@@ -202,30 +201,79 @@ export const ROLE_LABELS: Record<string, Record<string, string>> = {
 /* ------------------------------------------------------------------ */
 /*  Permissions                                                        */
 /* ------------------------------------------------------------------ */
+
+/**
+ * ★ UPDATED: Added granular logistics permissions for the new module tabs:
+ *   - logistics.sell      → record SALE transactions
+ *   - logistics.pricing   → manage margin rules / pricing tab
+ *   - logistics.alerts    → manage / resolve alerts
+ *   - logistics.import    → CSV import of spare parts
+ *   - logistics.inventory → perform inventory counts
+ */
 export const PERMISSIONS = [
+  // Schedule
   "schedule.view", "schedule.edit",
+  "schedule.view.all", "schedule.view.team",
+
+  // Customers
   "customers.view", "customers.edit", "customers.delete",
+  "customers.view.all", "customers.view.team",
+
+  // Machines
   "machines.view", "machines.edit", "machines.delete",
+  "machines.view.all", "machines.view.team",
+
+  // Tasks
   "tasks.view", "tasks.edit", "tasks.delete",
+  "tasks.view.all", "tasks.view.team",
+
+  // Quotations
   "quotations.view", "quotations.edit", "quotations.delete",
+  "quotations.view.all", "quotations.view.team",
+
+  // Invoices
   "invoices.view", "invoices.edit", "invoices.delete",
-  "hr.view", "hr.edit", "hr.payroll",
+  "invoices.view.all", "invoices.view.finance",
+
+  // HR
+  "hr.view", "hr.edit", "hr.payroll", "hr.access",
+
+  // Finance
   "finance.view", "finance.reports",
+
+  // Admin
   "admin.view", "admin.users", "admin.roles",
   "admin.customers", "admin.machines", "admin.tasks",
+  "admin.access",
+
+  // Reports
   "reports.own", "reports.team", "reports.all",
+
+  // CEO
   "ceo.dashboard", "ceo.org", "ceo.settings",
-  "schedule.view.all", "schedule.view.team",
-  "machines.view.all", "machines.view.team",
-  "tasks.view.all", "tasks.view.team",
-  "customers.view.all", "customers.view.team",
-  "quotations.view.all", "quotations.view.team",
-  "invoices.view.all", "invoices.view.finance",
-  "myweek.view",
+
+  // Stats
   "stats.global", "stats.perimeter", "stats.team", "stats.individual",
-  "hr.access", "admin.access", "profile.view",
+
+  // My Week
+  "myweek.view",
+
+  // Profile
+  "profile.view",
+
+  // CRM
   "crm.view", "crm.edit", "crm.delete", "crm.pipeline", "crm.performance",
-  "logistics.view", "logistics.edit", "logistics.delete", "logistics.consume",
+
+  // Logistics (★ expanded)
+  "logistics.view",
+  "logistics.edit",
+  "logistics.delete",
+  "logistics.consume",
+  "logistics.sell",
+  "logistics.pricing",
+  "logistics.alerts",
+  "logistics.import",
+  "logistics.inventory",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -239,52 +287,85 @@ export function isOperational(userDepartments: string[]): boolean {
 /* ------------------------------------------------------------------ */
 /*  Default permission matrix                                          */
 /* ------------------------------------------------------------------ */
+
+/**
+ * ★ UPDATED: Each role now has the appropriate logistics sub-permissions
+ *   matching the logistics tab structure (dashboard, maintenance, consumables,
+ *   alerts, transactions, inventory, pricing).
+ */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   CEO: [...PERMISSIONS],
 
   ADMIN: [
     "schedule.view", "schedule.edit",
+    "schedule.view.all",
     "customers.view", "customers.edit", "customers.delete",
+    "customers.view.all",
     "machines.view", "machines.edit", "machines.delete",
+    "machines.view.all",
     "tasks.view", "tasks.edit", "tasks.delete",
+    "tasks.view.all",
     "quotations.view", "quotations.edit", "quotations.delete",
+    "quotations.view.all",
     "invoices.view", "invoices.edit", "invoices.delete",
-    "hr.view", "hr.edit", "hr.payroll",
+    "invoices.view.all",
+    "hr.view", "hr.edit", "hr.payroll", "hr.access",
     "finance.view", "finance.reports",
     "admin.view", "admin.users", "admin.roles",
     "admin.customers", "admin.machines", "admin.tasks",
+    "admin.access",
     "reports.own", "reports.team", "reports.all",
     "crm.view", "crm.edit", "crm.pipeline", "crm.performance",
+    "stats.global", "stats.perimeter",
+    "profile.view",
+    // ★ Logistics — full access
     "logistics.view", "logistics.edit", "logistics.delete", "logistics.consume",
+    "logistics.sell", "logistics.pricing", "logistics.alerts",
+    "logistics.import", "logistics.inventory",
   ],
 
   MANAGER: [
     "schedule.view", "schedule.edit",
+    "schedule.view.team",
     "customers.view", "customers.edit",
+    "customers.view.team",
     "machines.view", "machines.edit",
+    "machines.view.team",
     "tasks.view", "tasks.edit",
+    "tasks.view.team",
     "quotations.view", "quotations.edit",
+    "quotations.view.team",
     "invoices.view",
     "hr.view",
     "admin.view",
     "reports.own", "reports.team",
+    "stats.team",
+    "myweek.view",
+    "profile.view",
+    // ★ Logistics — can manage parts, consume, sell, run inventory, handle alerts
     "logistics.view", "logistics.edit", "logistics.consume",
+    "logistics.sell", "logistics.alerts", "logistics.inventory",
   ],
 
   HR: [
     "customers.view",
-    "hr.view", "hr.edit", "hr.payroll",
+    "hr.view", "hr.edit", "hr.payroll", "hr.access",
     "reports.own", "reports.team", "reports.all",
     "admin.view", "admin.users",
+    "stats.perimeter",
+    "profile.view",
   ],
 
   FINANCE: [
     "customers.view",
     "quotations.view",
     "invoices.view", "invoices.edit",
+    "invoices.view.finance",
     "finance.view", "finance.reports",
     "hr.view", "hr.payroll",
     "reports.own", "reports.all",
+    "stats.perimeter",
+    "profile.view",
   ],
 
   SALES: [
@@ -292,6 +373,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "quotations.view", "quotations.edit",
     "reports.own",
     "crm.view", "crm.edit", "crm.pipeline", "crm.performance",
+    "stats.individual",
+    "profile.view",
   ],
 
   EMPLOYEE: [
@@ -299,6 +382,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "tasks.view",
     "machines.view",
     "reports.own",
+    "myweek.view",
+    "stats.individual",
+    "profile.view",
+    // ★ Logistics — can view dashboard + consume parts
     "logistics.view", "logistics.consume",
   ],
 };

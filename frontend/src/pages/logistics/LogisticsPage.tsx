@@ -1,5 +1,5 @@
 // frontend/src/pages/logistics/LogisticsPage.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTheme } from '../../contexts/themeContext';
 import { useAuthStore } from '../../contexts/authStore';
 import { resolvePermissions, type Role, type Permission } from '../../../../shared/constants/roles';
@@ -26,14 +26,19 @@ function normalizeRole(raw: string): Role {
   }
 }
 
-const TABS: { key: Section; labelKey: string; icon: string }[] = [
-  { key: 'dashboard',    labelKey: 'logDashboard',        icon: '📊' },
-  { key: 'maintenance',  labelKey: 'logMaintenanceParts',  icon: '🔧' },
-  { key: 'consumables',  labelKey: 'logConsumables',       icon: '🛒' },
-  { key: 'alerts',       labelKey: 'logAlerts',            icon: '🔔' },
-  { key: 'transactions', labelKey: 'logTransactions',      icon: '📋' },
-  { key: 'inventory',    labelKey: 'logInventoryCount',    icon: '📦' },
-  { key: 'pricing',      labelKey: 'logPricingRules',      icon: '💲' },
+/**
+ * ★ Map each tab to the permission(s) required.
+ *   A user sees a tab only if they have ALL listed permissions.
+ *   'dashboard' requires only 'logistics.view'.
+ */
+const TAB_DEFS: { key: Section; labelKey: string; icon: string; requires: Permission[] }[] = [
+  { key: 'dashboard',    labelKey: 'logDashboard',        icon: '📊', requires: ['logistics.view'] },
+  { key: 'maintenance',  labelKey: 'logMaintenanceParts',  icon: '🔧', requires: ['logistics.view'] },
+  { key: 'consumables',  labelKey: 'logConsumables',       icon: '🛒', requires: ['logistics.view'] },
+  { key: 'alerts',       labelKey: 'logAlerts',            icon: '🔔', requires: ['logistics.alerts'] },
+  { key: 'transactions', labelKey: 'logTransactions',      icon: '📋', requires: ['logistics.view'] },
+  { key: 'inventory',    labelKey: 'logInventoryCount',    icon: '📦', requires: ['logistics.inventory'] },
+  { key: 'pricing',      labelKey: 'logPricingRules',      icon: '💲', requires: ['logistics.pricing'] },
 ];
 
 export function LogisticsPage() {
@@ -47,6 +52,14 @@ export function LogisticsPage() {
   const role = normalizeRole(user?.role || '');
   const perms = resolvePermissions(role, user?.custom_permissions, permissionMap);
   const canView = perms.has('logistics.view' as Permission);
+
+  // ★ Filter visible tabs based on permissions
+  const visibleTabs = useMemo(() =>
+    TAB_DEFS.filter(tab =>
+      tab.requires.every(p => perms.has(p))
+    ),
+    [perms]
+  );
 
   if (!canView) return null;
 
@@ -71,6 +84,18 @@ export function LogisticsPage() {
     );
   }
 
+  // ★ Expose permission checks to section components
+  const permChecks = {
+    canEdit:      perms.has('logistics.edit' as Permission),
+    canDelete:    perms.has('logistics.delete' as Permission),
+    canConsume:   perms.has('logistics.consume' as Permission),
+    canSell:      perms.has('logistics.sell' as Permission),
+    canPricing:   perms.has('logistics.pricing' as Permission),
+    canAlerts:    perms.has('logistics.alerts' as Permission),
+    canImport:    perms.has('logistics.import' as Permission),
+    canInventory: perms.has('logistics.inventory' as Permission),
+  };
+
   return (
     <div style={{ padding: 24, background: s.bg, minHeight: '100vh', color: s.text }}>
       {toastEl}
@@ -79,9 +104,9 @@ export function LogisticsPage() {
       <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{t.logTitle || 'Logistics'}</h1>
       <p style={{ color: s.muted, marginBottom: 20 }}>{t.logMaintenanceDesc || 'Spare parts & consumables management'}</p>
 
-      {/* Tab bar */}
+      {/* Tab bar — ★ only visible tabs */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
-        {TABS.map(tab => (
+        {visibleTabs.map(tab => (
           <button key={tab.key} style={s.tabBtn(data.section === tab.key)}
                   onClick={() => data.setSection(tab.key)}>
             <span>{tab.icon}</span>
@@ -90,14 +115,14 @@ export function LogisticsPage() {
         ))}
       </div>
 
-      {/* Section content */}
-      {data.section === 'dashboard'    && <Dashboard data={data} t={t} isDark={isDark} />}
-      {data.section === 'maintenance'  && <MaintenanceParts data={data} t={t} isDark={isDark} />}
-      {data.section === 'consumables'  && <Consumables data={data} t={t} isDark={isDark} />}
-      {data.section === 'alerts'       && <Alerts data={data} t={t} isDark={isDark} />}
-      {data.section === 'transactions' && <Transactions data={data} t={t} isDark={isDark} />}
-      {data.section === 'inventory'    && <Inventory data={data} t={t} isDark={isDark} />}
-      {data.section === 'pricing'      && <PricingRules data={data} t={t} isDark={isDark} />}
+      {/* Section content — pass permChecks down */}
+      {data.section === 'dashboard'    && <Dashboard data={data} t={t} isDark={isDark} perms={permChecks} />}
+      {data.section === 'maintenance'  && <MaintenanceParts data={data} t={t} isDark={isDark} perms={permChecks} />}
+      {data.section === 'consumables'  && <Consumables data={data} t={t} isDark={isDark} perms={permChecks} />}
+      {data.section === 'alerts'       && <Alerts data={data} t={t} isDark={isDark} perms={permChecks} />}
+      {data.section === 'transactions' && <Transactions data={data} t={t} isDark={isDark} perms={permChecks} />}
+      {data.section === 'inventory'    && <Inventory data={data} t={t} isDark={isDark} perms={permChecks} />}
+      {data.section === 'pricing'      && <PricingRules data={data} t={t} isDark={isDark} perms={permChecks} />}
 
       {/* Transaction modal */}
       {data.txModalOpen && (
@@ -106,6 +131,7 @@ export function LogisticsPage() {
           parts={data.parts} machines={data.machines} tasks={data.tasks}
           defaultType={data.txModalType}
           defaultPartId={data.selectedPart?.id}
+          canSell={permChecks.canSell}
           onSubmit={async (body) => {
             await data.submitTransaction(body);
             data.showToast(t.logSaved || 'Done', 'ok');

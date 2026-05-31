@@ -31,6 +31,17 @@ export interface SparePart {
   updated_at: string;
 }
 
+export interface PermChecks {
+  canEdit:      boolean;
+  canDelete:    boolean;
+  canConsume:   boolean;
+  canSell:      boolean;
+  canPricing:   boolean;
+  canAlerts:    boolean;
+  canImport:    boolean;
+  canInventory: boolean;
+}
+
 export interface Transaction {
   id: string;
   part_id: string;

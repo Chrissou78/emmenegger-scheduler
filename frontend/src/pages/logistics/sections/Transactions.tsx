@@ -1,13 +1,14 @@
 // frontend/src/pages/logistics/sections/Transactions.tsx
 import React from 'react';
 import type { LogisticsData } from '../hooks/useLogisticsData';
+import type { PermChecks } from '../types';
 import { TX_COLORS, TX_ICONS } from '../constants';
 import { getLogStyles } from '../styles';
 import { fmtCHF } from '../helpers';
 
-interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean }
+interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean; perms: PermChecks }
 
-export function Transactions({ data, t, isDark }: Props) {
+export function Transactions({ data, t, isDark, perms }: Props) {
   const s = getLogStyles(isDark);
   const { transactions } = data;
 

@@ -2,13 +2,14 @@
 import React, { useState, useMemo } from 'react';
 import type { LogisticsData } from '../hooks/useLogisticsData';
 import type { InventoryLine } from '../types';
+import type { PermChecks } from '../types';
 import { CATEGORY_I18N } from '../constants';
 import { getLogStyles } from '../styles';
 import { fmtCHF, fmtNum } from '../helpers';
 
-interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean }
+interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean; perms: PermChecks }
 
-export function Inventory({ data, t, isDark }: Props) {
+export function Inventory({ data, t, isDark, perms }: Props) {
   const s = getLogStyles(isDark);
   const { parts, submitTransaction, showToast, setSection } = data;
 
@@ -89,9 +90,11 @@ export function Inventory({ data, t, isDark }: Props) {
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
         <input placeholder={t.logSearchParts || 'Search...'} value={filter} onChange={e => setFilter(e.target.value)} style={{ ...s.input, flex: 1 }} />
         <button style={s.btnSecondary} onClick={markAllOk}>{t.logMarkAllOk || 'Mark all uncounted as OK'}</button>
-        <button style={s.btnPrimary} onClick={applyAdjustments} disabled={applying}>
-          {applying ? '...' : (t.logApplyAdjustments || 'Apply Adjustments')}
-        </button>
+        {perms.canInventory && (
+          <button style={s.btnPrimary} onClick={applyAdjustments} disabled={applying}>
+            {applying ? '...' : (t.logApplyAdjustments || 'Apply Adjustments')}
+          </button>
+        )}
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>

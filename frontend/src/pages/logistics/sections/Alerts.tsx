@@ -1,12 +1,13 @@
 // frontend/src/pages/logistics/sections/Alerts.tsx
 import React from 'react';
 import type { LogisticsData } from '../hooks/useLogisticsData';
+import type { PermChecks } from '../types';
 import { ALERT_COLORS, ALERT_ICONS } from '../constants';
 import { getLogStyles } from '../styles';
 
-interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean }
+interface Props { data: LogisticsData; t: Record<string, any>; isDark: boolean; perms: PermChecks }
 
-export function Alerts({ data, t, isDark }: Props) {
+export function Alerts({ data, t, isDark, perms }: Props) {
   const s = getLogStyles(isDark);
   const { alerts, updateAlert, showToast } = data;
 
@@ -32,7 +33,7 @@ export function Alerts({ data, t, isDark }: Props) {
           <th style={s.thStyle}>{t.logAlertType || 'Type'}</th>
           <th style={s.thStyle}>{t.logMessage || 'Message'}</th>
           <th style={s.thStyle}>{t.logDate || 'Date'}</th>
-          {showActions && <th style={s.thStyle}>{t.logActions || 'Actions'}</th>}
+          {showActions && perms.canAlerts && <th style={s.thStyle}>{t.logActions || 'Actions'}</th>}
         </tr>
       </thead>
       <tbody>
@@ -43,7 +44,7 @@ export function Alerts({ data, t, isDark }: Props) {
             <td style={s.tdStyle}><span style={s.badge(ALERT_COLORS[a.alert_type] || '#f59e0b')}>{a.alert_type}</span></td>
             <td style={s.tdStyle}>{a.message}</td>
             <td style={s.tdStyle}>{new Date(a.created_at).toLocaleDateString('de-CH')}</td>
-            {showActions && (
+            {showActions && perms.canAlerts && (
               <td style={s.tdStyle}>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {a.status === 'OPEN' && <button style={{ ...s.btnSecondary, padding: '4px 8px', fontSize: 12 }} onClick={() => handleAck(a.id)}>{t.logAcknowledge || 'Ack'}</button>}

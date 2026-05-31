@@ -121,20 +121,67 @@ export type MainTab =
 /*  Constants                                                          */
 /* ================================================================== */
 
+/**
+ * ★ UPDATED: Permission groups now include ALL permissions from
+ *   shared/constants/roles.ts — including the new Logistics sub-permissions,
+ *   CRM, Stats, CEO, scoped views, My Week, and Profile.
+ *
+ *   The groups are ordered to match the sidebar navigation sections.
+ */
 export const PERM_GROUPS: Record<string, Permission[]> = {
-  Schedule: ['schedule.view', 'schedule.edit'],
-  Customers: ['customers.view', 'customers.edit', 'customers.delete'],
-  Machines: ['machines.view', 'machines.edit', 'machines.delete'],
-  Tasks: ['tasks.view', 'tasks.edit', 'tasks.delete'],
-  Quotations: ['quotations.view', 'quotations.edit', 'quotations.delete'],
-  Invoices: ['invoices.view', 'invoices.edit', 'invoices.delete'],
-  HR: ['hr.view', 'hr.edit', 'hr.payroll'],
+  /* ── Planning ── */
+  Schedule: ['schedule.view', 'schedule.edit', 'schedule.view.all', 'schedule.view.team'],
+
+  Machines: ['machines.view', 'machines.edit', 'machines.delete', 'machines.view.all', 'machines.view.team'],
+
+  Tasks: ['tasks.view', 'tasks.edit', 'tasks.delete', 'tasks.view.all', 'tasks.view.team'],
+
+  /* ── Logistics (★ NEW) ── */
+  Logistics: [
+    'logistics.view',
+    'logistics.edit',
+    'logistics.delete',
+    'logistics.consume',
+    'logistics.sell',
+    'logistics.pricing',
+    'logistics.alerts',
+    'logistics.import',
+    'logistics.inventory',
+  ],
+
+  /* ── CRM (★ NEW) ── */
+  CRM: ['crm.view', 'crm.edit', 'crm.delete', 'crm.pipeline', 'crm.performance'],
+
+  Customers: ['customers.view', 'customers.edit', 'customers.delete', 'customers.view.all', 'customers.view.team'],
+
+  Quotations: ['quotations.view', 'quotations.edit', 'quotations.delete', 'quotations.view.all', 'quotations.view.team'],
+
+  Invoices: ['invoices.view', 'invoices.edit', 'invoices.delete', 'invoices.view.all', 'invoices.view.finance'],
+
+  /* ── Operations ── */
+  Reports: ['reports.own', 'reports.team', 'reports.all'],
+
+  Stats: ['stats.global', 'stats.perimeter', 'stats.team', 'stats.individual'],
+
+  'My Week': ['myweek.view'],
+
+  /* ── HR & Finance ── */
+  HR: ['hr.view', 'hr.edit', 'hr.payroll', 'hr.access'],
+
   Finance: ['finance.view', 'finance.reports'],
+
+  /* ── Admin ── */
   Admin: [
     'admin.view', 'admin.users', 'admin.roles',
     'admin.customers', 'admin.machines', 'admin.tasks',
+    'admin.access',
   ],
-  Reports: ['reports.own', 'reports.team', 'reports.all'],
+
+  /* ── CEO ── */
+  CEO: ['ceo.dashboard', 'ceo.org', 'ceo.settings'],
+
+  /* ── Profile ── */
+  Profile: ['profile.view'],
 };
 
 export const CONFIG_CATEGORIES: { key: ConfigCategory; labelKey: string }[] = [
