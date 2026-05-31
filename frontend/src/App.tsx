@@ -22,7 +22,7 @@ import { InvoicesPage } from './pages/InvoicesPage';
 import HRPage from './pages/HRPage';
 import CrmPage from './pages/CrmPage';
 import SettingsPage from './pages/settings';
-import LogisticsPage from './pages/logistics';
+import { LogisticsPage } from './pages/logistics';
 import { MachineSchedulePage } from './pages/MachineSchedulePage';
 
 /* ─── Map legacy DB roles to the 6-role system ─── */
