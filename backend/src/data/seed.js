@@ -10,25 +10,25 @@ export async function seedDatabase() {
   // ─── USERS ───
   const usersData = [
     // Garten & Tiefbau
-    { email: 'marco.cancela@emmenegger.ch', password_hash: hash, first_name: 'Marco', last_name: 'Cancela', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'antonio@emmenegger.ch', password_hash: hash, first_name: 'Antonio', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'fabian@emmenegger.ch', password_hash: hash, first_name: 'Fabian', last_name: '', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'tomek@emmenegger.ch', password_hash: hash, first_name: 'Tomek', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'marco.cancelatest@emmenegger.ch', password_hash: hash, first_name: 'Marco', last_name: 'Cancela', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'antoniotest@emmenegger.ch', password_hash: hash, first_name: 'Antonio', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'fabiantest@emmenegger.ch', password_hash: hash, first_name: 'Fabian', last_name: '', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'tomektest@emmenegger.ch', password_hash: hash, first_name: 'Tomek', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
     { email: 'thomas.kaeser@emmenegger.ch', password_hash: hash, first_name: 'Thomas', last_name: 'Käser', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'milan@emmenegger.ch', password_hash: hash, first_name: 'Milan', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'martin@emmenegger.ch', password_hash: hash, first_name: 'Martin', last_name: '', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'matchek@emmenegger.ch', password_hash: hash, first_name: 'Matchek', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'yves@emmenegger.ch', password_hash: hash, first_name: 'Yves', last_name: '', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
-    { email: 'paede.appenzeller@emmenegger.ch', password_hash: hash, first_name: 'Päde', last_name: 'Appenzeller', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'milantest@emmenegger.ch', password_hash: hash, first_name: 'Milan', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'martintest@emmenegger.ch', password_hash: hash, first_name: 'Martin', last_name: '', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'matchektest@emmenegger.ch', password_hash: hash, first_name: 'Matchek', last_name: '', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'yvestest@emmenegger.ch', password_hash: hash, first_name: 'Yves', last_name: '', role: 'LOCAL_MANAGER', departments: ['GARTEN_TIEFBAU'] },
+    { email: 'paede.appenzellertest@emmenegger.ch', password_hash: hash, first_name: 'Päde', last_name: 'Appenzeller', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU'] },
     // Unterhalt
-    { email: 'urs.liebi@emmenegger.ch', password_hash: hash, first_name: 'Urs', last_name: 'Liebi', role: 'LOCAL_MANAGER', departments: ['UNTERHALT'] },
-    { email: 'attila.dobos@emmenegger.ch', password_hash: hash, first_name: 'Attila', last_name: 'Dobos', role: 'ARBEITER', departments: ['UNTERHALT'] },
-    { email: 'slavisa.damjanovic@emmenegger.ch', password_hash: hash, first_name: 'Slavisa', last_name: 'Damjanovic', role: 'LOCAL_MANAGER', departments: ['UNTERHALT'] },
-    { email: 'brigitte.naef@emmenegger.ch', password_hash: hash, first_name: 'Brigitte', last_name: 'Näf', role: 'LOCAL_MANAGER', departments: ['UNTERHALT'] },
+    { email: 'urs.liebitest@emmenegger.ch', password_hash: hash, first_name: 'Urs', last_name: 'Liebi', role: 'LOCAL_MANAGER', departments: ['UNTERHALT'] },
+    { email: 'attila.dobostest@emmenegger.ch', password_hash: hash, first_name: 'Attila', last_name: 'Dobos', role: 'ARBEITER', departments: ['UNTERHALT'] },
+    { email: 'slavisa.damjanovictest@emmenegger.ch', password_hash: hash, first_name: 'Slavisa', last_name: 'Damjanovic', role: 'LOCAL_MANAGER', departments: ['UNTERHALT'] },
+    { email: 'brigitte.naeftest@emmenegger.ch', password_hash: hash, first_name: 'Brigitte', last_name: 'Näf', role: 'LOCAL_MANAGER', departments: ['UNTERHALT'] },
     // Shared
-    { email: 'sabrina.lehmann@emmenegger.ch', password_hash: hash, first_name: 'Sabrina', last_name: 'Lehmann', role: 'GLOBAL_MANAGER', departments: ['GARTEN_TIEFBAU', 'UNTERHALT'] },
-    { email: 'luc.huber@emmenegger.ch', password_hash: hash, first_name: 'Luc', last_name: 'Huber', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU', 'UNTERHALT'] },
-    { email: 'admin@emmenegger.ch', password_hash: hash, first_name: 'Admin', last_name: 'Emmenegger', role: 'GLOBAL_MANAGER', departments: ['GARTEN_TIEFBAU', 'UNTERHALT'] },
+    { email: 'sabrina.lehmanntest@emmenegger.ch', password_hash: hash, first_name: 'Sabrina', last_name: 'Lehmann', role: 'GLOBAL_MANAGER', departments: ['GARTEN_TIEFBAU', 'UNTERHALT'] },
+    { email: 'luc.hubertest@emmenegger.ch', password_hash: hash, first_name: 'Luc', last_name: 'Huber', role: 'ARBEITER', departments: ['GARTEN_TIEFBAU', 'UNTERHALT'] },
+    { email: 'admintest@emmenegger.ch', password_hash: hash, first_name: 'Admin', last_name: 'Emmenegger', role: 'GLOBAL_MANAGER', departments: ['GARTEN_TIEFBAU', 'UNTERHALT'] },
   ];
 
   const { data: users, error: usersError } = await supabase

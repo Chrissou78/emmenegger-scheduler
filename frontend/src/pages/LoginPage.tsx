@@ -200,9 +200,9 @@ export function LoginPage() {
         {/* ★ Direct login buttons — row 1: CEO, Executive, Manager */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
           {([
-            { label: lt.ceo ?? 'CEO', icon: '👑', color: th.gold, email: 'ceo@emmenegger.ch', pw: 'emmenegger2026' },
-            { label: lt.executive ?? 'Executive', icon: '👔', color: '#3b82f6', email: 'admin@emmenegger.ch', pw: 'admin' },
-            { label: lt.manager ?? 'Manager', icon: '🔧', color: '#6495ed', email: 'marco.cancela@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.ceo ?? 'CEO', icon: '👑', color: th.gold, email: 'bosstest@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.executive ?? 'Executive', icon: '👔', color: '#3b82f6', email: 'admintest@emmenegger.ch', pw: 'admin' },
+            { label: lt.manager ?? 'Manager', icon: '🔧', color: '#6495ed', email: 'marco.cancelatest@emmenegger.ch', pw: 'emmenegger2026' },
           ] as const).map(acc => (
             <button
               key={acc.email}
@@ -238,10 +238,10 @@ export function LoginPage() {
         {/* ★ Direct login buttons — row 2: Worker, HR, Finance, Sales */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
           {([
-            { label: lt.worker ?? 'Worker', icon: '👤', color: '#4caf50', email: 'worker@emmenegger.ch', pw: 'worker2026' },
-            { label: lt.hr ?? 'HR', icon: '🧑‍💼', color: '#e891b2', email: 'hr@emmenegger.ch', pw: 'emmenegger2026' },
-            { label: lt.finance ?? 'Finance', icon: '💰', color: '#f0b347', email: 'finance@emmenegger.ch', pw: 'emmenegger2026' },
-            { label: lt.sales ?? 'Sales', icon: '🤝', color: '#42b883', email: 'sales@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.worker ?? 'Worker', icon: '👤', color: '#4caf50', email: 'workertest@emmenegger.ch', pw: 'worker2026' },
+            { label: lt.hr ?? 'HR', icon: '🧑‍💼', color: '#e891b2', email: 'hrtest@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.finance ?? 'Finance', icon: '💰', color: '#f0b347', email: 'financetest@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.sales ?? 'Sales', icon: '🤝', color: '#42b883', email: 'salestest@emmenegger.ch', pw: 'emmenegger2026' },
           ] as const).map(acc => (
             <button
               key={acc.email}
