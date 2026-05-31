@@ -200,7 +200,7 @@ export function LoginPage() {
         {/* ★ Direct login buttons — row 1: CEO, Executive, Manager */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
           {([
-            { label: lt.ceo ?? 'CEO', icon: '👑', color: th.gold, email: 'bosstest@emmenegger.ch', pw: 'emmenegger2026' },
+            { label: lt.ceo ?? 'CEO', icon: '👑', color: th.gold, email: 'ceotest@emmenegger.ch', pw: 'emmenegger2026' },
             { label: lt.executive ?? 'Executive', icon: '👔', color: '#3b82f6', email: 'admintest@emmenegger.ch', pw: 'admin' },
             { label: lt.manager ?? 'Manager', icon: '🔧', color: '#6495ed', email: 'marco.cancelatest@emmenegger.ch', pw: 'emmenegger2026' },
           ] as const).map(acc => (
