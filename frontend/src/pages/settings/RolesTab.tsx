@@ -11,6 +11,7 @@ interface Props {
   S: Styles;
   t: Record<string, any>;
   gold: string;
+  lang?: string;              // ← active language code, e.g. 'de','en','fr','pt'
 }
 
 /* ── i18n keys for each permission group heading ── */
@@ -33,14 +34,59 @@ const GROUP_I18N: Record<string, string> = {
   Profile:    'permGroupProfile',
 };
 
-/* ── Pretty label for individual permission tokens ── */
-function permLabel(perm: string): string {
-  // "logistics.sell" → "sell", "schedule.view.all" → "view.all"
-  const parts = perm.split('.');
-  return parts.slice(1).join('.');
+/* ── i18n keys for individual permission action tokens ── */
+const PERM_ACTION_I18N: Record<string, string> = {
+  view:        'permView',
+  edit:        'permEdit',
+  delete:      'permDelete',
+  consume:     'permConsume',
+  sell:        'permSell',
+  pricing:     'permPricing',
+  alerts:      'permAlerts',
+  import:      'permImport',
+  inventory:   'permInventory',
+  pipeline:    'permPipeline',
+  performance: 'permPerformance',
+  own:         'permOwn',
+  team:        'permTeam',
+  all:         'permAll',
+  payroll:     'permPayroll',
+  access:      'permAccess',
+  users:       'permUsers',
+  roles:       'permRoles',
+  customers:   'permCustomers',
+  machines:    'permMachines',
+  tasks:       'permTasks',
+  reports:     'permReports',
+  dashboard:   'permDashboard',
+  org:         'permOrg',
+  global:      'permGlobal',
+  perimeter:   'permPerimeter',
+  individual:  'permIndividual',
+  'view.all':  'permViewAll',
+  'view.team': 'permViewTeam',
+  'view.finance': 'permViewFinance',
+};
+
+/* ── Resolve the role's display label based on active language ── */
+function getRoleLabel(r: RoleConfig, lang: string): string {
+  const map: Record<string, string> = {
+    de: r.label_de, en: r.label_en, fr: r.label_fr, pt: r.label_pt,
+  };
+  // Current lang → DE fallback → EN fallback → role name
+  return map[lang] || r.label_de || r.label_en || r.name;
 }
 
-export default function RolesTab({ data, S, t, gold }: Props) {
+/* ── Pretty label for individual permission tokens ── */
+function permLabel(perm: string, t: Record<string, any>): string {
+  const parts = perm.split('.');
+  const actionKey = parts.slice(1).join('.');
+  const i18nKey = PERM_ACTION_I18N[actionKey];
+  if (i18nKey && t[i18nKey]) return t[i18nKey];
+  return actionKey;
+}
+
+export default function RolesTab({ data, S, t, gold, lang = 'de' }: Props) {
   const { roles, saving, fetchRoles, hdrs, showToast, setConfirmDel } = data;
 
   const [modal, setModal] = useState(false);
@@ -87,15 +133,12 @@ export default function RolesTab({ data, S, t, gold }: Props) {
     }));
   };
 
-  /* ★ NEW: Toggle all permissions in a group */
   const toggleGroupAll = (permsArr: Permission[]) => {
     const allChecked = permsArr.every(p => form.permissions.includes(p));
     setForm(prev => {
       if (allChecked) {
-        // remove all group perms
         return { ...prev, permissions: prev.permissions.filter(p => !permsArr.includes(p)) };
       }
-      // add missing group perms
       const newPerms = new Set([...prev.permissions, ...permsArr]);
       return { ...prev, permissions: [...newPerms] as Permission[] };
     });
@@ -104,16 +147,15 @@ export default function RolesTab({ data, S, t, gold }: Props) {
   return (
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ margin: 0, color: gold }}>{t.roles ?? 'Roles'}</h2>
-        <button style={S.sBtn(gold)} onClick={openCreate}>+ {t.newRole ?? 'New Role'}</button>
+        <h2 style={{ margin: 0, color: gold }}>{t.roles ?? 'Roles & Permissions'}</h2>
+        <button style={S.sBtn(gold)} onClick={openCreate}>+ {t.createRole ?? 'New Role'}</button>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
             <th style={S.sTh}>{t.roleName ?? 'Role'}</th>
-            <th style={S.sTh}>DE</th>
-            <th style={S.sTh}>EN</th>
+            <th style={S.sTh}>{t.roleLabel ?? 'Label'}</th>
             <th style={S.sTh}>{t.permissions ?? 'Permissions'}</th>
             <th style={S.sTh}>{t.systemRole ?? 'System'}</th>
             <th style={S.sTh}>{t.active ?? 'Active'}</th>
@@ -122,17 +164,16 @@ export default function RolesTab({ data, S, t, gold }: Props) {
         </thead>
         <tbody>
           {roles.length === 0 && (
-            <tr><td colSpan={7} style={{ ...S.sTd, textAlign: 'center', color: S.dimText }}>{t.noResults ?? 'No results'}</td></tr>
+            <tr><td colSpan={6} style={{ ...S.sTd, textAlign: 'center', color: S.dimText }}>{t.noResults ?? 'No results'}</td></tr>
           )}
           {roles.map(r => (
             <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(r)}>
               <td style={{ ...S.sTd, fontWeight: 700 }}>{r.name}</td>
-              <td style={S.sTd}>{r.label_de}</td>
-              <td style={S.sTd}>{r.label_en}</td>
-              <td style={S.sTd}><span style={{ fontSize: 12, color: S.dimText }}>{r.permissions.length} permissions</span></td>
+              <td style={S.sTd}>{getRoleLabel(r, lang)}</td>
+              <td style={S.sTd}><span style={{ fontSize: 12, color: S.dimText }}>{r.permissions.length} {t.permissions ?? 'permissions'}</span></td>
               <td style={S.sTd}>
                 {r.is_system && (
-                  <span style={{ padding: '2px 8px', borderRadius: 4, background: gold + '22', color: gold, fontSize: 11, fontWeight: 600 }}>System</span>
+                  <span style={{ padding: '2px 8px', borderRadius: 4, background: gold + '22', color: gold, fontSize: 11, fontWeight: 600 }}>{t.systemRole ?? 'System'}</span>
                 )}
               </td>
               <td style={S.sTd}><span style={{ color: r.is_active ? '#22c55e' : '#6b7280' }}>●</span></td>
@@ -154,7 +195,7 @@ export default function RolesTab({ data, S, t, gold }: Props) {
         <div style={S.sOverlay} onClick={() => setModal(false)}>
           <div style={{ ...S.sModal, maxWidth: 760 }} onClick={e => e.stopPropagation()}>
             <h2 style={{ margin: '0 0 16px', color: gold }}>
-              {editId ? (t.editRole ?? 'Edit Role') : (t.newRole ?? 'New Role')}
+              {editId ? (t.editRole ?? 'Edit Role') : (t.createRole ?? 'New Role')}
             </h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
               <div>
@@ -170,19 +211,19 @@ export default function RolesTab({ data, S, t, gold }: Props) {
                 </label>
               </div>
               <div>
-                <label style={S.sLabel}>Label DE</label>
+                <label style={S.sLabel}>{t.roleLabelDe ?? 'Bezeichnung (DE)'}</label>
                 <input style={S.sInput} value={form.label_de} onChange={e => setForm({ ...form, label_de: e.target.value })} />
               </div>
               <div>
-                <label style={S.sLabel}>Label EN</label>
+                <label style={S.sLabel}>{t.roleLabelEn ?? 'Label (EN)'}</label>
                 <input style={S.sInput} value={form.label_en} onChange={e => setForm({ ...form, label_en: e.target.value })} />
               </div>
               <div>
-                <label style={S.sLabel}>Label FR</label>
+                <label style={S.sLabel}>{t.roleLabelFr ?? 'Libellé (FR)'}</label>
                 <input style={S.sInput} value={form.label_fr} onChange={e => setForm({ ...form, label_fr: e.target.value })} />
               </div>
               <div>
-                <label style={S.sLabel}>Label PT</label>
+                <label style={S.sLabel}>{t.roleLabelPt ?? 'Rótulo (PT)'}</label>
                 <input style={S.sInput} value={form.label_pt} onChange={e => setForm({ ...form, label_pt: e.target.value })} />
               </div>
             </div>
@@ -235,7 +276,7 @@ export default function RolesTab({ data, S, t, gold }: Props) {
                             border: `1px solid ${checked ? '#22c55e' : 'gray'}`, cursor: 'pointer',
                           }}>
                             <input type="checkbox" checked={checked} onChange={() => togglePerm(perm)} />
-                            {permLabel(perm)}
+                            {permLabel(perm, t)}
                           </label>
                         );
                       })}

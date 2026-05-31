@@ -91,7 +91,7 @@ export default function SettingsPage() {
       </div>
 
       <div style={{ borderTop: `2px solid ${gold}`, paddingTop: 20 }}>
-        {mainTab === 'roles'     && <RolesTab data={data} S={S} t={t} gold={gold} />}
+        {mainTab === 'roles'     && <RolesTab data={data} S={S} t={t} gold={gold} lang={lang} />}
         {mainTab === 'config'    && <ConfigTab data={data} S={S} t={t} gold={gold} />}
         {mainTab === 'company'   && <CompanyTab data={data} S={S} t={t} gold={gold} />}
         {mainTab === 'vat'       && <VatTab data={data} S={S} t={t} gold={gold} />}
