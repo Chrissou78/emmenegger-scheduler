@@ -130,6 +130,8 @@ quotationsRouter.post('/', requireRole('LOCAL_MANAGER', 'GLOBAL_MANAGER'), async
       const itemRows = lineItems.map((it: any, idx: number) => ({
         quotation_id: quotation.id,
         sort_order: idx + 1,
+        line_type: it.line_type || 'SERVICE', 
+        spare_part_id: it.spare_part_id || null, 
         description: it.description || '',
         detail: it.detail || null,
         quantity: parseFloat(it.quantity) || 1,
@@ -311,6 +313,8 @@ quotationsRouter.post('/:id/convert-to-invoice', requireRole('LOCAL_MANAGER', 'G
       const invoiceItems = quote.items.map((it: any) => ({
         invoice_id: invoice.id,
         sort_order: it.sort_order,
+        line_type: it.line_type || 'SERVICE',
+        spare_part_id: it.spare_part_id || null,
         description: it.description,
         detail: it.detail,
         quantity: it.quantity,
@@ -423,6 +427,35 @@ quotationsRouter.post('/field', async (req, res, next) => {
     }
 
     res.status(201).json({ data: quotation });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/quotations/consumables — sellable consumable parts for quotation line picker
+quotationsRouter.get('/consumables', async (req, res, next) => {
+  try {
+    const { search, category } = req.query;
+
+    let query = supabase
+      .from('spare_parts')
+      .select('id, part_number, name, category, unit, unit_price, selling_price, stock_qty, is_sellable, is_active')
+      .eq('part_type', 'CONSUMABLE')
+      .eq('is_sellable', true)
+      .eq('is_active', true);
+
+    if (category && typeof category === 'string') {
+      query = query.eq('category', category);
+    }
+    if (search && typeof search === 'string' && search.trim()) {
+      const s = `%${search.trim()}%`;
+      query = query.or(`name.ilike.${s},part_number.ilike.${s}`);
+    }
+
+    const { data, error } = await query.order('name').limit(200);
+    if (error) throw error;
+
+    res.json({ data: data || [] });
   } catch (err) {
     next(err);
   }

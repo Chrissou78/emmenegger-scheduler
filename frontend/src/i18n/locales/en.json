@@ -582,5 +582,12 @@
   "permIndividual": "individual",
   "permViewAll": "view all",
   "permViewTeam": "view team",
-  "permViewFinance": "view finance"
+  "permViewFinance": "view finance",
+  "service": "Service",
+  "material": "Material",
+  "addServiceLine": "Add Service Line",
+  "addMaterialLine": "Add Material Line",
+  "searchConsumable": "Search consumable...",
+  "fromConsumable": "From consumable",
+  "clearConsumable": "Clear"
 }

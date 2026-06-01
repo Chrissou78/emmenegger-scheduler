@@ -37,12 +37,27 @@ interface Task {
   schedule_type?: string;
 }
 
+interface ConsumablePart {
+  id: string;
+  part_number: string;
+  name: string;
+  category: string;
+  unit: string;
+  unit_price: number;
+  selling_price: number;
+  stock_qty: number;
+  is_sellable: boolean;
+}
+
 interface QuotationLine {
   id: string;
   position: number;
+  line_type: 'SERVICE' | 'MATERIAL';
   description: string;
   task_id?: string;
   task_name?: string;
+  spare_part_id?: string;
+  spare_part_number?: string;
   quantity: number;
   unit: string;
   unit_price: number;
@@ -254,6 +269,104 @@ function TaskSearchDropdown({
   );
 }
 
+/* ────────────────── ConsumableSearchDropdown ────────────────── */
+interface ConsumableSearchProps {
+  consumables: ConsumablePart[];
+  onSelect: (part: ConsumablePart) => void;
+  t: Record<string, string>;
+  inputStyle: React.CSSProperties;
+  isDark: boolean;
+  th: any;
+}
+
+function ConsumableSearchDropdown({
+  consumables, onSelect, t, inputStyle, isDark, th,
+}: ConsumableSearchProps) {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    if (!search) return consumables.slice(0, 30);
+    const q = search.toLowerCase();
+    return consumables.filter(
+      (p) => p.name.toLowerCase().includes(q) ||
+             p.part_number.toLowerCase().includes(q) ||
+             p.category.toLowerCase().includes(q)
+    ).slice(0, 30);
+  }, [consumables, search]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const dimText = isDark ? 'rgba(255,255,255,.45)' : 'rgba(0,0,0,.4)';
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <input
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder={t.searchConsumable || 'Search consumable...'}
+        style={inputStyle}
+      />
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0,
+          zIndex: 100, maxHeight: 280, overflowY: 'auto',
+          background: isDark ? '#1e1e3a' : '#fff',
+          border: `1px solid ${th.border}`, borderRadius: 8, marginTop: 4,
+          boxShadow: '0 8px 30px rgba(0,0,0,.25)',
+        }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: '12px 14px', color: dimText, fontSize: 13 }}>
+              {t.noResults || 'No results'}
+            </div>
+          )}
+          {filtered.map((p) => (
+            <div
+              key={p.id}
+              onClick={() => { onSelect(p); setSearch(''); setOpen(false); }}
+              style={{
+                padding: '10px 14px', cursor: 'pointer', transition: 'background .1s',
+                borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.04)'}`,
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.03)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div style={{
+                width: 32, height: 32, borderRadius: 6,
+                background: '#f59e0b', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 700, fontSize: 10, flexShrink: 0,
+              }}>
+                {p.part_number.slice(0, 4)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: th.text }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: dimText, marginTop: 1 }}>
+                  {p.part_number} · {p.category} · Stock: {p.stock_qty}
+                </div>
+              </div>
+              <span style={{ fontSize: 12, color: th.text, fontWeight: 600, flexShrink: 0 }}>
+                CHF {(p.selling_price || p.unit_price || 0).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ────────────────── helpers ────────────────── */
 function makeLineId(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -261,8 +374,10 @@ function makeLineId(): string {
 
 function emptyLine(position: number): QuotationLine {
   return {
-    id: makeLineId(), position, description: '', task_id: undefined,
-    task_name: undefined, quantity: 1, unit: 'Std', unit_price: 0,
+    id: makeLineId(), position, line_type: 'SERVICE',
+    description: '', task_id: undefined, task_name: undefined,
+    spare_part_id: undefined, spare_part_number: undefined,
+    quantity: 1, unit: 'Std', unit_price: 0,
     discount: 0, vat_rate: 8.1, total: 0,
   };
 }
@@ -294,9 +409,12 @@ function normalizeQuotation(raw: any): Quotation {
     .map((it: any, i: number) => ({
       id: it.id || makeLineId(),
       position: it.sort_order || it.position || i + 1,
+      line_type: it.line_type || 'SERVICE',
       description: it.description || '',
       task_id: it.task_id || undefined,
       task_name: it.task_name || undefined,
+      spare_part_id: it.spare_part_id || undefined,
+      spare_part_number: it.spare_part_number || undefined,
       quantity: parseFloat(it.quantity) || 0,
       unit: it.unit || 'Std',
       unit_price: parseFloat(it.unit_price) || 0,
@@ -371,6 +489,7 @@ export function QuotationsPage() {
 
   const [selected, setSelected] = useState<Quotation | null>(null);
   const [editing, setEditing] = useState(false);
+  const [consumables, setConsumables] = useState<ConsumablePart[]>([]);
 
   /* form state */
   const [formTitle, setFormTitle] = useState('');
@@ -513,6 +632,15 @@ export function QuotationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  const fetchConsumables = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/quotations/consumables`, { headers: getHeaders() });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setConsumables(Array.isArray(json.data) ? json.data : []);
+    } catch { /* silent */ }
+  }, [token]);
+
   useEffect(() => {
     const currentToken = token || localStorage.getItem('token');
     if (!currentToken || hasFetched.current) return;
@@ -521,6 +649,7 @@ export function QuotationsPage() {
     fetchCustomers();
     fetchTasks();
     fetchUsers();
+    fetchConsumables();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -600,6 +729,34 @@ export function QuotationsPage() {
     updateLine(lineId, { task_id: undefined, task_name: undefined });
   }
 
+  function handleSelectConsumable(lineId: string, part: ConsumablePart) {
+    updateLine(lineId, {
+      line_type: 'MATERIAL',
+      spare_part_id: part.id,
+      spare_part_number: part.part_number,
+      description: part.name,
+      unit: part.unit || 'Stk',
+      unit_price: part.selling_price || part.unit_price || 0,
+      task_id: undefined,
+      task_name: undefined,
+    });
+  }
+
+  function handleClearConsumable(lineId: string) {
+    updateLine(lineId, {
+      line_type: 'SERVICE',
+      spare_part_id: undefined,
+      spare_part_number: undefined,
+    });
+  }
+
+  function addMaterialLine() {
+    setFormLines((prev) => [
+      ...prev,
+      { ...emptyLine(prev.length + 1), line_type: 'MATERIAL' },
+    ]);
+  }
+
   /* ── CRUD ── */
   async function saveQuotation() {
     if (!canEdit) return;
@@ -614,6 +771,8 @@ export function QuotationsPage() {
         discount_amount: formDiscountAmount,
         notes: formNotes || undefined,
         items: formLines.map((l) => ({
+          line_type: l.line_type || 'SERVICE',
+          spare_part_id: l.spare_part_id || undefined,
           description: l.description,
           task_id: l.task_id || undefined,
           quantity: l.quantity,
@@ -921,8 +1080,17 @@ export function QuotationsPage() {
                           <td style={{ ...tdStyleBase, color: dimText }}>{i + 1}</td>
                           <td style={{ ...tdStyleBase, color: th.text }}>
                             {l.description || '–'}
+                            {l.line_type === 'MATERIAL' && l.spare_part_number && (
+                              <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                                background: isDark ? 'rgba(245,158,11,.12)' : 'rgba(245,158,11,.08)',
+                                color: '#f59e0b', fontWeight: 600 }}>
+                                📦 {l.spare_part_number}
+                              </span>
+                            )}
                             {l.task_id && (
-                              <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4, background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)', color: '#4ecdc4', fontWeight: 600 }}>
+                              <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 6px', borderRadius: 4,
+                                background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)',
+                                color: '#4ecdc4', fontWeight: 600 }}>
                                 🔗 {l.task_name || ''}
                               </span>
                             )}
@@ -1025,12 +1193,35 @@ export function QuotationsPage() {
 
                 {formLines.map((line, idx) => (
                   <div key={line.id} style={sCard}>
+                    {/* Line header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: th.text }}>
                         #{idx + 1}
+                        {/* Badge: service or material */}
+                        <span style={{
+                          marginLeft: 8, fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                          background: line.line_type === 'MATERIAL'
+                            ? (isDark ? 'rgba(245,158,11,.15)' : 'rgba(245,158,11,.1)')
+                            : (isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)'),
+                          color: line.line_type === 'MATERIAL' ? '#f59e0b' : '#4ecdc4',
+                          fontWeight: 600,
+                        }}>
+                          {line.line_type === 'MATERIAL'
+                            ? (t.material || 'Material')
+                            : (t.service || 'Service')}
+                        </span>
                         {line.task_name && (
-                          <span style={{ marginLeft: 8, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)', color: '#4ecdc4', fontWeight: 600 }}>
+                          <span style={{ marginLeft: 6, fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                            background: isDark ? 'rgba(78,205,196,.1)' : 'rgba(78,205,196,.08)',
+                            color: '#4ecdc4', fontWeight: 600 }}>
                             🔗 {line.task_name}
+                          </span>
+                        )}
+                        {line.spare_part_number && (
+                          <span style={{ marginLeft: 6, fontSize: 10, padding: '2px 8px', borderRadius: 4,
+                            background: isDark ? 'rgba(245,158,11,.15)' : 'rgba(245,158,11,.1)',
+                            color: '#f59e0b', fontWeight: 600 }}>
+                            📦 {line.spare_part_number}
                           </span>
                         )}
                       </span>
@@ -1040,24 +1231,84 @@ export function QuotationsPage() {
                         </span>
                         {formLines.length > 1 && (
                           <button type="button" onClick={() => removeLine(line.id)}
-                            style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 18, fontWeight: 600, lineHeight: 1 }}>
+                            style={{ background: 'none', border: 'none', color: '#e74c3c',
+                              cursor: 'pointer', fontSize: 18, fontWeight: 600, lineHeight: 1 }}>
                             ×
                           </button>
                         )}
                       </div>
                     </div>
 
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={labelStyle}>{t.description || 'Description'}</label>
-                      <TaskSearchDropdown
-                        tasks={tasks} value={line.description} taskId={line.task_id}
-                        onSelectTask={(task) => handleSelectTask(line.id, task)}
-                        onClearTask={() => handleClearTask(line.id)}
-                        onChange={(val) => updateLine(line.id, { description: val })}
-                        t={t} inputStyle={inputStyle} isDark={isDark} th={th}
-                      />
+                    {/* Line type toggle */}
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+                      <button type="button"
+                        onClick={() => {
+                          updateLine(line.id, { line_type: 'SERVICE', spare_part_id: undefined, spare_part_number: undefined });
+                        }}
+                        style={{
+                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                          fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all .15s',
+                          background: line.line_type === 'SERVICE' ? (gold) : (isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)'),
+                          color: line.line_type === 'SERVICE' ? '#fff' : dimText,
+                        }}>
+                        🔧 {t.service || 'Service'}
+                      </button>
+                      <button type="button"
+                        onClick={() => updateLine(line.id, { line_type: 'MATERIAL', task_id: undefined, task_name: undefined })}
+                        style={{
+                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                          fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all .15s',
+                          background: line.line_type === 'MATERIAL' ? '#f59e0b' : (isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)'),
+                          color: line.line_type === 'MATERIAL' ? '#fff' : dimText,
+                        }}>
+                        📦 {t.material || 'Material'}
+                      </button>
                     </div>
 
+                    {/* Description / picker */}
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>{t.description || 'Description'}</label>
+                      {line.line_type === 'SERVICE' ? (
+                        <TaskSearchDropdown
+                          tasks={tasks} value={line.description} taskId={line.task_id}
+                          onSelectTask={(task) => handleSelectTask(line.id, task)}
+                          onClearTask={() => handleClearTask(line.id)}
+                          onChange={(val) => updateLine(line.id, { description: val })}
+                          t={t} inputStyle={inputStyle} isDark={isDark} th={th}
+                        />
+                      ) : (
+                        <>
+                          {line.spare_part_id ? (
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+                              padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                              background: isDark ? 'rgba(245,158,11,.1)' : 'rgba(245,158,11,.06)',
+                              color: '#f59e0b', fontWeight: 600,
+                            }}>
+                              <span>📦 {line.spare_part_number} — {line.description}</span>
+                              <button type="button" onClick={() => handleClearConsumable(line.id)}
+                                style={{ background: 'none', border: 'none', color: '#e74c3c',
+                                  cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0, marginLeft: 'auto' }}>
+                                {t.clearTask || 'Clear'}
+                              </button>
+                            </div>
+                          ) : (
+                            <ConsumableSearchDropdown
+                              consumables={consumables}
+                              onSelect={(part) => handleSelectConsumable(line.id, part)}
+                              t={t} inputStyle={inputStyle} isDark={isDark} th={th}
+                            />
+                          )}
+                          {/* Still allow free-text override */}
+                          <textarea value={line.description}
+                            onChange={(e) => updateLine(line.id, { description: e.target.value })}
+                            rows={1} style={{ ...inputStyle, resize: 'vertical', marginTop: 6 }}
+                            placeholder={t.description || 'Description (override)'} />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Qty / Unit / Price / Disc / VAT — same grid as before */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10 }}>
                       <div>
                         <label style={labelStyle}>{t.quantity || 'Qty'}</label>
@@ -1089,10 +1340,17 @@ export function QuotationsPage() {
                   </div>
                 ))}
 
-                <button type="button" onClick={addLine} style={{ ...btnSecondary, fontSize: 13, padding: '6px 16px', marginBottom: 20 }}>
-                  + {t.addLine || 'Add Line'}
-                </button>
-
+                {/* Add Line buttons — now two options */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                  <button type="button" onClick={addLine}
+                    style={{ ...btnSecondary, fontSize: 13, padding: '6px 16px' }}>
+                    + {t.addServiceLine || 'Add Service Line'}
+                  </button>
+                  <button type="button" onClick={addMaterialLine}
+                    style={{ ...btnSecondary, fontSize: 13, padding: '6px 16px', borderColor: '#f59e0b', color: '#f59e0b' }}>
+                    + 📦 {t.addMaterialLine || 'Add Material Line'}
+                  </button>
+                </div>
                 {/* Totals */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
                   <div style={{ minWidth: 300 }}>
